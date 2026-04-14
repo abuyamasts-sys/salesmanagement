@@ -66,6 +66,15 @@ function submitSalesOrder(payload) {
     createApprovalOrder_(noSo, payload.sales_id, salesOrderRow.alasan_hold);
   }
 
+  if (normalizeText_(salesOrderRow.status_order) === 'siap kirim') {
+    try {
+      recordKpiLogForOrderIfEligible_(noSo, payload.sales_id, now.tanggal + ' ' + now.jam);
+    } catch (error) {
+      // KPI bersifat tambahan; jangan bikin submit order gagal.
+      console.log('KPI log gagal: ' + (error && error.message ? error.message : error));
+    }
+  }
+
   return {
     success: true,
     no_so: noSo,
@@ -409,6 +418,78 @@ function getSalesOrderDetailsForDisplay_(order) {
     subtotal: Number(order.total || order.subtotal || 0),
     subtotal_final: Number(order.total || order.subtotal || 0)
   }];
+}
+
+function buildSalesOrderDetailsFallback_(order) {
+  var source = order || {};
+
+  if (!String(source.item || '').trim()) {
+    return [];
+  }
+
+  return [{
+    detail_id: '',
+    urutan_item: 1,
+    kode_item: '',
+    nama_item: String(source.item || '').trim(),
+    qty: Number(source.qty || 0),
+    qty_terkirim: Number(source.qty || 0),
+    satuan: getProductUnitByNameServer_(source.item),
+    harga: Number(source.harga || 0),
+    harga_final: Number(source.harga || 0),
+    diskon: Number(source.diskon || 0),
+    diskon_final: Number(source.diskon || 0),
+    subtotal: Number(source.total || source.subtotal || 0),
+    subtotal_final: Number(source.total || source.subtotal || 0)
+  }];
+}
+
+function buildSalesOrderClientRowFromDetails_(order, rawDetails) {
+  var source = order || {};
+  var details = Array.isArray(rawDetails) ? rawDetails : [];
+
+  if (!details.length) {
+    details = buildSalesOrderDetailsFallback_(source);
+  }
+
+  var totals = calculateOrderTotals_(details);
+  var derivedVerificationStatus = String(source.status_verifikasi_cs || '').trim();
+  var derivedExportStatus = String(source.status_export_kledo || '').trim();
+  var finalTotals = details.reduce(function(result, detail) {
+    result.subtotal_order += Number(detail.qty_terkirim || 0) * Number(detail.harga_final || 0);
+    result.diskon_order += Number(detail.diskon_final || 0);
+    result.total_order += Number(detail.subtotal_final || 0);
+    return result;
+  }, {
+    subtotal_order: 0,
+    diskon_order: 0,
+    total_order: 0
+  });
+
+  return Object.keys(source).reduce(function(result, key) {
+    result[key] = source[key];
+    return result;
+  }, {
+    details: details,
+    item_summary: buildOrderItemsSummary_(details) || source.item || '',
+    qty_summary: buildOrderQtyDisplay_(details) || source.qty || '',
+    jumlah_item: details.length,
+    subtotal_order: Number(source.subtotal || totals.subtotal_order || 0),
+    diskon_order: Number(source.diskon || totals.diskon_order || 0),
+    total_order: Number(source.total || totals.total_order || 0),
+    subtotal_final: Number(source.subtotal_final || finalTotals.subtotal_order || 0),
+    diskon_final: Number(source.diskon_final || finalTotals.diskon_order || 0),
+    total_final: Number(source.total_final || finalTotals.total_order || 0),
+    status_verifikasi_cs: derivedVerificationStatus || (normalizeText_(source.status_order) === 'selesai' ? 'Sudah Dicek' : 'Belum Dicek'),
+    status_export_kledo: derivedExportStatus || (normalizeText_(source.status_order) === 'selesai' ? 'Siap Export' : 'Belum Siap'),
+    tanggal_export_kledo: source.tanggal_export_kledo || '',
+    diekspor_oleh: source.diekspor_oleh || '',
+    catatan_export_kledo: source.catatan_export_kledo || '',
+    tanggal_selesai: source.tanggal_selesai || '',
+    diverifikasi_oleh: source.diverifikasi_oleh || '',
+    tanggal_verifikasi_cs: source.tanggal_verifikasi_cs || '',
+    catatan_verifikasi_cs: source.catatan_verifikasi_cs || ''
+  });
 }
 
 function buildSalesOrderClientRow_(order) {

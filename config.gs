@@ -11,7 +11,15 @@ var APP_CONFIG = {
     SURAT_JALAN: 'SURAT_JALAN',
     LOG_STATUS_ORDER: 'LOG_STATUS_ORDER',
     MASTER_ITEM: 'MASTER_ITEM',
-    MASTER_STATUS: 'MASTER_STATUS'
+    MASTER_STATUS: 'MASTER_STATUS',
+    TAGIHAN: 'TAGIHAN',
+    KPI_TARGET_SALES: 'KPI_TARGET_SALES',
+    KPI_LOG: 'KPI_LOG',
+    BACKUP_LOG: 'SYSTEM_BACKUP_LOG'
+  },
+  BACKUP: {
+    FOLDER_NAME: 'BACKUP_MVP_SALES_ORDER',
+    FILE_PREFIX: 'BACKUP_MVP_SALES_ORDER'
   },
   ROLES: ['Sales', 'CS/Admin', 'Approver'],
   CUSTOMER_STATUS: ['Baru', 'Aktif', 'Menunggak', 'Ditahan'],
@@ -54,7 +62,11 @@ var APP_CONFIG = {
     'SALES_ORDER_DETAIL',
     'LOG_STATUS_ORDER',
     'MASTER_ITEM',
-    'MASTER_STATUS'
+    'MASTER_STATUS',
+    'TAGIHAN',
+    'KPI_TARGET_SALES',
+    'KPI_LOG',
+    'BACKUP_LOG'
   ],
   HEADERS: {
     MASTER_CUSTOMER: [
@@ -200,6 +212,62 @@ var APP_CONFIG = {
       'label',
       'urutan',
       'status_aktif'
+    ],
+    TAGIHAN: [
+      'tagihan_id',
+      'kode_customer',
+      'nama_customer',
+      'status_customer',
+      'status_pembayaran',
+      'total_tagihan',
+      'total_awal_tagihan',
+      'total_bayar',
+      'sisa_tagihan',
+      'jumlah_nota_overdue',
+      'jt_terdekat',
+      'catatan_piutang',
+      'status_tagihan',
+      'tanggal_dibuat',
+      'dibuat_oleh',
+      'tanggal_bayar_terakhir',
+      'dibayar_oleh_terakhir',
+      'catatan_bayar_terakhir',
+      'tanggal_lunas',
+      'dilunasi_oleh',
+      'catatan_pelunasan'
+    ],
+    KPI_TARGET_SALES: [
+      'bulan',
+      'sales_id',
+      'target_qty',
+      'catatan',
+      'tanggal_input',
+      'diinput_oleh'
+    ],
+    KPI_LOG: [
+      'bulan',
+      'no_so',
+      'sales_id',
+      'jenis_customer',
+      'qty_total',
+      'tanggal_siap_kirim',
+      'dicatat_oleh'
+    ],
+    BACKUP_LOG: [
+      'backup_id',
+      'tanggal_backup',
+      'jam_backup',
+      'timestamp_backup',
+      'nama_file',
+      'file_id',
+      'file_url',
+      'folder_id',
+      'folder_name',
+      'jumlah_sheet',
+      'daftar_sheet',
+      'dibackup_oleh',
+      'status_backup',
+      'catatan'
     ]
   },
   KLEDO_EXPORT: {

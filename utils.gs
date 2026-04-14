@@ -35,7 +35,9 @@ function getSheetData_(sheetName) {
     return [];
   }
 
-  var headers = values[0];
+  var headers = (values[0] || []).map(function(header) {
+    return String(header || '').trim();
+  });
   var rows = values.slice(1);
 
   return rows
@@ -51,7 +53,11 @@ function mapRowToObject_(headers, row) {
   var obj = {};
 
   headers.forEach(function(header, index) {
-    obj[header] = row[index];
+    var key = String(header || '').trim();
+    if (!key) {
+      return;
+    }
+    obj[key] = row[index];
   });
 
   return obj;
@@ -71,7 +77,9 @@ function normalizeSheetDateToYmd_(value) {
 
 function appendRowByHeaders_(sheetName, data) {
   var sheet = getSheetByName_(sheetName);
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(header) {
+    return String(header || '').trim();
+  });
   var row = headers.map(function(header) {
     return Object.prototype.hasOwnProperty.call(data, header) ? data[header] : '';
   });
@@ -91,33 +99,52 @@ function getNowParts_() {
 
 function updateRowByKey_(sheetName, keyField, keyValue, updates) {
   var sheet = getSheetByName_(sheetName);
-  var values = sheet.getDataRange().getValues();
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
 
-  if (!values || values.length < 2) {
+  if (!lastRow || lastRow < 2 || !lastCol) {
     throw new Error('Sheet belum memiliki data: ' + sheetName);
   }
 
-  var headers = values[0];
-  var keyIndex = headers.indexOf(keyField);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(header) {
+    return String(header || '').trim();
+  });
+  var keyIndex = headers.indexOf(String(keyField || '').trim());
 
   if (keyIndex === -1) {
     throw new Error('Kolom key tidak ditemukan: ' + keyField);
   }
 
-  for (var rowIndex = 1; rowIndex < values.length; rowIndex += 1) {
-    if (String(values[rowIndex][keyIndex]).trim() === String(keyValue).trim()) {
-      headers.forEach(function(header, columnIndex) {
-        if (Object.prototype.hasOwnProperty.call(updates, header)) {
-          values[rowIndex][columnIndex] = updates[header];
-        }
-      });
+  var normalizedKey = String(keyValue).trim();
+  var keyRange = sheet.getRange(2, keyIndex + 1, lastRow - 1, 1);
+  var finder = keyRange.createTextFinder(normalizedKey).matchEntireCell(true);
+  var match = finder.findNext();
 
-      sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([values[rowIndex]]);
-      return mapRowToObject_(headers, values[rowIndex]);
-    }
+  if (!match) {
+    throw new Error('Data tidak ditemukan di ' + sheetName + ' untuk ' + keyField + ': ' + keyValue);
   }
 
-  throw new Error('Data tidak ditemukan di ' + sheetName + ' untuk ' + keyField + ': ' + keyValue);
+  var rowNumber = match.getRow();
+  var updatesObj = updates || {};
+  var updatedAny = false;
+  var rowRange = sheet.getRange(rowNumber, 1, 1, lastCol);
+  var rowValues = rowRange.getValues()[0];
+
+  headers.forEach(function(header, columnIndex) {
+    if (!Object.prototype.hasOwnProperty.call(updatesObj, header)) {
+      return;
+    }
+
+    rowValues[columnIndex] = updatesObj[header];
+    updatedAny = true;
+  });
+
+  if (!updatedAny) {
+    return mapRowToObject_(headers, rowValues);
+  }
+
+  rowRange.setValues([rowValues]);
+  return mapRowToObject_(headers, rowValues);
 }
 
 function ensureSheetHeadersContain_(sheetName, headers) {
@@ -139,7 +166,9 @@ function ensureSheetHeadersContain_(sheetName, headers) {
     return sheet;
   }
 
-  currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(header) {
+    return String(header || '').trim();
+  });
   missingHeaders = safeHeaders.filter(function(header) {
     return currentHeaders.indexOf(header) === -1;
   });

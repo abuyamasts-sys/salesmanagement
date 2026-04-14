@@ -64,6 +64,15 @@ function decideApproval_(noSo, approverId, statusApproval, statusOrderBaru, cata
 
   logStatusOrder_(noSo, salesOrder.status_order, statusOrderBaru, approverId, note);
 
+  if (normalizeText_(statusOrderBaru) === 'siap kirim') {
+    try {
+      var nowForKpi = getNowParts_();
+      recordKpiLogForOrderIfEligible_(noSo, approverId, nowForKpi.tanggal + ' ' + nowForKpi.jam);
+    } catch (error) {
+      console.log('KPI log gagal: ' + (error && error.message ? error.message : error));
+    }
+  }
+
   return {
     success: true,
     no_so: noSo,

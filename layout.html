@@ -31,6 +31,11 @@
           </aside>
         </header>
 
+        <section class="result-card" id="globalResultCard">
+          <h2>Info Proses</h2>
+          <div id="globalResultContent">Belum ada proses yang dijalankan.</div>
+        </section>
+
         <nav class="app-tabs hidden">
           <button type="button" class="tab-btn active" data-tab="sales" data-role="sales">Sales Order</button>
           <button type="button" class="tab-btn" data-tab="approver" data-role="approver">Approver</button>
@@ -64,6 +69,61 @@
                   <span>Nama Sales</span>
                   <input id="sales_nama" name="sales_nama" type="text" readonly />
                 </label>
+              </div>
+            </section>
+
+            <section class="form-card">
+              <div class="panel-header">
+                <div>
+                  <h2>KPI Customer Baru</h2>
+                  <p class="panel-subtitle">Target dihitung per bulan saat order menjadi Siap Kirim, total qty mix (dus/galon).</p>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Bulan</span>
+                  <input id="salesKpiMonth" type="month" />
+                </label>
+              </div>
+
+              <div class="summary-grid">
+                <article class="summary-card">
+                  <span class="summary-label">Target Qty</span>
+                  <strong class="summary-value" id="salesKpiTarget">0</strong>
+                  <span class="summary-note">Target dari approver</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Tercapai</span>
+                  <strong class="summary-value" id="salesKpiAchieved">0</strong>
+                  <span class="summary-note">Total qty order Siap Kirim</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Sisa</span>
+                  <strong class="summary-value" id="salesKpiRemaining">0</strong>
+                  <span class="summary-note">Target - tercapai</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">% Tercapai</span>
+                  <strong class="summary-value" id="salesKpiPercent">0%</strong>
+                  <span class="summary-note">Progress bulan berjalan</span>
+                </article>
+              </div>
+
+              <h3 class="section-title">Detail Order (Siap Kirim)</h3>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>No SO</th>
+                      <th>Tanggal</th>
+                      <th class="cell-right">Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody id="salesKpiOrdersBody">
+                    <tr><td colspan="3" class="empty-cell">Belum ada data KPI.</td></tr>
+                  </tbody>
+                </table>
               </div>
             </section>
 
@@ -253,6 +313,8 @@
             <button type="button" class="approver-subtab-btn active" data-approver-view="approval">Approval Order</button>
             <button type="button" class="approver-subtab-btn" data-approver-view="export">Export Kledo</button>
             <button type="button" class="approver-subtab-btn" data-approver-view="pricing">Harga Dasar Item</button>
+            <button type="button" class="approver-subtab-btn" data-approver-view="kpi">Target KPI</button>
+            <button type="button" class="approver-subtab-btn" data-approver-view="backup">Backup Database</button>
           </div>
 
           <section class="approver-view-panel active" id="approver-view-approval">
@@ -441,6 +503,137 @@
               </div>
             </section>
           </section>
+
+          <section class="approver-view-panel" id="approver-view-kpi">
+            <section class="form-card">
+              <div class="panel-header">
+                <div>
+                  <h2>Target KPI Sales (Customer Baru)</h2>
+                  <p class="panel-subtitle">KPI dihitung saat order berstatus Siap Kirim. Target dan realisasi dihitung per bulan, dalam total qty (mix dus/galon).</p>
+                </div>
+                <button type="button" class="ghost-btn" id="refreshApproverKpiBtn">Refresh</button>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Bulan KPI</span>
+                  <input id="approverKpiMonth" type="month" />
+                </label>
+                <label class="field">
+                  <span>Sales</span>
+                  <select id="approverKpiSales"></select>
+                </label>
+                <label class="field">
+                  <span>Target Qty (mix)</span>
+                  <input id="approverKpiTargetQty" type="number" min="0" step="1" placeholder="Contoh: 60" />
+                </label>
+                <label class="field field-wide">
+                  <span>Catatan</span>
+                  <input id="approverKpiNote" type="text" placeholder="Catatan opsional" />
+                </label>
+              </div>
+
+              <div class="action-row">
+                <button type="button" class="primary-btn" id="saveApproverKpiBtn">Simpan Target</button>
+              </div>
+
+              <h3 class="section-title">Daftar Target Bulan Ini</h3>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Sales</th>
+                      <th class="cell-right">Target Qty</th>
+                      <th>Catatan</th>
+                      <th>Update</th>
+                    </tr>
+                  </thead>
+                  <tbody id="approverKpiTableBody">
+                    <tr><td colspan="4" class="empty-cell">Belum ada target KPI.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="approver-view-panel" id="approver-view-backup">
+            <section class="form-card">
+              <div class="panel-header">
+                <div>
+                  <h2>Backup Database</h2>
+                  <p class="panel-subtitle">Buat salinan spreadsheet operasional ke Google Drive agar data lebih aman dan mudah direstore saat dibutuhkan.</p>
+                </div>
+                <div class="inline-actions">
+                  <button type="button" class="primary-btn" id="createBackupBtn">Buat Backup Sekarang</button>
+                  <button type="button" class="ghost-btn" id="refreshApproverBackupBtn">Refresh</button>
+                </div>
+              </div>
+
+              <div class="summary-grid approver-summary-grid">
+                <article class="summary-card">
+                  <span class="summary-label">Total Backup</span>
+                  <strong class="summary-value" id="summaryBackupTotal">0</strong>
+                  <span class="summary-note">Jumlah riwayat backup yang tercatat</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Backup Terakhir</span>
+                  <strong class="summary-value summary-value-sm" id="summaryBackupLastTime">-</strong>
+                  <span class="summary-note" id="summaryBackupLastStatus">Belum ada backup</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Jumlah Sheet</span>
+                  <strong class="summary-value" id="summaryBackupSheetCount">0</strong>
+                  <span class="summary-note">Seluruh sheet operasional yang ikut dicadangkan</span>
+                </article>
+              </div>
+
+              <div class="form-grid">
+                <div class="field field-wide">
+                  <span>Folder Backup</span>
+                  <div class="backup-folder-row">
+                    <input id="backupFolderName" type="text" readonly value="-" />
+                    <a id="backupFolderLink" class="ghost-btn hidden" href="#" target="_blank" rel="noopener noreferrer">Buka Folder</a>
+                  </div>
+                </div>
+              </div>
+
+              <div class="plan-card">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="section-title">Panduan Restore Singkat</h3>
+                    <p class="panel-subtitle">Dipakai saat spreadsheet utama perlu dipulihkan dari file backup hasil salinan database.</p>
+                  </div>
+                </div>
+                <ol class="restore-guide-list">
+                  <li>Buka file backup terbaru dari tabel riwayat atau dari folder backup.</li>
+                  <li>Pastikan nama file, waktu backup, dan isi sheet sudah sesuai dengan kondisi yang ingin dipulihkan.</li>
+                  <li>Buka spreadsheet utama aplikasi, lalu tentukan sheet operasional yang perlu direstore.</li>
+                  <li>Salin data dari spreadsheet backup ke sheet utama dengan urutan kolom yang tetap sama.</li>
+                  <li>Prioritaskan sheet transaksi utama seperti sales order, detail order, approval, surat jalan, tagihan, dan KPI bila memang terdampak.</li>
+                  <li>Setelah restore selesai, buka ulang webapp lalu refresh dengan Ctrl+F5 dan cek proses login, approval, operasional kirim, serta tagihan.</li>
+                </ol>
+              </div>
+
+              <h3 class="section-title">Riwayat Backup</h3>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Waktu</th>
+                      <th>File Backup</th>
+                      <th>Status</th>
+                      <th>Sheet</th>
+                      <th>Dibuat Oleh</th>
+                      <th>Catatan</th>
+                    </tr>
+                  </thead>
+                  <tbody id="approverBackupTableBody">
+                    <tr><td colspan="6" class="empty-cell">Belum ada riwayat backup.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
         </section>
 
         <section class="tab-panel hidden" id="tab-admin" data-role="cs_admin">
@@ -482,6 +675,7 @@
             <div class="admin-subtabs" id="adminSubtabs">
               <button type="button" class="admin-subtab-btn active" data-admin-view="operations">Operasional</button>
               <button type="button" class="admin-subtab-btn" data-admin-view="planning">Rencana Besok</button>
+              <button type="button" class="admin-subtab-btn" data-admin-view="billing">Tagihan</button>
             </div>
 
             <section class="admin-view-panel active" id="admin-view-operations">
@@ -591,7 +785,58 @@
                 </label>
               </section>
             </section>
+
+            <section class="admin-view-panel" id="admin-view-billing">
+              <h3 class="section-title">Tagihan</h3>
+              <p class="panel-subtitle">Daftar customer yang punya tunggakan, bisa ditandai lunas oleh CS/Admin.</p>
+
+              <div class="summary-grid">
+                <article class="summary-card">
+                  <span class="summary-label">Belum Lunas</span>
+                  <strong class="summary-value" id="billingSummaryBelumLunas">0</strong>
+                  <span class="summary-note">Jumlah customer/tagihan terbuka</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Nominal Belum Lunas</span>
+                  <strong class="summary-value" id="billingSummaryTotalBelumLunas">Rp 0</strong>
+                  <span class="summary-note">Total tunggakan dari master customer</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Sinkron Terakhir</span>
+                  <strong class="summary-value" id="billingSummarySync">-</strong>
+                  <span class="summary-note">Tagihan dibuat/diupdate otomatis</span>
+                </article>
+              </div>
+
+              <div class="toolbar-row">
+                <label class="field">
+                  <span>Cari</span>
+                  <input type="search" id="billingSearch" placeholder="Cari kode, nama customer, catatan, atau status..." />
+                </label>
+                <button type="button" class="secondary-btn" id="billingRefreshBtn">Refresh Tagihan</button>
+              </div>
+
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Status</th>
+                      <th>Total</th>
+                      <th>Overdue</th>
+                      <th>JT Terdekat</th>
+                      <th>Catatan</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="billingTableBody">
+                    <tr><td colspan="7" class="empty-cell">Memuat data tagihan...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </section>
+
         </section>
       </section>
     </main>
@@ -747,6 +992,41 @@
           <div class="action-row">
             <button type="button" class="ghost-btn" id="resetAgentBtn">Reset Form Agen</button>
             <button type="submit" class="primary-btn" id="submitAgentBtn">Submit Pengiriman Agen</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="billingPaymentBackdrop">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="billingPaymentTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="billingPaymentTitle">Pembayaran Tagihan</h2>
+            <p class="panel-subtitle" id="billingPaymentSubtitle">Input pembayaran untuk customer.</p>
+          </div>
+          <button type="button" class="ghost-btn" id="closeBillingPaymentBtn">Tutup</button>
+        </div>
+
+        <div class="customer-info">
+          <div><strong>Customer:</strong> <span id="billingPaymentCustomer">-</span></div>
+          <div><strong>Total Tagihan:</strong> <span id="billingPaymentTotal">-</span></div>
+          <div><strong>Sudah Bayar:</strong> <span id="billingPaymentPaid">-</span></div>
+          <div><strong>Sisa:</strong> <span id="billingPaymentRemaining">-</span></div>
+        </div>
+
+        <form id="billingPaymentForm" class="order-form" onsubmit="return false;" style="margin-top:16px;">
+          <label class="field">
+            <span>Nominal Bayar</span>
+            <input id="billingPaymentAmount" type="text" inputmode="numeric" autocomplete="off" placeholder="Rp 0" />
+          </label>
+          <label class="field" style="margin-top:12px;">
+            <span>Catatan (opsional)</span>
+            <textarea id="billingPaymentNote" rows="3" placeholder="Contoh: transfer BCA, bayar sebagian, atau janji pelunasan"></textarea>
+          </label>
+
+          <div class="action-row" style="margin-top:16px;">
+            <button type="button" class="ghost-btn" id="cancelBillingPaymentBtn">Batal</button>
+            <button type="submit" class="primary-btn" id="saveBillingPaymentBtn">Simpan</button>
           </div>
         </form>
       </section>

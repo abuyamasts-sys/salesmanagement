@@ -316,6 +316,17 @@
     margin-bottom: 20px;
   }
 
+  .restore-guide-list {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--sap-text);
+    line-height: 1.7;
+  }
+
+  .restore-guide-list li + li {
+    margin-top: 6px;
+  }
+
   .panel-header {
     display: flex;
     justify-content: space-between;
@@ -371,6 +382,11 @@
     color: var(--sap-text);
   }
 
+  .summary-value-sm {
+    font-size: 18px;
+    line-height: 1.3;
+  }
+
   .summary-note {
     font-size: 12px;
     color: var(--sap-muted);
@@ -397,6 +413,13 @@
     font-size: 13px;
     font-weight: 600;
     color: var(--sap-text);
+  }
+
+  .backup-folder-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
   }
 
   #tab-sales .field span {
@@ -754,6 +777,40 @@
     padding: 20px 12px;
   }
 
+  .cell-right {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .toolbar-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .tiny-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 10px;
+  }
+
+  .empty-state {
+    border: 1px dashed var(--sap-border);
+    border-radius: 14px;
+    padding: 18px 16px;
+    background: #fff;
+    color: var(--sap-muted);
+  }
+
+  .empty-state strong {
+    display: block;
+    color: var(--sap-text);
+    margin-bottom: 6px;
+  }
+
   #tab-sales .form-card,
   #tab-sales .result-card {
     border-radius: 18px;
@@ -816,6 +873,77 @@
 
   #tab-sales #resultContent {
     font-size: 17px;
+  }
+
+  #tab-sales .result-card.result-card-warning {
+    background: linear-gradient(180deg, #fff8ea 0%, #fff1cf 100%);
+    border: 1px solid #f0c36d;
+    box-shadow: 0 10px 24px rgba(233, 115, 12, 0.12);
+  }
+
+  #tab-sales .result-card.result-card-warning h2 {
+    color: #8a4700;
+  }
+
+  #tab-sales .result-card.result-card-success {
+    background: linear-gradient(180deg, #f2fbf5 0%, #e6f7eb 100%);
+    border: 1px solid #9fd6ad;
+    box-shadow: 0 10px 24px rgba(24, 135, 67, 0.08);
+  }
+
+  #tab-sales .result-card.result-card-success h2 {
+    color: #13683a;
+  }
+
+  .sales-submit-result {
+    display: grid;
+    gap: 10px;
+  }
+
+  .submit-kicker {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .submit-meta-line {
+    color: inherit;
+    line-height: 1.6;
+  }
+
+  .submit-meta-line strong {
+    color: #27445d;
+  }
+
+  .submit-status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .submit-alasan-hold {
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(240, 195, 109, 0.75);
+  }
+
+  .submit-guidance {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: #fff3cd;
+    border: 1px solid #f0c36d;
+    color: #8a4700;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .submit-guidance-ok {
+    background: #edf9f0;
+    border-color: #9fd6ad;
+    color: #13683a;
   }
 
   #tab-sales .sales-order-total-grid {
@@ -1000,7 +1128,8 @@
     background: #fcfcfc;
   }
 
-  #resultContent {
+  #resultContent,
+  #globalResultContent {
     color: var(--sap-muted);
     line-height: 1.6;
     white-space: pre-line;
@@ -1066,6 +1195,14 @@
   .ghost-btn:hover {
     border-color: var(--sap-blue);
     color: var(--sap-blue);
+  }
+
+  .print-action-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    line-height: 1.2;
+    white-space: nowrap;
   }
 
   .danger-btn {

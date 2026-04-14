@@ -1,10 +1,25 @@
 function setupAppSheets() {
-  Object.keys(APP_CONFIG.HEADERS).forEach(function(sheetKey) {
-    var sheetName = APP_CONFIG.SHEETS[sheetKey];
-    var headers = APP_CONFIG.HEADERS[sheetKey];
+  try {
+    if (!APP_CONFIG || !APP_CONFIG.SPREADSHEET_ID) {
+      throw new Error('APP_CONFIG.SPREADSHEET_ID belum diisi.');
+    }
 
-    ensureSheetWithHeaders_(sheetName, headers);
-  });
+    Object.keys(APP_CONFIG.HEADERS).forEach(function(sheetKey) {
+      var sheetName = APP_CONFIG.SHEETS[sheetKey];
+      var headers = APP_CONFIG.HEADERS[sheetKey];
+
+      if (!sheetName) {
+        throw new Error('Nama sheet tidak ditemukan untuk key: ' + sheetKey);
+      }
+
+      ensureSheetWithHeaders_(sheetName, headers);
+    });
+
+    return { success: true, message: 'Setup sheet selesai.' };
+  } catch (error) {
+    Logger.log(error && error.stack ? error.stack : error);
+    throw new Error('Setup sheet gagal: ' + (error && error.message ? error.message : error));
+  }
 }
 
 function seedDummyDataAsSales() {
@@ -27,7 +42,10 @@ function clearDummyTransactionsOnly() {
     APP_CONFIG.SHEETS.SALES_ORDER_DETAIL,
     APP_CONFIG.SHEETS.APPROVAL_ORDER,
     APP_CONFIG.SHEETS.SURAT_JALAN,
-    APP_CONFIG.SHEETS.LOG_STATUS_ORDER
+    APP_CONFIG.SHEETS.LOG_STATUS_ORDER,
+    APP_CONFIG.SHEETS.TAGIHAN,
+    APP_CONFIG.SHEETS.KPI_TARGET_SALES,
+    APP_CONFIG.SHEETS.KPI_LOG
   ].forEach(function(sheetName) {
     clearSheetRowsPreserveHeader_(sheetName);
   });
@@ -91,7 +109,10 @@ function clearDataRows_() {
     APP_CONFIG.SHEETS.SALES_ORDER_DETAIL,
     APP_CONFIG.SHEETS.APPROVAL_ORDER,
     APP_CONFIG.SHEETS.SURAT_JALAN,
-    APP_CONFIG.SHEETS.LOG_STATUS_ORDER
+    APP_CONFIG.SHEETS.LOG_STATUS_ORDER,
+    APP_CONFIG.SHEETS.TAGIHAN,
+    APP_CONFIG.SHEETS.KPI_TARGET_SALES,
+    APP_CONFIG.SHEETS.KPI_LOG
   ].forEach(function(sheetName) {
     clearSheetRowsPreserveHeader_(sheetName);
   });
@@ -106,8 +127,10 @@ function ensureSheetWithHeaders_(sheetName, headers) {
   }
 
   var safeHeaders = headers || [];
-  var currentHeaders = sheet.getLastColumn() > 0
-    ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+  var currentHeaders = safeHeaders.length
+    ? sheet.getRange(1, 1, 1, safeHeaders.length).getValues()[0].map(function(header) {
+      return String(header || '').trim();
+    })
     : [];
 
   if (currentHeaders.join('|') !== safeHeaders.join('|')) {
@@ -116,6 +139,11 @@ function ensureSheetWithHeaders_(sheetName, headers) {
       sheet.getRange(1, 1, 1, safeHeaders.length).setValues([safeHeaders]);
       sheet.setFrozenRows(1);
     }
+    return;
+  }
+
+  if (safeHeaders.length) {
+    sheet.setFrozenRows(1);
   }
 }
 
