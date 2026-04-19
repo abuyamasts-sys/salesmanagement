@@ -6,6 +6,7 @@ function doGet() {
 }
 
 function getAppBootstrap() {
+  ensureMasterUserPasswords_();
   var currentUser = getCurrentUserProfile();
 
   return {
@@ -58,9 +59,79 @@ function getSalesOrderFormData(userId) {
     currentUser: currentUser,
     users: [currentUser],
     products: getProductCatalog_(),
+    salesHistoryOrders: getSalesOrderHistoryForSales_(currentUser.user_id, 30),
     deliveryPriority: APP_CONFIG.DELIVERY_PRIORITY,
     customerType: APP_CONFIG.CUSTOMER_TYPE
   });
+}
+
+function getSalesOrderHistoryForSales_(salesId, limit) {
+  var safeSalesId = String(salesId || '').trim();
+  var maxRows = Math.max(1, Number(limit || 30));
+  var salesOrders;
+  var neededNoSo = {};
+  var salesOrderDetailsByNoSo;
+
+  if (!safeSalesId) {
+    return [];
+  }
+
+  salesOrders = getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).filter(function(row) {
+    return String(row.sales_id || '').trim() === safeSalesId;
+  });
+
+  salesOrders.sort(function(left, right) {
+    return getSalesOrderHistorySortValue_(right) - getSalesOrderHistorySortValue_(left);
+  });
+
+  salesOrders = salesOrders.slice(0, maxRows);
+  salesOrders.forEach(function(order) {
+    var noSoKey = String(order.no_so || '').trim();
+    if (noSoKey) {
+      neededNoSo[noSoKey] = true;
+    }
+  });
+
+  salesOrderDetailsByNoSo = getSalesOrderDetailsMapForNoSo_(neededNoSo);
+
+  return salesOrders.map(function(order) {
+    var noSoKey = String(order.no_so || '').trim();
+    return buildSalesOrderClientRowFromDetails_(order, salesOrderDetailsByNoSo[noSoKey] || null);
+  });
+}
+
+function getSalesOrderHistorySortValue_(order) {
+  var source = order || {};
+  var candidates = [
+    source.tanggal_order,
+    source.tanggal_kirim_rencana,
+    source.tanggal_selesai,
+    source.no_so
+  ];
+  var index;
+  var candidate;
+  var parsed;
+
+  for (index = 0; index < candidates.length; index += 1) {
+    candidate = candidates[index];
+
+    if (candidate instanceof Date && !isNaN(candidate.getTime())) {
+      return candidate.getTime();
+    }
+
+    parsed = new Date(candidate);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.getTime();
+    }
+  }
+
+  return 0;
+}
+
+function loginFromDashboard(formData) {
+  var payload = formData || {};
+
+  return toClientValue_(loginWithPassword(payload.user_id || '', payload.password || ''));
 }
 
 function getApproverDashboardData(userId) {
@@ -148,14 +219,24 @@ function getReadyKledoExportOrders_() {
 
 function backfillCompletedOrdersVerification_() {
   ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
+  var salesOrders = getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER);
+  var suratJalanByNoSo = {};
 
-  getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).forEach(function(order) {
+  getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN).forEach(function(row) {
+    var noSoKey = String(row.no_so || '').trim();
+
+    if (noSoKey) {
+      suratJalanByNoSo[noSoKey] = row;
+    }
+  });
+
+  salesOrders.forEach(function(order) {
     var noSo = String(order.no_so || '').trim();
     var statusOrder = normalizeText_(order.status_order);
     var statusVerifikasi = String(order.status_verifikasi_cs || '').trim();
     var statusExport = String(order.status_export_kledo || '').trim();
     var tanggalSelesai = normalizeSheetDateToYmd_(order.tanggal_selesai);
-    var suratJalan = findSuratJalanByNoSo_(noSo) || {};
+    var suratJalan = suratJalanByNoSo[noSo] || {};
     var updates = {};
 
     if (!noSo || statusOrder !== 'selesai') {
@@ -247,7 +328,8 @@ function getAdminDashboardData(userId) {
   });
 
   var readyOrders = salesOrders.filter(function(row) {
-    return normalizeText_(row.status_order) === 'siap kirim';
+    var statusOrder = normalizeText_(row.status_order);
+    return statusOrder === 'siap kirim' || statusOrder === 'pending kirim';
   }).filter(function(row) {
     return !suratJalanByNoSo[String(row.no_so || '').trim()];
   }).map(function(order) {
@@ -303,6 +385,12 @@ function getAdminOperationsData(userId, options) {
   var deliveryOrders = getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN);
   var salesOrderByNoSo = {};
   var suratJalanByNoSo = {};
+  var neededNoSo = {};
+  var salesOrderDetailsByNoSo;
+  var readyOrders;
+  var deliverySummary;
+  var filterDate;
+  var filteredDeliveryOrders;
 
   salesOrders.forEach(function(order) {
     salesOrderByNoSo[String(order.no_so || '').trim()] = order;
@@ -312,7 +400,7 @@ function getAdminOperationsData(userId, options) {
     suratJalanByNoSo[String(row.no_so || '').trim()] = true;
   });
 
-  var deliverySummary = deliveryOrders.reduce(function(result, row) {
+  deliverySummary = deliveryOrders.reduce(function(result, row) {
     var status = normalizeText_(row.status_kirim);
     if (status === 'siap kirim') result.siap_kirim += 1;
     if (status === 'terkirim') result.terkirim += 1;
@@ -320,64 +408,112 @@ function getAdminOperationsData(userId, options) {
     return result;
   }, { siap_kirim: 0, terkirim: 0, selesai: 0 });
 
-  var filterDate = normalizeSheetDateToYmd_(options && options.delivery_filter_date);
-  var filteredDeliveryOrders = filterDate ? deliveryOrders.filter(function(row) {
+  filterDate = normalizeSheetDateToYmd_(options && options.delivery_filter_date);
+  filteredDeliveryOrders = filterDate ? deliveryOrders.filter(function(row) {
     return normalizeSheetDateToYmd_(row.tanggal_kirim || row.tanggal_cetak || '') === filterDate;
   }) : deliveryOrders.slice();
 
-  var readyOrders = salesOrders.filter(function(row) {
-    return normalizeText_(row.status_order) === 'siap kirim';
+  readyOrders = salesOrders.filter(function(row) {
+    var statusOrder = normalizeText_(row.status_order);
+    return statusOrder === 'siap kirim' || statusOrder === 'pending kirim';
   }).filter(function(row) {
     return !suratJalanByNoSo[String(row.no_so || '').trim()];
-  }).map(function(order) {
-    var noSoKey = String(order.no_so || '').trim();
-    return buildSalesOrderClientRowFromDetails_(order, null);
   });
 
-  var neededNoSo = {};
   readyOrders.forEach(function(order) {
     var key = String(order.no_so || '').trim();
     if (key) neededNoSo[key] = true;
   });
-  filteredDeliveryOrders.forEach(function(row) {
-    var key = String(row.no_so || '').trim();
-    if (key) neededNoSo[key] = true;
-  });
 
-  var salesOrderDetailsByNoSo = getSalesOrderDetailsMapForNoSo_(neededNoSo);
+  salesOrderDetailsByNoSo = getSalesOrderDetailsMapForNoSo_(neededNoSo);
 
   readyOrders = readyOrders.map(function(order) {
     var noSoKey = String(order.no_so || '').trim();
-    return buildSalesOrderClientRowFromDetails_(salesOrderByNoSo[noSoKey] || order, salesOrderDetailsByNoSo[noSoKey] || null);
+    return buildAdminReadyOrderListRow_(salesOrderByNoSo[noSoKey] || order, salesOrderDetailsByNoSo[noSoKey] || null);
   });
 
   return toClientValue_({
     readyOrders: readyOrders,
     deliverySummary: deliverySummary,
+    products: getProductCatalog_(),
     deliveryOrders: filteredDeliveryOrders.map(function(row) {
       var noSoKey = String(row.no_so || '').trim();
-      var sourceOrder = salesOrderByNoSo[noSoKey] || {};
-      var order = buildSalesOrderClientRowFromDetails_(sourceOrder, salesOrderDetailsByNoSo[noSoKey] || null);
-      var result = {};
-
-      Object.keys(row || {}).forEach(function(key) {
-        result[key] = row[key];
-      });
-
-      result.item_summary = order.item_summary || '';
-      result.qty_summary = order.qty_summary || '';
-      result.details = order.details || [];
-      result.subtotal_final = order.subtotal_final || 0;
-      result.diskon_final = order.diskon_final || 0;
-      result.total_final = order.total_final || 0;
-      result.status_verifikasi_cs = order.status_verifikasi_cs || 'Belum Dicek';
-      result.diverifikasi_oleh = order.diverifikasi_oleh || '';
-      result.tanggal_verifikasi_cs = order.tanggal_verifikasi_cs || '';
-      result.catatan_verifikasi_cs = order.catatan_verifikasi_cs || '';
-
-      return result;
+      return buildAdminDeliveryListRow_(row, salesOrderByNoSo[noSoKey] || {});
     })
   });
+}
+
+function buildAdminReadyOrderListRow_(order, rawDetails) {
+  var row = buildSalesOrderClientRowFromDetails_(order || {}, rawDetails || null);
+
+  return {
+    no_so: row.no_so || '',
+    tanggal_order: row.tanggal_order || '',
+    jam_order: row.jam_order || '',
+    tanggal_kirim_rencana: row.tanggal_kirim_rencana || '',
+    nama_customer_input: row.nama_customer_input || '',
+    nama_customer: row.nama_customer || '',
+    sales_nama: row.sales_nama || '',
+    item_summary: row.item_summary || row.item || '',
+    qty_summary: row.qty_summary || row.qty || '',
+    total_order: row.total_order || row.total || 0,
+    total_final: row.total_final || row.total || 0,
+    status_order: row.status_order || '',
+    catatan: row.catatan || '',
+    alasan_hold: row.alasan_hold || '',
+    alasan_batal: row.alasan_batal || ''
+  };
+}
+
+function buildAdminDeliveryListRow_(suratJalan, order) {
+  var sourceDelivery = suratJalan || {};
+  var sourceOrder = order || {};
+  var tanggalKirimEfektif = resolveEffectiveSuratJalanTanggalKirim_(sourceDelivery, sourceOrder);
+
+  return {
+    no_surat_jalan: sourceDelivery.no_surat_jalan || '',
+    no_so: sourceDelivery.no_so || '',
+    tanggal_kirim: tanggalKirimEfektif || sourceDelivery.tanggal_cetak || '',
+    tanggal_cetak: sourceDelivery.tanggal_cetak || '',
+    nama_customer: sourceDelivery.nama_customer || sourceOrder.nama_customer_input || '',
+    nama_customer_input: sourceOrder.nama_customer_input || sourceDelivery.nama_customer || '',
+    status_kirim: sourceDelivery.status_kirim || '',
+    catatan_kirim: sourceDelivery.catatan_kirim || '',
+    status_verifikasi_cs: sourceOrder.status_verifikasi_cs || 'Belum Dicek',
+    diverifikasi_oleh: sourceOrder.diverifikasi_oleh || '',
+    tanggal_verifikasi_cs: sourceOrder.tanggal_verifikasi_cs || '',
+    catatan_verifikasi_cs: sourceOrder.catatan_verifikasi_cs || ''
+  };
+}
+
+function getDeliveryVerificationData_(noSo) {
+  var noSoKey = String(noSo || '').trim();
+  var suratJalan = findSuratJalanByNoSo_(noSoKey);
+  var sourceOrder = findSalesOrderByNoSo_(noSoKey) || {};
+  var order = buildSalesOrderClientRow_(sourceOrder);
+  var tanggalKirimEfektif;
+
+  if (!suratJalan) {
+    throw new Error('Data surat jalan tidak ditemukan untuk diverifikasi.');
+  }
+
+  tanggalKirimEfektif = resolveEffectiveSuratJalanTanggalKirim_(suratJalan, sourceOrder);
+
+  return {
+    no_surat_jalan: suratJalan.no_surat_jalan || '',
+    no_so: suratJalan.no_so || noSoKey,
+    tanggal_kirim: tanggalKirimEfektif || suratJalan.tanggal_cetak || '',
+    tanggal_cetak: suratJalan.tanggal_cetak || '',
+    nama_customer: suratJalan.nama_customer || sourceOrder.nama_customer_input || '',
+    nama_customer_input: sourceOrder.nama_customer_input || suratJalan.nama_customer || '',
+    status_kirim: suratJalan.status_kirim || '',
+    catatan_kirim: suratJalan.catatan_kirim || '',
+    status_verifikasi_cs: order.status_verifikasi_cs || 'Belum Dicek',
+    diverifikasi_oleh: order.diverifikasi_oleh || '',
+    tanggal_verifikasi_cs: order.tanggal_verifikasi_cs || '',
+    catatan_verifikasi_cs: order.catatan_verifikasi_cs || '',
+    details: order.details || []
+  };
 }
 
 function getAdminBillingData(userId) {
@@ -403,6 +539,10 @@ function getSalesOrderDetailsMapForNoSo_(neededNoSoMap) {
   var sheet = getSheetByNameOrNull_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL);
   var needed = neededNoSoMap || {};
   var result = {};
+
+  if (!Object.keys(needed).length) {
+    return result;
+  }
 
   if (!sheet) {
     return result;
@@ -581,9 +721,33 @@ function createSuratJalanFromDashboard(userId, formData) {
   });
 }
 
+function getSalesOrderRevisionDataFromDashboard(userId, noSo) {
+  requireCurrentUserRole_(['CS/Admin'], userId);
+  return toClientValue_(getSalesOrderForRevision_(noSo));
+}
+
+function saveSalesOrderRevisionFromDashboard(userId, formData) {
+  var currentUser = requireCurrentUserRole_(['CS/Admin'], userId);
+  var payload = formData || {};
+
+  return toClientValue_(reviseSalesOrderByCs_(payload.no_so, currentUser, payload));
+}
+
+function cancelSalesOrderFromDashboard(userId, formData) {
+  var currentUser = requireCurrentUserRole_(['CS/Admin'], userId);
+  var payload = formData || {};
+
+  return toClientValue_(cancelSalesOrderByCs_(payload.no_so, currentUser, payload.alasan_batal || ''));
+}
+
 function markOrderDeliveredFromDashboard(userId, formData) {
   var currentUser = requireCurrentUserRole_(['CS/Admin'], userId);
   return markOrderDelivered(formData.no_so, currentUser.user_id, formData.catatan_kirim || '');
+}
+
+function getDeliveryVerificationDataFromDashboard(userId, noSo) {
+  requireCurrentUserRole_(['CS/Admin'], userId);
+  return toClientValue_(getDeliveryVerificationData_(noSo));
 }
 
 function verifyDeliveredOrderFromDashboard(userId, formData) {
@@ -646,6 +810,11 @@ function getSuratJalanPrintDataFromDashboard(userId, noSo) {
   return toClientValue_(getSuratJalanPrintData(noSo));
 }
 
+function getSuratJalanPreviewDataFromDashboard(userId, noSo) {
+  requireCurrentUserRole_(['CS/Admin'], userId);
+  return toClientValue_(getSuratJalanPreviewData(noSo));
+}
+
 function validateSalesNewCustomerFields_(payload) {
   var requiredFields;
 
@@ -670,6 +839,7 @@ function validateSalesNewCustomerFields_(payload) {
 
 function getProductCatalog_() {
   ensureDefaultMasterItems_();
+  syncMasterItemNames_();
 
   return getSheetData_(APP_CONFIG.SHEETS.MASTER_ITEM).filter(function(row) {
     return normalizeText_(row.status_aktif || 'aktif') !== 'nonaktif';
@@ -707,14 +877,46 @@ function ensureDefaultMasterItems_() {
 function getDefaultProductCatalogSeed_() {
   return [
     { kode_item: 'PRD001', nama_item: 'AIRTIS Galon 19L', satuan: 'pcs', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
-    { kode_item: 'PRD002', nama_item: 'AIRTIS Refill galon 19L', satuan: 'pcs', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
+    { kode_item: 'PRD002', nama_item: 'AIRTIS Galon Refill 19L', satuan: 'pcs', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
     { kode_item: 'PRD003', nama_item: 'AIRTIS Cup 150 ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
-    { kode_item: 'PRD004', nama_item: 'AIRTIS Cup 220 ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
+    { kode_item: 'PRD004', nama_item: 'AIRTIS Cup 220ml - 48', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
     { kode_item: 'PRD005', nama_item: 'AIRTIS Botol 220 ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
-    { kode_item: 'PRD006', nama_item: 'AIRTIS Botol 330 ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
-    { kode_item: 'PRD007', nama_item: 'AIRTIS Botol 600 ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
-    { kode_item: 'PRD008', nama_item: 'AIRTIS Botol 1500 ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' }
+    { kode_item: 'PRD006', nama_item: 'AIRTIS Botol 330ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
+    { kode_item: 'PRD007', nama_item: 'AIRTIS Botol 600ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' },
+    { kode_item: 'PRD008', nama_item: 'AIRTIS Botol 1500ml', satuan: 'dus', harga_default: 0, harga_dasar: 0, diupdate_oleh: '', tanggal_update_harga: '', status_aktif: 'Aktif' }
   ];
+}
+
+function syncMasterItemNames_() {
+  var expectedNamesByCode = {
+    PRD002: 'AIRTIS Galon Refill 19L',
+    PRD004: 'AIRTIS Cup 220ml - 48',
+    PRD006: 'AIRTIS Botol 330ml',
+    PRD007: 'AIRTIS Botol 600ml',
+    PRD008: 'AIRTIS Botol 1500ml'
+  };
+  var expectedNamesByLegacyName = {
+    'AIRTIS Refill galon 19L': 'AIRTIS Galon Refill 19L',
+    'AIRTIS Cup 220 ml': 'AIRTIS Cup 220ml - 48',
+    'AIRTIS Botol 330 ml': 'AIRTIS Botol 330ml',
+    'AIRTIS Botol 600 ml': 'AIRTIS Botol 600ml',
+    'AIRTIS Botol 1500 ml': 'AIRTIS Botol 1500ml'
+  };
+  var rows = getSheetData_(APP_CONFIG.SHEETS.MASTER_ITEM);
+
+  rows.forEach(function(row) {
+    var kodeItem = String(row.kode_item || '').trim();
+    var currentName = String(row.nama_item || '').trim();
+    var expectedName = expectedNamesByCode[kodeItem] || expectedNamesByLegacyName[currentName];
+
+    if (!expectedName || currentName === expectedName) {
+      return;
+    }
+
+    updateRowByKey_(APP_CONFIG.SHEETS.MASTER_ITEM, 'kode_item', kodeItem, {
+      nama_item: expectedName
+    });
+  });
 }
 
 function updateProductBasePrice_(kodeItem, hargaDasar, currentUser) {

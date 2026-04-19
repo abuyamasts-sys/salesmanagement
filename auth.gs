@@ -28,6 +28,53 @@ function getUserProfileByUserId(userId) {
   return getCurrentUserProfile(userId);
 }
 
+function ensureMasterUserPasswords_() {
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_USER, APP_CONFIG.HEADERS.MASTER_USER);
+
+  getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).forEach(function(user) {
+    var userId = String(user.user_id || '').trim();
+    var password = String(user.password || '');
+
+    if (!userId || password) {
+      return;
+    }
+
+    updateRowByKey_(APP_CONFIG.SHEETS.MASTER_USER, 'user_id', userId, {
+      password: userId
+    });
+  });
+}
+
+function loginWithPassword(userId, password) {
+  var normalizedUserId = String(userId || '').trim().toUpperCase();
+  var rawPassword = String(password || '');
+  var user = getCurrentUserRecord_(normalizedUserId);
+  var storedPassword;
+
+  if (!normalizedUserId) {
+    throw new Error('User ID wajib diisi.');
+  }
+
+  if (!rawPassword) {
+    throw new Error('Password wajib diisi.');
+  }
+
+  if (!user) {
+    throw new Error('User ID tidak ditemukan atau status user tidak aktif.');
+  }
+
+  storedPassword = String(user.password || '');
+  if (!storedPassword) {
+    throw new Error('Password untuk user ini belum diatur di MASTER_USER.');
+  }
+
+  if (storedPassword !== rawPassword) {
+    throw new Error('Password salah.');
+  }
+
+  return getCurrentUserProfile(normalizedUserId);
+}
+
 function requireAuthorizedUser_(userId) {
   var user = getCurrentUserRecord_(userId);
 

@@ -17,7 +17,7 @@ function createSuratJalan(noSo, options) {
   var now = getNowParts_();
   var payload = options || {};
   var noSuratJalan = generateDocNumber_(APP_CONFIG.DOC_PREFIX.SURAT_JALAN);
-  var tanggalKirim = payload.tanggal_kirim || salesOrder.tanggal_kirim_rencana || now.tanggal;
+  var tanggalKirim = normalizeSheetDateToYmd_(payload.tanggal_kirim || salesOrder.tanggal_kirim_rencana || now.tanggal);
 
   appendRowByHeaders_(APP_CONFIG.SHEETS.SURAT_JALAN, {
     no_surat_jalan: noSuratJalan,
@@ -52,12 +52,13 @@ function getSuratJalanPrintData(noSo) {
 
   var salesOrder = findSalesOrderByNoSo_(noSo) || {};
   var orderDisplay = buildSalesOrderClientRow_(salesOrder);
+  var tanggalKirimEfektif = resolveEffectiveSuratJalanTanggalKirim_(suratJalan, salesOrder);
 
   return {
     no_surat_jalan: suratJalan.no_surat_jalan || '',
     no_so: suratJalan.no_so || '',
     tanggal_cetak: suratJalan.tanggal_cetak || '',
-    tanggal_kirim: suratJalan.tanggal_kirim || '',
+    tanggal_kirim: tanggalKirimEfektif,
     customer_id: suratJalan.customer_id || '',
     nama_customer: suratJalan.nama_customer || salesOrder.nama_customer_input || '',
     alamat_kirim: suratJalan.alamat_kirim || salesOrder.alamat_kirim || '',
@@ -84,6 +85,56 @@ function getSuratJalanPrintData(noSo) {
     subtotal: orderDisplay.subtotal_final || salesOrder.subtotal_final || salesOrder.subtotal || '',
     diskon: orderDisplay.diskon_final || salesOrder.diskon_final || salesOrder.diskon || '',
     total: orderDisplay.total_final || salesOrder.total_final || salesOrder.total || '',
+    catatan_order: salesOrder.catatan || ''
+  };
+}
+
+function getSuratJalanPreviewData(noSo) {
+  var noSoKey = String(noSo || '').trim();
+  var salesOrder = findSalesOrderByNoSo_(noSoKey);
+  var orderDisplay;
+
+  if (!salesOrder) {
+    throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSoKey);
+  }
+
+  if (normalizeText_(salesOrder.status_order) !== 'siap kirim') {
+    throw new Error('Preview SJ hanya tersedia untuk order berstatus Siap Kirim.');
+  }
+
+  orderDisplay = buildSalesOrderClientRow_(salesOrder);
+
+  return {
+    no_surat_jalan: '',
+    no_so: salesOrder.no_so || '',
+    tanggal_cetak: '',
+    tanggal_kirim: normalizeSheetDateToYmd_(salesOrder.tanggal_kirim_rencana || ''),
+    customer_id: salesOrder.customer_id || '',
+    nama_customer: salesOrder.nama_customer_input || '',
+    alamat_kirim: salesOrder.alamat_kirim || '',
+    item: orderDisplay.item_summary || salesOrder.item || '',
+    qty: orderDisplay.qty_summary || salesOrder.qty || '',
+    items: (orderDisplay.details || []).map(function(detail) {
+      return {
+        nama_item: detail.nama_item || '',
+        qty: Number(detail.qty || 0),
+        satuan: detail.satuan || '',
+        harga: Number(detail.harga || 0),
+        diskon: Number(detail.diskon || 0),
+        subtotal: Number(detail.subtotal || 0)
+      };
+    }),
+    driver: '',
+    armada: '',
+    status_kirim: 'Preview',
+    catatan_kirim: '',
+    sales_nama: salesOrder.sales_nama || '',
+    pic_customer: salesOrder.pic_customer || '',
+    no_hp_customer: salesOrder.no_hp_customer || '',
+    term_pembayaran: salesOrder.term_pembayaran || '',
+    subtotal: orderDisplay.subtotal_order || salesOrder.subtotal || '',
+    diskon: orderDisplay.diskon_order || salesOrder.diskon || '',
+    total: orderDisplay.total_order || salesOrder.total || '',
     catatan_order: salesOrder.catatan || ''
   };
 }
@@ -300,6 +351,7 @@ function buildKledoExportRows_(salesOrder, suratJalan) {
   var details = Array.isArray(salesOrder.details) ? salesOrder.details : [];
   var customerName = salesOrder.customer || salesOrder.nama_customer_input || '';
   var orderNote = salesOrder.catatan || salesOrder.catatan_order || '';
+  var tanggalKirimEfektif = resolveEffectiveSuratJalanTanggalKirim_(suratJalan || {}, salesOrder || {});
 
   if (!details.length) {
     throw new Error('Detail item order tidak ditemukan untuk export Kledo.');
@@ -325,7 +377,7 @@ function buildKledoExportRows_(salesOrder, suratJalan) {
         catatan: orderNote,
         catatan_verifikasi_cs: salesOrder.catatan_verifikasi_cs || ''
       }),
-      formatKledoDate_(suratJalan.tanggal_kirim || salesOrder.tanggal_kirim_rencana || ''),
+      formatKledoDate_(tanggalKirimEfektif || salesOrder.tanggal_kirim_rencana || ''),
       suratJalan.armada || '',
       '',
       APP_CONFIG.KLEDO_EXPORT.INCLUDE_TAX,
@@ -462,6 +514,48 @@ function findSuratJalanByNoSo_(noSo) {
   return getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN).find(function(row) {
     return String(row.no_so).trim() === String(noSo).trim();
   }) || null;
+}
+
+function resolveEffectiveSuratJalanTanggalKirim_(suratJalan, salesOrder) {
+  var suratJalanRow = suratJalan || {};
+  var salesOrderRow = salesOrder || {};
+  var statusKirim = normalizeText_(suratJalanRow.status_kirim);
+  var tanggalSo = normalizeSheetDateToYmd_(salesOrderRow.tanggal_kirim_rencana);
+  var tanggalSj = normalizeSheetDateToYmd_(suratJalanRow.tanggal_kirim || suratJalanRow.tanggal_cetak || '');
+
+  if (statusKirim !== 'terkirim' && statusKirim !== 'selesai' && tanggalSo) {
+    return tanggalSo;
+  }
+
+  return tanggalSj || tanggalSo || '';
+}
+
+function syncSuratJalanDraftFromSalesOrder_(noSo) {
+  var noSoKey = String(noSo || '').trim();
+  var suratJalan = findSuratJalanByNoSo_(noSoKey);
+  var salesOrder = findSalesOrderByNoSo_(noSoKey);
+  var orderDisplay;
+  var statusKirim;
+
+  if (!suratJalan || !salesOrder) {
+    return null;
+  }
+
+  statusKirim = normalizeText_(suratJalan.status_kirim);
+  if (statusKirim === 'terkirim' || statusKirim === 'selesai') {
+    return suratJalan;
+  }
+
+  orderDisplay = buildSalesOrderClientRow_(salesOrder);
+
+  return updateRowByKey_(APP_CONFIG.SHEETS.SURAT_JALAN, 'no_so', noSoKey, {
+    tanggal_kirim: normalizeSheetDateToYmd_(salesOrder.tanggal_kirim_rencana || suratJalan.tanggal_kirim || ''),
+    customer_id: salesOrder.customer_id || suratJalan.customer_id || '',
+    nama_customer: salesOrder.nama_customer_input || suratJalan.nama_customer || '',
+    alamat_kirim: salesOrder.alamat_kirim || suratJalan.alamat_kirim || '',
+    item: orderDisplay.item_summary || salesOrder.item || suratJalan.item || '',
+    qty: orderDisplay.qty_summary || salesOrder.qty || suratJalan.qty || ''
+  });
 }
 
 function getLatestSalesOrderByStatus_(statusOrder) {

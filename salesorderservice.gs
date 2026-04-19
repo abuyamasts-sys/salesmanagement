@@ -141,6 +141,247 @@ function testSubmitSalesOrderHold() {
   console.log(JSON.stringify(result));
 }
 
+function getSalesOrderForRevision_(noSo) {
+  var noSoKey = String(noSo || '').trim();
+  var salesOrder = findSalesOrderByNoSo_(noSoKey);
+  var suratJalan = findSuratJalanByNoSo_(noSoKey);
+  var orderDisplay;
+  var statusOrder;
+  var statusKirim;
+
+  if (!salesOrder) {
+    throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSoKey);
+  }
+
+  statusOrder = normalizeText_(salesOrder.status_order);
+  if (['terkirim', 'selesai', 'ditolak'].indexOf(statusOrder) !== -1) {
+    throw new Error('Order dengan status ' + salesOrder.status_order + ' tidak bisa direvisi CS.');
+  }
+
+  if (suratJalan) {
+    statusKirim = normalizeText_(suratJalan.status_kirim);
+    if (statusKirim === 'terkirim' || statusKirim === 'selesai') {
+      throw new Error('Order tidak bisa direvisi karena surat jalan sudah masuk proses kirim/final.');
+    }
+  }
+
+  orderDisplay = buildSalesOrderClientRow_(salesOrder);
+
+  return {
+    no_so: salesOrder.no_so || '',
+    status_order: salesOrder.status_order || '',
+    customer_id: salesOrder.customer_id || '',
+    nama_customer_input: salesOrder.nama_customer_input || '',
+    sales_nama: salesOrder.sales_nama || orderDisplay.sales_nama || '',
+    tanggal_order: normalizeSheetDateToYmd_(salesOrder.tanggal_order),
+    term_pembayaran: salesOrder.term_pembayaran || '',
+    tanggal_jatuh_tempo: normalizeSheetDateToYmd_(salesOrder.tanggal_jatuh_tempo),
+    tanggal_kirim_rencana: normalizeSheetDateToYmd_(salesOrder.tanggal_kirim_rencana),
+    catatan: salesOrder.catatan || '',
+    has_surat_jalan: Boolean(suratJalan),
+    status_kirim: suratJalan ? (suratJalan.status_kirim || '') : '',
+    details: (orderDisplay.details || []).map(function(detail) {
+      return {
+        detail_id: detail.detail_id || '',
+        kode_item: detail.kode_item || '',
+        nama_item: detail.nama_item || '',
+        qty: Number(detail.qty || 0),
+        satuan: detail.satuan || '',
+        harga: Number(detail.harga || 0),
+        diskon: Number(detail.diskon || 0),
+        subtotal: Number(detail.subtotal || 0)
+      };
+    })
+  };
+}
+
+function reviseSalesOrderByCs_(noSo, currentUser, payload) {
+  var noSoKey = String(noSo || '').trim();
+  var user = currentUser || {};
+  var salesOrder = findSalesOrderByNoSo_(noSoKey);
+  var suratJalan = findSuratJalanByNoSo_(noSoKey);
+  var revisionPayload = payload || {};
+  var existingDetails;
+  var existingDetailMap = {};
+  var normalizedItems;
+  var totals;
+  var previousSnapshot;
+  var nextSnapshot;
+  var updates;
+  var now;
+  var pendingApproval;
+  var nextStatusOrder;
+  var statusKirim;
+
+  if (!salesOrder) {
+    throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSoKey);
+  }
+
+  if (['terkirim', 'selesai', 'ditolak'].indexOf(normalizeText_(salesOrder.status_order)) !== -1) {
+    throw new Error('Order dengan status ' + salesOrder.status_order + ' tidak bisa direvisi CS.');
+  }
+
+  if (suratJalan) {
+    statusKirim = normalizeText_(suratJalan.status_kirim);
+    if (statusKirim === 'terkirim' || statusKirim === 'selesai') {
+      throw new Error('Order tidak bisa direvisi karena surat jalan sudah masuk proses kirim/final.');
+    }
+  }
+
+  validateSalesOrderRevisionPayload_(revisionPayload);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, APP_CONFIG.HEADERS.SALES_ORDER_DETAIL);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.APPROVAL_ORDER, APP_CONFIG.HEADERS.APPROVAL_ORDER);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.LOG_REVISI_ORDER, APP_CONFIG.HEADERS.LOG_REVISI_ORDER);
+
+  existingDetails = getSalesOrderDetailsByNoSo_(noSoKey);
+  if (!existingDetails.length) {
+    throw new Error('Detail item order tidak ditemukan untuk no_so: ' + noSoKey);
+  }
+
+  existingDetails.forEach(function(detail) {
+    existingDetailMap[String(detail.detail_id || '').trim()] = detail;
+  });
+
+  normalizedItems = normalizeRevisionItems_(revisionPayload.items, existingDetailMap);
+  totals = calculateOrderTotals_(normalizedItems);
+  previousSnapshot = buildRevisionSnapshot_(salesOrder, existingDetails);
+  nextSnapshot = buildRevisionSnapshot_({
+    tanggal_kirim_rencana: revisionPayload.tanggal_kirim_rencana,
+    term_pembayaran: revisionPayload.term_pembayaran,
+    tanggal_jatuh_tempo: revisionPayload.tanggal_jatuh_tempo,
+    catatan: revisionPayload.catatan
+  }, normalizedItems);
+  now = getNowParts_();
+  nextStatusOrder = determineRevisedOrderStatus_(salesOrder.status_order, revisionPayload.tanggal_kirim_rencana, now.tanggal);
+  replaceSalesOrderDetails_(noSoKey, normalizedItems);
+
+  updates = {
+    item: buildOrderItemsSummary_(normalizedItems),
+    qty: buildOrderQtyDisplay_(normalizedItems),
+    harga: normalizedItems.length === 1 ? normalizedItems[0].harga : '',
+    diskon: totals.diskon_order,
+    subtotal: totals.subtotal_order,
+    total: totals.total_order,
+    subtotal_final: totals.subtotal_order,
+    diskon_final: totals.diskon_order,
+    total_final: totals.total_order,
+    tanggal_kirim_rencana: revisionPayload.tanggal_kirim_rencana,
+    term_pembayaran: revisionPayload.term_pembayaran,
+    tanggal_jatuh_tempo: revisionPayload.tanggal_jatuh_tempo,
+    catatan: revisionPayload.catatan,
+    status_order: nextStatusOrder,
+    butuh_persetujuan: 'Tidak',
+    alasan_hold: ''
+  };
+
+  updateRowByKey_(APP_CONFIG.SHEETS.SALES_ORDER, 'no_so', noSoKey, updates);
+  syncSuratJalanDraftFromSalesOrder_(noSoKey);
+
+  pendingApproval = findPendingApprovalByNoSo_(noSoKey);
+  if (pendingApproval) {
+    updateRowByKey_(APP_CONFIG.SHEETS.APPROVAL_ORDER, 'approval_id', pendingApproval.approval_id, {
+      status_approval: 'Ditolak',
+      diputuskan_oleh: user.user_id || '',
+      tanggal_keputusan: now.tanggal + ' ' + now.jam,
+      catatan_approval: 'Ditutup otomatis setelah Revisi CS: keputusan manajemen tidak memerlukan approval ulang.'
+    });
+  }
+
+  appendRowByHeaders_(APP_CONFIG.SHEETS.LOG_REVISI_ORDER, {
+    revisi_id: generateDocNumber_('REV'),
+    no_so: noSoKey,
+    tanggal: now.tanggal,
+    jam: now.jam,
+    direvisi_oleh: user.user_id || '',
+    nama_user_revisi: user.nama_user || '',
+    alasan_revisi: String(revisionPayload.alasan_revisi || '').trim(),
+    ringkasan_perubahan: buildRevisionSummary_(previousSnapshot, nextSnapshot),
+    perubahan_json: JSON.stringify({
+      before: previousSnapshot,
+      after: nextSnapshot
+    })
+  });
+
+  if (String(salesOrder.status_order || '').trim() !== String(nextStatusOrder || '').trim()) {
+    logStatusOrder_(noSoKey, salesOrder.status_order, nextStatusOrder, user.user_id, 'Revisi CS: ' + String(revisionPayload.alasan_revisi || '').trim());
+  }
+
+  return {
+    success: true,
+    no_so: noSoKey,
+    status_order: nextStatusOrder,
+    term_pembayaran: revisionPayload.term_pembayaran,
+    tanggal_jatuh_tempo: revisionPayload.tanggal_jatuh_tempo,
+    total_order: totals.total_order,
+    message: 'Revisi CS berhasil disimpan.'
+  };
+}
+
+function cancelSalesOrderByCs_(noSo, currentUser, reason) {
+  var noSoKey = String(noSo || '').trim();
+  var user = currentUser || {};
+  var cancelReason = String(reason || '').trim();
+  var salesOrder = findSalesOrderByNoSo_(noSoKey);
+  var suratJalan = findSuratJalanByNoSo_(noSoKey);
+  var statusOrder;
+  var now;
+  var pendingApproval;
+  var approvalNote;
+
+  if (!salesOrder) {
+    throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSoKey);
+  }
+
+  if (!cancelReason) {
+    throw new Error('Alasan pembatalan wajib diisi.');
+  }
+
+  statusOrder = normalizeText_(salesOrder.status_order);
+  if (['menunggu persetujuan', 'disetujui', 'siap kirim'].indexOf(statusOrder) === -1) {
+    throw new Error('Order dengan status ' + (salesOrder.status_order || '-') + ' tidak bisa dibatalkan.');
+  }
+
+  if (suratJalan) {
+    throw new Error('Order tidak bisa dibatalkan karena surat jalan sudah dibuat.');
+  }
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.APPROVAL_ORDER, APP_CONFIG.HEADERS.APPROVAL_ORDER);
+  now = getNowParts_();
+
+  updateRowByKey_(APP_CONFIG.SHEETS.SALES_ORDER, 'no_so', noSoKey, {
+    status_order: 'Dibatalkan',
+    butuh_persetujuan: 'Tidak',
+    alasan_batal: cancelReason,
+    dibatalkan_oleh: user.user_id || '',
+    tanggal_dibatalkan: now.tanggal + ' ' + now.jam
+  });
+
+  pendingApproval = findPendingApprovalByNoSo_(noSoKey);
+  if (pendingApproval) {
+    approvalNote = 'Dibatalkan oleh CS/Admin: ' + cancelReason;
+    updateRowByKey_(APP_CONFIG.SHEETS.APPROVAL_ORDER, 'approval_id', pendingApproval.approval_id, {
+      status_approval: 'Ditolak',
+      diputuskan_oleh: user.user_id || '',
+      tanggal_keputusan: now.tanggal + ' ' + now.jam,
+      catatan_approval: approvalNote
+    });
+  }
+
+  logStatusOrder_(noSoKey, salesOrder.status_order, 'Dibatalkan', user.user_id || '', cancelReason);
+
+  return {
+    success: true,
+    no_so: noSoKey,
+    status_order: 'Dibatalkan',
+    alasan_batal: cancelReason,
+    dibatalkan_oleh: user.user_id || '',
+    tanggal_dibatalkan: now.tanggal + ' ' + now.jam,
+    message: 'Sales order berhasil dibatalkan.'
+  };
+}
+
 function validateSalesOrderPayload_(payload) {
   var requiredFields = [
     'sales_id',
@@ -165,6 +406,31 @@ function validateSalesOrderPayload_(payload) {
   }
 
   normalizeOrderItems_(payload);
+}
+
+function validateSalesOrderRevisionPayload_(payload) {
+  var revisionPayload = payload || {};
+  var items = Array.isArray(revisionPayload.items) ? revisionPayload.items : [];
+
+  if (!String(revisionPayload.tanggal_kirim_rencana || '').trim()) {
+    throw new Error('Tanggal kirim rencana wajib diisi.');
+  }
+
+  if (!String(revisionPayload.term_pembayaran || '').trim()) {
+    throw new Error('Term pembayaran wajib diisi.');
+  }
+
+  if (!String(revisionPayload.tanggal_jatuh_tempo || '').trim()) {
+    throw new Error('Tanggal jatuh tempo wajib diisi.');
+  }
+
+  if (!String(revisionPayload.alasan_revisi || '').trim()) {
+    throw new Error('Alasan revisi wajib diisi.');
+  }
+
+  if (!items.length) {
+    throw new Error('Minimal satu item revisi wajib diisi.');
+  }
 }
 
 function buildOrderCustomerCheck_(payload) {
@@ -199,6 +465,52 @@ function buildOrderCustomerCheck_(payload) {
     status_order: eligibility.butuh_persetujuan === 'Ya' ? 'Menunggu Persetujuan' : 'Siap Kirim',
     butuh_persetujuan: eligibility.butuh_persetujuan,
     alasan_hold: eligibility.alasan_hold
+  };
+}
+
+function buildRevisionCustomerCheck_(salesOrder, termPembayaran) {
+  var source = salesOrder || {};
+  var normalizedTerm = normalizeText_(termPembayaran);
+  var customer;
+  var eligibility;
+
+  if (normalizeText_(source.jenis_customer) !== 'lama') {
+    return {
+      status_pembayaran_customer: 'Lancar',
+      total_tunggakan: 0,
+      jumlah_nota_overdue: 0,
+      tanggal_jatuh_tempo_terdekat: '',
+      catatan_piutang: '',
+      butuh_persetujuan: 'Tidak',
+      alasan_hold: ''
+    };
+  }
+
+  customer = findCustomerByCode_(source.customer_id);
+  if (!customer) {
+    return {
+      status_pembayaran_customer: '',
+      total_tunggakan: 0,
+      jumlah_nota_overdue: 0,
+      tanggal_jatuh_tempo_terdekat: '',
+      catatan_piutang: '',
+      butuh_persetujuan: 'Ya',
+      alasan_hold: 'Customer tidak ditemukan'
+    };
+  }
+
+  eligibility = normalizedTerm.indexOf('tempo') !== -1
+    ? checkCustomerEligibility(source.customer_id)
+    : { butuh_persetujuan: 'Tidak', alasan_hold: '' };
+
+  return {
+    status_pembayaran_customer: customer.status_pembayaran || '',
+    total_tunggakan: Number(customer.total_tunggakan || 0),
+    jumlah_nota_overdue: Number(customer.jumlah_nota_overdue || 0),
+    tanggal_jatuh_tempo_terdekat: customer.tanggal_jatuh_tempo_terdekat || '',
+    catatan_piutang: customer.catatan_piutang || customer.catatan || '',
+    butuh_persetujuan: eligibility.butuh_persetujuan || 'Tidak',
+    alasan_hold: eligibility.alasan_hold || ''
   };
 }
 
@@ -315,9 +627,72 @@ function normalizeOrderItemRow_(item, index) {
   };
 }
 
+function normalizeRevisionItems_(items, existingDetailMap) {
+  var normalizedItems = (items || []).map(function(item, index) {
+    var rawItem = item || {};
+    var detailId = String(rawItem.detail_id || '').trim();
+    var existingDetail = existingDetailMap[detailId] || null;
+    var resolvedProduct = resolveRevisionProduct_(rawItem, existingDetail);
+    var qty = Number(rawItem.qty || 0);
+    var harga = Number(rawItem.harga || 0);
+    var diskon = Number(rawItem.diskon || 0);
+    var effectiveDetailId = detailId || generateDocNumber_('DTL');
+    var orderIndex = Number(existingDetail && existingDetail.urutan_item || index + 1);
+
+    if (!(qty > 0)) {
+      throw new Error('Qty item ' + (resolvedProduct.nama_item || rawItem.nama_item || effectiveDetailId) + ' harus lebih dari 0.');
+    }
+
+    if (harga < 0) {
+      throw new Error('Harga item ' + (resolvedProduct.nama_item || rawItem.nama_item || effectiveDetailId) + ' tidak boleh negatif.');
+    }
+
+    if (diskon < 0) {
+      throw new Error('Diskon item ' + (resolvedProduct.nama_item || rawItem.nama_item || effectiveDetailId) + ' tidak boleh negatif.');
+    }
+
+    return {
+      detail_id: effectiveDetailId,
+      urutan_item: orderIndex,
+      kode_item: resolvedProduct.kode_item || String(rawItem.kode_item || existingDetail && existingDetail.kode_item || '').trim(),
+      nama_item: resolvedProduct.nama_item || String(rawItem.nama_item || existingDetail && existingDetail.nama_item || '').trim(),
+      qty: qty,
+      satuan: resolvedProduct.satuan || String(existingDetail && existingDetail.satuan || '').trim(),
+      harga: harga,
+      diskon: diskon,
+      subtotal: Math.max((qty * harga) - diskon, 0)
+    };
+  }).filter(function(item) {
+    return String(item.nama_item || '').trim();
+  });
+
+  if (!normalizedItems.length) {
+    throw new Error('Minimal satu item revisi wajib aktif.');
+  }
+
+  normalizedItems.forEach(function(item, index) {
+    item.urutan_item = index + 1;
+  });
+
+  return normalizedItems.sort(function(left, right) {
+    return Number(left.urutan_item || 0) - Number(right.urutan_item || 0);
+  });
+}
+
 function getProductByNameServer_(itemName) {
-  return getProductCatalog_().find(function(row) {
-    return String(row.nama_item || '').trim() === String(itemName || '').trim();
+  var requestedName = String(itemName || '').trim();
+  var normalizedRequested = normalizeRevisionProductName_(requestedName);
+  var catalog = getProductCatalog_();
+  var exactMatch = catalog.find(function(row) {
+    return String(row.nama_item || '').trim() === requestedName;
+  });
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  return catalog.find(function(row) {
+    return normalizeRevisionProductName_(row.nama_item) === normalizedRequested;
   }) || {};
 }
 
@@ -356,6 +731,27 @@ function writeSalesOrderDetails_(noSo, items) {
       subtotal_final: item.subtotal
     });
   });
+}
+
+function replaceSalesOrderDetails_(noSo, items) {
+  var sheet = getSheetByNameOrNull_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL);
+  var safeNoSo = String(noSo || '').trim();
+  var rowIndex;
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, APP_CONFIG.HEADERS.SALES_ORDER_DETAIL);
+
+  if (!sheet) {
+    writeSalesOrderDetails_(safeNoSo, items);
+    return;
+  }
+
+  for (rowIndex = sheet.getLastRow(); rowIndex >= 2; rowIndex -= 1) {
+    if (String(sheet.getRange(rowIndex, 2).getValue() || '').trim() === safeNoSo) {
+      sheet.deleteRow(rowIndex);
+    }
+  }
+
+  writeSalesOrderDetails_(safeNoSo, items);
 }
 
 function getSalesOrderDetailsByNoSo_(noSo) {
@@ -570,6 +966,148 @@ function buildOrderQtyDisplay_(items) {
   return safeItems.length + ' item';
 }
 
+function buildRevisionSnapshot_(order, details) {
+  var source = order || {};
+  var safeDetails = Array.isArray(details) ? details : [];
+
+  return {
+    tanggal_kirim_rencana: normalizeSheetDateToYmd_(source.tanggal_kirim_rencana),
+    term_pembayaran: String(source.term_pembayaran || '').trim(),
+    tanggal_jatuh_tempo: normalizeSheetDateToYmd_(source.tanggal_jatuh_tempo),
+    catatan: String(source.catatan || '').trim(),
+    items: safeDetails.map(function(detail) {
+      return {
+        detail_id: String(detail.detail_id || '').trim(),
+        kode_item: String(detail.kode_item || '').trim(),
+        nama_item: String(detail.nama_item || '').trim(),
+        qty: Number(detail.qty || 0),
+        harga: Number(detail.harga || 0),
+        diskon: Number(detail.diskon || 0)
+      };
+    })
+  };
+}
+
+function buildRevisionSummary_(beforeSnapshot, afterSnapshot) {
+  var beforeData = beforeSnapshot || {};
+  var afterData = afterSnapshot || {};
+  var lines = [];
+  var beforeItemsById = {};
+  var afterItemIds = {};
+
+  if (String(beforeData.tanggal_kirim_rencana || '').trim() !== String(afterData.tanggal_kirim_rencana || '').trim()) {
+    lines.push('tanggal_kirim_rencana: ' + (beforeData.tanggal_kirim_rencana || '-') + ' -> ' + (afterData.tanggal_kirim_rencana || '-'));
+  }
+
+  if (String(beforeData.term_pembayaran || '').trim() !== String(afterData.term_pembayaran || '').trim()) {
+    lines.push('term_pembayaran: ' + (beforeData.term_pembayaran || '-') + ' -> ' + (afterData.term_pembayaran || '-'));
+  }
+
+  if (String(beforeData.tanggal_jatuh_tempo || '').trim() !== String(afterData.tanggal_jatuh_tempo || '').trim()) {
+    lines.push('tanggal_jatuh_tempo: ' + (beforeData.tanggal_jatuh_tempo || '-') + ' -> ' + (afterData.tanggal_jatuh_tempo || '-'));
+  }
+
+  if (String(beforeData.catatan || '').trim() !== String(afterData.catatan || '').trim()) {
+    lines.push('catatan: ' + (beforeData.catatan || '-') + ' -> ' + (afterData.catatan || '-'));
+  }
+
+  (beforeData.items || []).forEach(function(item) {
+    beforeItemsById[String(item.detail_id || '').trim()] = item;
+  });
+
+  (afterData.items || []).forEach(function(item) {
+    var detailId = String(item.detail_id || '').trim();
+    var previousItem = beforeItemsById[detailId] || {};
+    afterItemIds[detailId] = true;
+
+    if (!beforeItemsById[detailId]) {
+      lines.push('item baru ' + (item.nama_item || detailId) + ': qty ' + String(Number(item.qty || 0)));
+      return;
+    }
+
+    if (Number(previousItem.qty || 0) !== Number(item.qty || 0)) {
+      lines.push('qty ' + (item.nama_item || previousItem.nama_item || detailId) + ': ' + String(Number(previousItem.qty || 0)) + ' -> ' + String(Number(item.qty || 0)));
+    }
+
+    if (Number(previousItem.harga || 0) !== Number(item.harga || 0)) {
+      lines.push('harga ' + (item.nama_item || previousItem.nama_item || detailId) + ': ' + formatNumberServer_(Number(previousItem.harga || 0)) + ' -> ' + formatNumberServer_(Number(item.harga || 0)));
+    }
+
+    if (Number(previousItem.diskon || 0) !== Number(item.diskon || 0)) {
+      lines.push('diskon ' + (item.nama_item || previousItem.nama_item || detailId) + ': ' + formatNumberServer_(Number(previousItem.diskon || 0)) + ' -> ' + formatNumberServer_(Number(item.diskon || 0)));
+    }
+  });
+
+  (beforeData.items || []).forEach(function(item) {
+    var detailId = String(item.detail_id || '').trim();
+    if (!afterItemIds[detailId]) {
+      lines.push('item dihapus ' + (item.nama_item || detailId));
+    }
+  });
+
+  return lines.join(' | ') || 'Tidak ada perubahan terdeteksi';
+}
+
+function resolveRevisionProduct_(item, existingDetail) {
+  var rawItem = item || {};
+  var existing = existingDetail || {};
+  var product = getProductByCodeServer_(rawItem.kode_item || existing.kode_item);
+
+  if (product && product.nama_item) {
+    return product;
+  }
+
+  product = getProductByNameServer_(rawItem.nama_item || existing.nama_item);
+  if (product && product.nama_item) {
+    return product;
+  }
+
+  return {
+    kode_item: String(rawItem.kode_item || existing.kode_item || '').trim(),
+    nama_item: normalizeRevisionProductLabel_(rawItem.nama_item || existing.nama_item || ''),
+    satuan: String(existing.satuan || '').trim()
+  };
+}
+
+function getProductByCodeServer_(kodeItem) {
+  var requestedCode = String(kodeItem || '').trim();
+
+  if (!requestedCode) {
+    return {};
+  }
+
+  return getProductCatalog_().find(function(row) {
+    return String(row.kode_item || '').trim() === requestedCode;
+  }) || {};
+}
+
+function normalizeRevisionProductLabel_(itemName) {
+  var product = getProductByNameServer_(itemName);
+
+  if (product && product.nama_item) {
+    return String(product.nama_item || '').trim();
+  }
+
+  return String(itemName || '').trim();
+}
+
+function normalizeRevisionProductName_(itemName) {
+  var legacyAliases = {
+    'airtis refill galon 19l': 'airtis galon refill 19l',
+    'airtis cup 220 ml': 'airtis cup 220ml - 48',
+    'airtis botol 330 ml': 'airtis botol 330ml',
+    'airtis botol 600 ml': 'airtis botol 600ml',
+    'airtis botol 1500 ml': 'airtis botol 1500ml'
+  };
+  var normalized = normalizeText_(itemName);
+
+  return legacyAliases[normalized] || normalized;
+}
+
+function determineRevisedOrderStatus_(previousStatus, tanggalKirimRencana, todayYmd) {
+  return 'Siap Kirim';
+}
+
 function getProductUnitByNameServer_(itemName) {
   var product = getProductByNameServer_(itemName);
 
@@ -614,6 +1152,13 @@ function createApprovalOrder_(noSo, diajukanOleh, alasanApproval) {
     tanggal_keputusan: '',
     catatan_approval: ''
   });
+}
+
+function findPendingApprovalByNoSo_(noSo) {
+  return getSheetData_(APP_CONFIG.SHEETS.APPROVAL_ORDER).find(function(row) {
+    return String(row.no_so || '').trim() === String(noSo || '').trim() &&
+      normalizeText_(row.status_approval) === 'menunggu';
+  }) || null;
 }
 
 function logStatusOrder_(noSo, statusLama, statusBaru, diubahOleh, catatan) {

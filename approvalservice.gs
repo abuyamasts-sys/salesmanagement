@@ -50,7 +50,7 @@ function decideApproval_(noSo, approverId, statusApproval, statusOrderBaru, cata
     throw new Error('Catatan approval wajib diisi.');
   }
 
-  var updatedApproval = updateRowByKey_(APP_CONFIG.SHEETS.APPROVAL_ORDER, 'no_so', noSo, {
+  var updatedApproval = updateRowByKey_(APP_CONFIG.SHEETS.APPROVAL_ORDER, 'approval_id', approval.approval_id, {
     status_approval: statusApproval,
     diputuskan_oleh: approverId,
     tanggal_keputusan: now.tanggal + ' ' + now.jam,
@@ -94,9 +94,26 @@ function getLatestWaitingApproval_() {
 }
 
 function findApprovalByNoSo_(noSo) {
-  return getSheetData_(APP_CONFIG.SHEETS.APPROVAL_ORDER).find(function(row) {
-    return String(row.no_so).trim() === String(noSo).trim();
-  }) || null;
+  var targetNoSo = String(noSo || '').trim();
+  var matches = getSheetData_(APP_CONFIG.SHEETS.APPROVAL_ORDER).filter(function(row) {
+    return String(row.no_so || '').trim() === targetNoSo;
+  });
+
+  if (!matches.length) {
+    return null;
+  }
+
+  // Prioritaskan approval yang masih menunggu agar approve/reject tidak salah
+  // mengenai riwayat approval lama untuk no_so yang sama.
+  var pendingMatches = matches.filter(function(row) {
+    return normalizeText_(row.status_approval) === 'menunggu';
+  });
+
+  if (pendingMatches.length) {
+    return pendingMatches[pendingMatches.length - 1];
+  }
+
+  return matches[matches.length - 1];
 }
 
 function findSalesOrderByNoSo_(noSo) {

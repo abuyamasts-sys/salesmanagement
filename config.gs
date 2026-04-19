@@ -10,6 +10,7 @@ var APP_CONFIG = {
     APPROVAL_ORDER: 'APPROVAL_ORDER',
     SURAT_JALAN: 'SURAT_JALAN',
     LOG_STATUS_ORDER: 'LOG_STATUS_ORDER',
+    LOG_REVISI_ORDER: 'LOG_REVISI_ORDER',
     MASTER_ITEM: 'MASTER_ITEM',
     MASTER_STATUS: 'MASTER_STATUS',
     TAGIHAN: 'TAGIHAN',
@@ -29,6 +30,7 @@ var APP_CONFIG = {
     'Menunggu Persetujuan',
     'Disetujui',
     'Ditolak',
+    'Dibatalkan',
     'Siap Kirim',
     'Terkirim',
     'Selesai'
@@ -61,6 +63,7 @@ var APP_CONFIG = {
   OPTIONAL_SHEETS: [
     'SALES_ORDER_DETAIL',
     'LOG_STATUS_ORDER',
+    'LOG_REVISI_ORDER',
     'MASTER_ITEM',
     'MASTER_STATUS',
     'TAGIHAN',
@@ -95,6 +98,7 @@ var APP_CONFIG = {
       'role',
       'no_hp',
       'email',
+      'password',
       'status_aktif'
     ],
     SALES_ORDER: [
@@ -142,7 +146,10 @@ var APP_CONFIG = {
       'tanggal_kirim_rencana',
       'catatan',
       'butuh_persetujuan',
-      'alasan_hold'
+      'alasan_hold',
+      'alasan_batal',
+      'dibatalkan_oleh',
+      'tanggal_dibatalkan'
     ],
     SALES_ORDER_DETAIL: [
       'detail_id',
@@ -195,6 +202,17 @@ var APP_CONFIG = {
       'status_baru',
       'diubah_oleh',
       'catatan'
+    ],
+    LOG_REVISI_ORDER: [
+      'revisi_id',
+      'no_so',
+      'tanggal',
+      'jam',
+      'direvisi_oleh',
+      'nama_user_revisi',
+      'alasan_revisi',
+      'ringkasan_perubahan',
+      'perubahan_json'
     ],
     MASTER_ITEM: [
       'kode_item',

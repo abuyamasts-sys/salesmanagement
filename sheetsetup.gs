@@ -43,6 +43,7 @@ function clearDummyTransactionsOnly() {
     APP_CONFIG.SHEETS.APPROVAL_ORDER,
     APP_CONFIG.SHEETS.SURAT_JALAN,
     APP_CONFIG.SHEETS.LOG_STATUS_ORDER,
+    APP_CONFIG.SHEETS.LOG_REVISI_ORDER,
     APP_CONFIG.SHEETS.TAGIHAN,
     APP_CONFIG.SHEETS.KPI_TARGET_SALES,
     APP_CONFIG.SHEETS.KPI_LOG
@@ -110,6 +111,7 @@ function clearDataRows_() {
     APP_CONFIG.SHEETS.APPROVAL_ORDER,
     APP_CONFIG.SHEETS.SURAT_JALAN,
     APP_CONFIG.SHEETS.LOG_STATUS_ORDER,
+    APP_CONFIG.SHEETS.LOG_REVISI_ORDER,
     APP_CONFIG.SHEETS.TAGIHAN,
     APP_CONFIG.SHEETS.KPI_TARGET_SALES,
     APP_CONFIG.SHEETS.KPI_LOG
@@ -189,6 +191,7 @@ function buildDummyUsers_(currentEmail, currentRole) {
       role: activeUser.role,
       no_hp: '081300000000',
       email: currentEmail,
+      password: activeUser.user_id,
       status_aktif: 'Aktif'
     },
     {
@@ -197,6 +200,7 @@ function buildDummyUsers_(currentEmail, currentRole) {
       role: 'Sales',
       no_hp: '081300000010',
       email: 'sales.dummy@airtis.local',
+      password: 'U010',
       status_aktif: 'Aktif'
     },
     {
@@ -205,6 +209,7 @@ function buildDummyUsers_(currentEmail, currentRole) {
       role: 'CS/Admin',
       no_hp: '081300000020',
       email: 'admin.dummy@airtis.local',
+      password: 'U020',
       status_aktif: 'Aktif'
     },
     {
@@ -213,6 +218,7 @@ function buildDummyUsers_(currentEmail, currentRole) {
       role: 'Approver',
       no_hp: '081300000030',
       email: 'approver.dummy@airtis.local',
+      password: 'U030',
       status_aktif: 'Aktif'
     }
   ];
@@ -306,7 +312,7 @@ function createDummyTransactions_() {
         subtotal: 180000
       },
       {
-        nama_item: 'AIRTIS Cup 220 ml',
+        nama_item: 'AIRTIS Cup 220ml - 48',
         qty: 5,
         harga: 15000,
         diskon: 5000,
@@ -334,7 +340,7 @@ function createDummyTransactions_() {
     longitude: '106.826666',
     pic_customer: 'Ibu Rina',
     no_hp_customer: '081300000102',
-    item: 'AIRTIS Cup 220 ml',
+    item: 'AIRTIS Cup 220ml - 48',
     qty: 40,
     harga: 15000,
     diskon: 25000,
@@ -359,7 +365,7 @@ function createDummyTransactions_() {
     longitude: '106.836666',
     pic_customer: 'Pak Hadi',
     no_hp_customer: '081300000103',
-    item: 'AIRTIS Botol 600 ml',
+    item: 'AIRTIS Botol 600ml',
     qty: 25,
     harga: 22000,
     diskon: 0,
@@ -386,14 +392,14 @@ function createDummyTransactions_() {
     no_hp_customer: '081300000101',
     items: [
       {
-        nama_item: 'AIRTIS Botol 330 ml',
+        nama_item: 'AIRTIS Botol 330ml',
         qty: 15,
         harga: 21000,
         diskon: 5000,
         subtotal: 310000
       },
       {
-        nama_item: 'AIRTIS Botol 600 ml',
+        nama_item: 'AIRTIS Botol 600ml',
         qty: 8,
         harga: 22000,
         diskon: 0,

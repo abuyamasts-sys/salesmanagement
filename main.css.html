@@ -347,6 +347,21 @@
     margin-bottom: 12px;
   }
 
+  .ready-order-header {
+    align-items: end;
+  }
+
+  .ready-order-search-wrap {
+    width: min(100%, 320px);
+    margin-left: auto;
+  }
+
+  .ready-order-search-wrap input {
+    min-height: 42px;
+    border-radius: 10px;
+    padding: 10px 14px;
+  }
+
   .summary-grid {
     display: grid;
     gap: 12px;
@@ -673,6 +688,28 @@
     color: var(--sap-muted);
   }
 
+  #csRevisionItemsBody input[type="number"] {
+    width: 100%;
+    min-width: 88px;
+  }
+
+  .form-inline-message {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #f0c36d;
+    background: #fff7e8;
+    color: #8a4700;
+    font-size: 13px;
+    line-height: 1.5;
+    font-weight: 700;
+  }
+
+  .field-error {
+    border-color: #d93025 !important;
+    box-shadow: 0 0 0 1px rgba(217, 48, 37, 0.15);
+  }
+
   #tab-sales .customer-info {
     display: grid;
     gap: 12px;
@@ -980,6 +1017,38 @@
     min-width: 160px;
   }
 
+  .table-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 4px 0;
+    flex-wrap: wrap;
+  }
+
+  .table-pagination-info {
+    font-size: 13px;
+    color: var(--sap-muted);
+  }
+
+  .table-pagination-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .table-pagination-status {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--sap-text);
+  }
+
+  .pagination-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .approver-summary-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-bottom: 16px;
@@ -1021,6 +1090,17 @@
 
   .approver-meta-line strong {
     color: var(--sap-text);
+  }
+
+  .approver-inline-message {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #f0c36d;
+    background: #fff7e8;
+    color: #8a4700;
+    font-size: 12px;
+    line-height: 1.5;
+    font-weight: 700;
   }
 
   .approver-order-total {
@@ -1205,6 +1285,17 @@
     white-space: nowrap;
   }
 
+  .preview-btn {
+    background: #edf8f1;
+    color: var(--sap-success);
+    border: 1px solid #97d8b2;
+  }
+
+  .preview-btn:hover {
+    background: #dff2e6;
+    border-color: var(--sap-success);
+  }
+
   .danger-btn {
     background: #fff1f0;
     color: var(--sap-danger);
@@ -1222,8 +1313,32 @@
     font-weight: 700;
   }
 
+  .ready-order-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    min-width: 130px;
+  }
+
+  .ready-order-actions button {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
   #tab-sales .detail-order-action-row {
     justify-content: flex-start;
+  }
+
+  @media (max-width: 720px) {
+    .ready-order-search-wrap {
+      width: 100%;
+      margin-left: 0;
+    }
   }
 
   #tab-sales .detail-order-action-row .primary-btn {
@@ -1241,6 +1356,15 @@
   }
 
   @media (max-width: 760px) {
+    .table-pagination {
+      align-items: stretch;
+    }
+
+    .table-pagination-actions {
+      width: 100%;
+      justify-content: space-between;
+    }
+
     .approver-summary-grid {
       grid-template-columns: 1fr;
     }

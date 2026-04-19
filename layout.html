@@ -50,6 +50,10 @@
               <span>User ID</span>
               <input id="login_user_id" type="text" autocomplete="username" />
             </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="login_password" type="password" autocomplete="current-password" />
+            </label>
             <div class="action-row auth-action-row">
               <button type="submit" class="primary-btn" id="loginBtn">Masuk</button>
             </div>
@@ -219,7 +223,7 @@
                 </label>
                 <label class="field">
                   <span>Harga</span>
-                  <input id="harga" name="harga" type="number" min="0" step="1" inputmode="numeric" />
+                  <input id="harga" name="harga" type="text" inputmode="numeric" autocomplete="off" placeholder="10.000" />
                 </label>
                 <label class="field">
                   <span>Diskon (%)</span>
@@ -303,6 +307,7 @@
 
             <div class="action-row action-row-sticky">
               <button type="button" class="ghost-btn" id="resetBtn">Reset</button>
+              <button type="button" class="ghost-btn" id="openSalesHistoryBtn">Lihat Riwayat Order</button>
               <button type="submit" class="primary-btn" id="submitBtn">Submit Sales Order</button>
             </div>
           </form>
@@ -644,7 +649,7 @@
                 <p class="panel-subtitle">Kelola order siap kirim, buat surat jalan, dan update status pengiriman.</p>
               </div>
               <div class="inline-actions">
-                <button type="button" class="primary-btn" id="openAgentModalBtn">Input Pengiriman Agen</button>
+                <button type="button" class="primary-btn" id="openAgentModalBtn">Input Pengiriman</button>
                 <button type="button" class="ghost-btn" id="refreshAdminBtn">Refresh</button>
               </div>
             </div>
@@ -679,13 +684,24 @@
             </div>
 
             <section class="admin-view-panel active" id="admin-view-operations">
-              <h3 class="section-title">Order Siap Kirim</h3>
+              <div class="section-header section-header-inline ready-order-header">
+                <div>
+                  <h3 class="section-title compact">Order Siap Kirim</h3>
+                  <p class="panel-subtitle">Ketik minimal 2 huruf untuk mencari customer atau No SO dengan cepat.</p>
+                </div>
+                <div class="ready-order-search-wrap">
+                  <input type="search" id="readyOrderSearch" placeholder="Cari customer / No SO..." autocomplete="off" />
+                </div>
+              </div>
               <div class="table-wrap">
                 <table class="data-table">
                   <thead>
                     <tr>
                       <th>No SO</th>
+                      <th>Input Sales</th>
+                      <th>Tanggal Kirim</th>
                       <th>Customer</th>
+                      <th>Sales</th>
                       <th>Item</th>
                       <th>Qty</th>
                       <th>Status</th>
@@ -694,10 +710,11 @@
                     </tr>
                   </thead>
                   <tbody id="readyOrderTableBody">
-                    <tr><td colspan="7" class="empty-cell">Belum ada order siap kirim.</td></tr>
+                    <tr><td colspan="10" class="empty-cell">Belum ada order siap kirim.</td></tr>
                   </tbody>
                 </table>
               </div>
+              <div class="table-pagination" id="readyOrderPagination"></div>
 
               <div class="section-header section-header-inline">
                 <div>
@@ -841,12 +858,61 @@
       </section>
     </main>
 
+    <div class="modal-backdrop hidden" id="salesHistoryBackdrop">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="salesHistoryTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="salesHistoryTitle">Riwayat Order Saya</h2>
+            <p class="panel-subtitle">Maksimal 30 order terbaru. Tabel ditampilkan 10 baris per halaman agar tetap rapi.</p>
+          </div>
+          <div class="inline-actions">
+            <button type="button" class="ghost-btn" id="refreshSalesHistoryBtn">Refresh</button>
+            <button type="button" class="ghost-btn" id="closeSalesHistoryBtn">Tutup</button>
+          </div>
+        </div>
+
+        <div class="toolbar-row">
+          <label class="field">
+            <span>Cari Order</span>
+            <input type="search" id="salesHistorySearch" placeholder="Cari No SO, customer, item, atau catatan..." />
+          </label>
+          <label class="field">
+            <span>Status</span>
+            <select id="salesHistoryStatusFilter">
+              <option value="">Semua Status</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>No SO</th>
+                <th>Tanggal</th>
+                <th>Customer</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Keterangan</th>
+              </tr>
+            </thead>
+            <tbody id="salesHistoryTableBody">
+              <tr><td colspan="8" class="empty-cell">Belum ada riwayat order.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-pagination" id="salesHistoryPagination"></div>
+      </section>
+    </div>
+
     <div class="modal-backdrop hidden" id="agentModalBackdrop">
       <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="agentModalTitle">
         <div class="panel-header">
           <div>
-            <h2 id="agentModalTitle">Input Pengiriman Agen</h2>
-            <p class="panel-subtitle">Dipakai CS/Admin untuk order agen yang masuk langsung ke kantor.</p>
+            <h2 id="agentModalTitle">Input Pengiriman</h2>
+            <p class="panel-subtitle">Dipakai CS/Admin untuk order customer yang masuk langsung ke kantor.</p>
           </div>
           <button type="button" class="ghost-btn" id="closeAgentModalBtn">Tutup</button>
         </div>
@@ -855,17 +921,17 @@
           <div class="radio-row">
             <label class="radio-pill">
               <input type="radio" name="admin_jenis_customer" value="Lama" checked />
-              <span>Agen Lama</span>
+              <span>Cust Lama</span>
             </label>
             <label class="radio-pill">
               <input type="radio" name="admin_jenis_customer" value="Baru" />
-              <span>Agen Baru</span>
+              <span>Cust Baru</span>
             </label>
           </div>
 
           <div id="adminCustomerLamaSection" class="stack">
             <label class="field">
-              <span>Pilih Agen / Customer</span>
+              <span>Pilih Cust / Customer</span>
               <select id="admin_customer_id" name="admin_customer_id"></select>
             </label>
             <div class="customer-info">
@@ -916,7 +982,7 @@
             </label>
             <label class="field">
               <span>Harga</span>
-              <input id="admin_harga" name="admin_harga" type="number" min="0" step="1" />
+              <input id="admin_harga" name="admin_harga" type="text" inputmode="numeric" autocomplete="off" placeholder="10.000" />
             </label>
             <label class="field">
               <span>Diskon (%)</span>
@@ -945,7 +1011,7 @@
                 </tr>
               </thead>
               <tbody id="adminOrderItemsTableBody">
-                <tr><td colspan="6" class="empty-cell">Belum ada item di order agen.</td></tr>
+                <tr><td colspan="6" class="empty-cell">Belum ada item di order customer.</td></tr>
               </tbody>
             </table>
           </div>
@@ -985,13 +1051,13 @@
             </label>
             <label class="field field-wide">
               <span>Catatan</span>
-              <textarea id="admin_catatan" name="admin_catatan" rows="2" placeholder="Catatan order agen dari CS/Admin"></textarea>
+              <textarea id="admin_catatan" name="admin_catatan" rows="2" placeholder="Catatan order customer dari CS/Admin"></textarea>
             </label>
           </div>
 
           <div class="action-row">
-            <button type="button" class="ghost-btn" id="resetAgentBtn">Reset Form Agen</button>
-            <button type="submit" class="primary-btn" id="submitAgentBtn">Submit Pengiriman Agen</button>
+            <button type="button" class="ghost-btn" id="resetAgentBtn">Reset Form Customer</button>
+            <button type="submit" class="primary-btn" id="submitAgentBtn">Submit Pengiriman</button>
           </div>
         </form>
       </section>
@@ -1091,6 +1157,156 @@
         <div class="action-row" style="margin-top:16px;">
           <button type="button" class="ghost-btn" id="cancelDeliveryVerificationBtn">Batal</button>
           <button type="button" class="primary-btn" id="saveDeliveryVerificationBtn">Simpan Verifikasi CS</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="csRevisionBackdrop">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="csRevisionTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="csRevisionTitle">Revisi CS</h2>
+            <p class="panel-subtitle">CS/Admin membetulkan input sales yang keliru sebelum surat jalan dibuat.</p>
+          </div>
+          <button type="button" class="ghost-btn" id="closeCsRevisionBtn">Tutup</button>
+        </div>
+
+        <div class="customer-info">
+          <div><strong>No SO:</strong> <span id="csRevisionNoSo">-</span></div>
+          <div><strong>Status Order:</strong> <span id="csRevisionStatusOrder">-</span></div>
+          <div><strong>Customer:</strong> <span id="csRevisionCustomer">-</span></div>
+          <div><strong>Sales:</strong> <span id="csRevisionSales">-</span></div>
+          <div><strong>Tanggal Order:</strong> <span id="csRevisionTanggalOrder">-</span></div>
+        </div>
+
+        <form id="csRevisionForm" class="order-form" onsubmit="return false;" style="margin-top:16px;">
+          <div class="form-inline-message hidden" id="csRevisionMessage"></div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Tanggal Kirim Rencana</span>
+              <input id="csRevisionTanggalKirim" type="date" />
+            </label>
+            <label class="field">
+              <span>Term Pembayaran</span>
+              <select id="csRevisionTermPembayaran">
+                <option value="Cash">Cash</option>
+                <option value="Tempo 7 Hari">Tempo 7 Hari</option>
+                <option value="Tempo 14 Hari">Tempo 14 Hari</option>
+                <option value="Tempo 30 Hari">Tempo 30 Hari</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Tanggal Jatuh Tempo</span>
+              <input id="csRevisionTanggalJatuhTempo" type="date" />
+            </label>
+          </div>
+
+          <div class="table-wrap" style="margin-top:16px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Produk</th>
+                  <th>Qty Lama</th>
+                  <th>Qty Revisi</th>
+                  <th>Harga Lama</th>
+                  <th>Harga Revisi</th>
+                  <th>Diskon</th>
+                  <th>Subtotal Baru</th>
+                  <th>Satuan</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="csRevisionItemsBody">
+                <tr><td colspan="9" class="empty-cell">Belum ada item untuk direvisi.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="form-grid" style="margin-top:16px;">
+            <label class="field field-wide">
+              <span>Tambah Item Baru</span>
+              <select id="csRevisionAddItem"></select>
+            </label>
+            <label class="field">
+              <span>Qty</span>
+              <input id="csRevisionAddQty" type="number" min="1" step="1" />
+            </label>
+            <label class="field">
+              <span>Harga</span>
+              <input id="csRevisionAddHarga" type="text" inputmode="numeric" autocomplete="off" placeholder="10.000" />
+            </label>
+            <label class="field">
+              <span>Diskon</span>
+              <input id="csRevisionAddDiskon" type="number" min="0" step="1" value="0" />
+            </label>
+          </div>
+
+          <div class="action-row" style="margin-top:12px;">
+            <button type="button" class="ghost-btn" id="addCsRevisionItemBtn">Tambah Item</button>
+          </div>
+
+          <div class="summary-grid" style="margin-top:16px;">
+            <article class="summary-card">
+              <span class="summary-label">Subtotal Baru</span>
+              <strong class="summary-value" id="csRevisionSubtotal">0</strong>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">Total Diskon</span>
+              <strong class="summary-value" id="csRevisionDiskon">0</strong>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">Total Baru</span>
+              <strong class="summary-value" id="csRevisionTotal">0</strong>
+            </article>
+          </div>
+
+          <div class="form-grid" style="margin-top:16px;">
+            <label class="field field-wide">
+              <span>Catatan Order</span>
+              <textarea id="csRevisionCatatan" rows="2" placeholder="Catatan order setelah revisi"></textarea>
+            </label>
+            <label class="field field-wide">
+              <span>Alasan Revisi</span>
+              <textarea id="csRevisionAlasan" rows="2" placeholder="Contoh: sales salah pilih term pembayaran" required></textarea>
+            </label>
+          </div>
+
+          <div class="action-row" style="margin-top:16px;">
+            <button type="button" class="ghost-btn" id="cancelCsRevisionBtn">Batal</button>
+            <button type="submit" class="primary-btn" id="saveCsRevisionBtn">Simpan Revisi</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="cancelSalesOrderBackdrop">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cancelSalesOrderTitle" style="width:min(560px,100%);">
+        <div class="panel-header">
+          <div>
+            <h2 id="cancelSalesOrderTitle">Batalkan Sales Order</h2>
+            <p class="panel-subtitle">Pembatalan hanya untuk order yang belum dibuat surat jalan.</p>
+          </div>
+          <button type="button" class="ghost-btn" id="closeCancelSalesOrderBtn">Tutup</button>
+        </div>
+
+        <div class="customer-info">
+          <div><strong>No SO:</strong> <span id="cancelSalesOrderNoSo">-</span></div>
+          <div><strong>Status Order:</strong> <span id="cancelSalesOrderStatus">-</span></div>
+          <div><strong>Customer:</strong> <span id="cancelSalesOrderCustomer">-</span></div>
+          <div><strong>Tanggal Kirim:</strong> <span id="cancelSalesOrderDate">-</span></div>
+        </div>
+
+        <div class="form-grid" style="margin-top:16px;">
+          <label class="field field-wide">
+            <span>Alasan Pembatalan</span>
+            <textarea id="cancelSalesOrderReason" rows="3" placeholder="Contoh: outlet tutup mendadak, customer tunda order, alamat kirim bermasalah" required></textarea>
+          </label>
+        </div>
+
+        <div class="action-row" style="margin-top:16px;">
+          <button type="button" class="ghost-btn" id="cancelSalesOrderAbortBtn">Batal</button>
+          <button type="button" class="danger-btn" id="saveCancelSalesOrderBtn">Batalkan SO</button>
         </div>
       </section>
     </div>

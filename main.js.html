@@ -7,6 +7,10 @@
     users: [],
     products: [],
     salesOrderItems: [],
+    salesHistoryOrders: [],
+    salesHistorySearch: '',
+    salesHistoryStatus: '',
+    salesHistoryPage: 1,
     adminOrderItems: [],
     approvals: [],
     approvers: [],
@@ -16,8 +20,10 @@
     approverFilterDate: '',
     approverExportFilterDate: '',
     readyOrders: [],
+    readyOrderSearch: '',
     deliveryOrders: [],
     deliveryFilterDate: '',
+    readyOrderPage: 1,
     tomorrowOrders: [],
     tomorrowPlanDate: '',
     tagihan: [],
@@ -32,11 +38,15 @@
     backupSummary: null,
     backupHistory: [],
     sessionUserId: '',
-    currentDeliveryVerificationNoSo: ''
+    currentDeliveryVerificationNoSo: '',
+    csRevisionDraft: null,
+    cancelSalesOrderDraft: null
   };
   var APP_USER_STORAGE_KEY = 'airtis_sales_user_id';
   var LAST_ASYNC_STATUS_TIMER = null;
   var KPI_SAVE_ASYNC_STATUS_TIMER = null;
+  var READY_ORDER_PAGE_SIZE = 10;
+  var SALES_HISTORY_PAGE_SIZE = 10;
 
   window.addEventListener('error', function(event) {
     try {
@@ -80,7 +90,7 @@
 
     if (savedUserId) {
       setFieldValue_('login_user_id', savedUserId);
-      renderUnauthorizedMessage_('Masukkan User ID lalu klik Masuk untuk memakai webapp.');
+      renderUnauthorizedMessage_('Masukkan User ID dan password lalu klik Masuk untuk memakai webapp.');
     }
   }
 
@@ -106,17 +116,22 @@
     safeBindById_('sales_id', 'change', handleSalesChange_);
     safeBindById_('customer_id', 'change', handleCustomerChange_);
     safeBindById_('customer_search', 'input', handleCustomerSearchInput_);
+    safeBindById_('salesHistorySearch', 'input', handleSalesHistorySearchInput_);
+    safeBindById_('salesHistoryStatusFilter', 'change', handleSalesHistoryStatusChange_);
     safeBindById_('item', 'change', handleProductChange_);
     document.querySelectorAll('input[name="jenis_customer"]').forEach(function(input) {
       input.addEventListener('change', handleJenisCustomerChange_);
     });
     safeBindById_('qty', 'input', calculateTotals_);
     safeBindById_('harga', 'input', calculateTotals_);
+    safeBindById_('harga', 'input', handleSalesPriceInput_);
     safeBindById_('diskon', 'input', calculateTotals_);
     safeSetOnClickById_('addSalesItemBtn', addSalesItem_);
     safeBindById_('tanggal_kirim_rencana', 'change', syncSalesPaymentDueDate_);
     safeBindById_('term_pembayaran', 'change', syncSalesPaymentDueDate_);
     safeBindById_('resetBtn', 'click', resetForm_);
+    safeBindById_('openSalesHistoryBtn', 'click', openSalesHistoryModal_);
+    safeBindById_('refreshSalesHistoryBtn', 'click', handleRefreshSalesHistory_);
     safeBindById_('salesOrderForm', 'submit', submitForm_);
     safeBindById_('loginForm', 'submit', submitLoginForm_);
     safeBindById_('logoutBtn', 'click', handleLogout_);
@@ -138,6 +153,7 @@
     safeBindById_('approverExportFilterTodayBtn', 'click', handleApproverExportFilterToday_);
     safeBindById_('approverExportFilterAllBtn', 'click', handleApproverExportFilterAll_);
     safeBindById_('refreshAdminBtn', 'click', handleAdminRefresh_);
+    safeBindById_('readyOrderSearch', 'input', handleReadyOrderSearchInput_);
     safeBindById_('deliveryFilterDate', 'change', handleDeliveryFilterChange_);
     safeBindById_('deliveryFilterTodayBtn', 'click', handleDeliveryFilterToday_);
     safeBindById_('deliveryFilterAllBtn', 'click', handleDeliveryFilterAll_);
@@ -148,6 +164,7 @@
     });
     safeBindById_('admin_qty', 'input', calculateAdminTotals_);
     safeBindById_('admin_harga', 'input', calculateAdminTotals_);
+    safeBindById_('admin_harga', 'input', handleAdminPriceInput_);
     safeBindById_('admin_diskon', 'input', calculateAdminTotals_);
     safeSetOnClickById_('addAdminItemBtn', addAdminItem_);
     safeBindById_('admin_tanggal_kirim_rencana', 'change', syncAdminPaymentDueDate_);
@@ -159,6 +176,18 @@
     safeBindById_('closeDeliveryVerificationBtn', 'click', closeDeliveryVerificationModal_);
     safeBindById_('cancelDeliveryVerificationBtn', 'click', closeDeliveryVerificationModal_);
     safeBindById_('saveDeliveryVerificationBtn', 'click', saveDeliveryVerification_);
+    safeBindById_('closeCsRevisionBtn', 'click', closeCsRevisionModal_);
+    safeBindById_('cancelCsRevisionBtn', 'click', closeCsRevisionModal_);
+    safeBindById_('csRevisionForm', 'submit', saveCsRevision_);
+    safeBindById_('csRevisionTanggalKirim', 'change', syncCsRevisionPaymentDueDate_);
+    safeBindById_('csRevisionTermPembayaran', 'change', syncCsRevisionPaymentDueDate_);
+    safeBindById_('csRevisionAddItem', 'change', handleCsRevisionAddItemChange_);
+    safeBindById_('csRevisionAddHarga', 'input', handleCsRevisionAddHargaInput_);
+    safeBindById_('addCsRevisionItemBtn', 'click', handleAddCsRevisionItem_);
+    safeBindById_('closeCancelSalesOrderBtn', 'click', closeCancelSalesOrderModal_);
+    safeBindById_('cancelSalesOrderAbortBtn', 'click', closeCancelSalesOrderModal_);
+    safeBindById_('saveCancelSalesOrderBtn', 'click', submitCancelSalesOrder_);
+    safeBindById_('closeSalesHistoryBtn', 'click', closeSalesHistoryModal_);
     safeBindById_('generateTomorrowPlanBtn', 'click', handleGenerateTomorrowPlan_);
     safeBindById_('copyTomorrowPlanBtn', 'click', handleCopyTomorrowPlan_);
     safeBindById_('billingSearch', 'input', renderBillingTable_);
@@ -185,6 +214,21 @@
     safeBindById_('deliveryVerificationBackdrop', 'click', function(event) {
       if (event.target.id === 'deliveryVerificationBackdrop') {
         closeDeliveryVerificationModal_();
+      }
+    });
+    safeBindById_('csRevisionBackdrop', 'click', function(event) {
+      if (event.target.id === 'csRevisionBackdrop') {
+        closeCsRevisionModal_();
+      }
+    });
+    safeBindById_('cancelSalesOrderBackdrop', 'click', function(event) {
+      if (event.target.id === 'cancelSalesOrderBackdrop') {
+        closeCancelSalesOrderModal_();
+      }
+    });
+    safeBindById_('salesHistoryBackdrop', 'click', function(event) {
+      if (event.target.id === 'salesHistoryBackdrop') {
+        closeSalesHistoryModal_();
       }
     });
 
@@ -222,6 +266,13 @@
     window.handleCompleteOrder = handleCompleteOrder;
     window.handlePrintSuratJalan = handlePrintSuratJalan;
     window.handlePrintSuratJalanOnly = handlePrintSuratJalanOnly;
+    window.handlePreviewSuratJalan = handlePreviewSuratJalan;
+    window.openCsRevisionModal = openCsRevisionModal_;
+    window.openCancelSalesOrderModal = openCancelSalesOrderModal_;
+    window.handleReadyOrderPageChange_ = handleReadyOrderPageChange_;
+    window.handleSalesHistoryPageChange_ = handleSalesHistoryPageChange_;
+    window.handleRemoveCsRevisionItem_ = handleRemoveCsRevisionItem_;
+    window.handleCsRevisionLineInput_ = handleCsRevisionLineInput_;
     window.handleBillingPartialPay_ = handleBillingPartialPay_;
     window.handleMarkBillingPaid_ = handleMarkBillingPaid_;
   }
@@ -391,11 +442,14 @@
           appState.customers = Array.isArray(payload.customers) ? payload.customers : [];
           appState.users = Array.isArray(payload.users) ? payload.users : [];
           appState.products = Array.isArray(payload.products) ? payload.products : [];
+          appState.salesHistoryOrders = Array.isArray(payload.salesHistoryOrders) ? payload.salesHistoryOrders : [];
           syncCurrentUser_(payload.currentUser);
 
           renderSalesOptions_();
           renderCustomerOptions_();
           renderProductOptions_();
+          renderSalesHistoryStatusOptions_();
+          renderSalesHistoryTable_();
           renderSalesOrderItems_();
           handleSalesChange_();
           handleCustomerChange_();
@@ -593,6 +647,7 @@
           appState.readyOrders = Array.isArray(payload.readyOrders) ? payload.readyOrders : [];
           appState.deliveryOrders = Array.isArray(payload.deliveryOrders) ? payload.deliveryOrders : [];
           appState.deliverySummary = payload.deliverySummary || null;
+          appState.products = Array.isArray(payload.products) ? payload.products : appState.products;
 
           renderAdminSummary_();
           renderReadyOrderTable_();
@@ -662,13 +717,13 @@
 
           if (callback) callback();
         } catch (error) {
-          var message = 'Gagal memuat data form agen: ' + (error && error.message ? error.message : error);
+          var message = 'Gagal memuat data form customer: ' + (error && error.message ? error.message : error);
           setStatusText_(message);
           renderResult_(message, true);
         }
       })
       .withFailureHandler(function(error) {
-        var message = 'Gagal memuat data form agen: ' + (error && error.message ? error.message : error);
+        var message = 'Gagal memuat data form customer: ' + (error && error.message ? error.message : error);
         setStatusText_(message);
         renderResult_(message, true);
       })
@@ -809,7 +864,7 @@
 
   function renderAdminCustomerOptions_() {
     var customerSelect = document.getElementById('admin_customer_id');
-    customerSelect.innerHTML = '<option value="">Pilih agen / customer</option>';
+    customerSelect.innerHTML = '<option value="">Pilih cust / customer</option>';
 
     getSortedCustomersByName_(appState.customers).forEach(function(customer) {
       var option = document.createElement('option');
@@ -1340,6 +1395,7 @@
     return '' +
       '<div class="approver-action-stack">' +
         '<input class="mini-input approver-note-input" id="approval-note-' + escapeHtml_(noSo) + '" type="text" placeholder="Catatan keputusan wajib" />' +
+        '<div class="approver-inline-message hidden" id="approval-message-' + escapeHtml_(noSo) + '"></div>' +
         '<div class="inline-actions">' +
           '<button type="button" class="approve-btn" onclick="handleApproveOrder(\'' + escapeJs_(noSo) + '\')">Approve</button>' +
           '<button type="button" class="danger-btn" onclick="handleRejectOrder(\'' + escapeJs_(noSo) + '\')">Reject</button>' +
@@ -1358,29 +1414,187 @@
 
   function renderReadyOrderTable_() {
     var tbody = document.getElementById('readyOrderTableBody');
+    var pagination = document.getElementById('readyOrderPagination');
+    var totalPages;
+    var currentPage;
+    var startIndex;
+    var endIndex;
+    var pageRows;
+    var pageInfo;
+    var orderedRows;
+    var emptyColspan = 10;
+    var searchActive = normalizeReadyOrderSearchQuery_().length >= 2;
     if (!tbody) return;
 
     if (!appState.readyOrders.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Belum ada order siap kirim.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + emptyColspan + '" class="empty-cell">Belum ada order siap kirim.</td></tr>';
+      if (pagination) {
+        pagination.innerHTML = '';
+      }
       return;
     }
 
-    tbody.innerHTML = appState.readyOrders.map(function(row) {
+    orderedRows = getFilteredReadyOrders_().slice().sort(function(left, right) {
+      var leftStatus = getAdminReadyOrderDisplayStatus_(left);
+      var rightStatus = getAdminReadyOrderDisplayStatus_(right);
+      var leftPriority = normalizeSearchText_(leftStatus) === 'pending kirim' ? 0 : 1;
+      var rightPriority = normalizeSearchText_(rightStatus) === 'pending kirim' ? 0 : 1;
+      var leftDate = normalizeDateKey_(left && left.tanggal_kirim_rencana) || '9999-12-31';
+      var rightDate = normalizeDateKey_(right && right.tanggal_kirim_rencana) || '9999-12-31';
+
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      if (leftDate !== rightDate) {
+        return leftDate.localeCompare(rightDate);
+      }
+
+      return String(left && left.no_so || '').localeCompare(String(right && right.no_so || ''));
+    });
+
+    if (!orderedRows.length) {
+      tbody.innerHTML = '<tr><td colspan="' + emptyColspan + '" class="empty-cell">' +
+        escapeHtml_(searchActive ? 'Customer tidak ditemukan.' : 'Belum ada order siap kirim.') +
+      '</td></tr>';
+      if (pagination) {
+        pagination.innerHTML = '';
+      }
+      return;
+    }
+
+    totalPages = getReadyOrderPageTotal_();
+    currentPage = normalizeReadyOrderPage_();
+    startIndex = (currentPage - 1) * READY_ORDER_PAGE_SIZE;
+    endIndex = Math.min(startIndex + READY_ORDER_PAGE_SIZE, orderedRows.length);
+    pageRows = orderedRows.slice(startIndex, endIndex);
+
+    tbody.innerHTML = pageRows.map(function(row) {
       var noSo = String(row.no_so || '');
+      var inputSalesDate = formatShortDateId_(row.tanggal_order || '');
+      var inputSalesLabel = formatTimeLabelWib_(row.jam_order || '');
+      var tanggalKirim = formatShortDateId_(row.tanggal_kirim_rencana || row.tanggal_kirim || row.tanggal_order || '');
+      var customerName = String(row.nama_customer_input || row.nama_customer || '-');
+      var salesName = String(row.sales_nama || '-');
+      var displayStatus = getAdminReadyOrderDisplayStatus_(row);
 
       return '' +
         '<tr>' +
           '<td>' + escapeHtml_(noSo) + '</td>' +
-          '<td>' + escapeHtml_(row.nama_customer_input) + '</td>' +
+          '<td><strong>' + escapeHtml_(inputSalesDate || '-') + '</strong><br/><small>' + escapeHtml_(inputSalesLabel) + '</small></td>' +
+          '<td>' + escapeHtml_(tanggalKirim) + '</td>' +
+          '<td>' + escapeHtml_(customerName) + '</td>' +
+          '<td>' + escapeHtml_(salesName) + '</td>' +
           '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
           '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
-          '<td>' + buildStatusBadge_(row.status_order) + '</td>' +
+          '<td>' + buildStatusBadge_(displayStatus) + '</td>' +
           '<td>' + formatNumber_(row.total_order || row.total) + '</td>' +
-          '<td><div class="inline-actions">' +
+          '<td><div class="ready-order-actions">' +
+            '<button type="button" class="danger-btn" onclick="openCancelSalesOrderModal(\'' + escapeJs_(noSo) + '\')">Batalkan SO</button>' +
+            '<button type="button" class="ghost-btn" onclick="openCsRevisionModal(\'' + escapeJs_(noSo) + '\')">Revisi CS</button>' +
+            '<button type="button" class="preview-btn" onclick="handlePreviewSuratJalan(\'' + escapeJs_(noSo) + '\')">Preview</button>' +
             '<button type="button" class="approve-btn" onclick="handleCreateSuratJalan(\'' + escapeJs_(noSo) + '\')">Buat SJ</button>' +
           '</div></td>' +
         '</tr>';
     }).join('');
+
+    if (!pagination) {
+      return;
+    }
+
+    pageInfo = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + orderedRows.length + ' order siap kirim/pending';
+
+    pagination.innerHTML = '' +
+      '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
+      '<div class="table-pagination-actions">' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleReadyOrderPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
+        '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleReadyOrderPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
+      '</div>';
+  }
+
+  function getAdminReadyOrderDisplayStatus_(row) {
+    var statusOrder = String(row && row.status_order || '').trim();
+    var tanggalRencana = normalizeDateKey_(row && row.tanggal_kirim_rencana);
+    var today = getTodayIsoDate_();
+
+    if (normalizeSearchText_(statusOrder) === 'siap kirim' && tanggalRencana && tanggalRencana < today) {
+      return 'Pending Kirim';
+    }
+
+    return statusOrder || '-';
+  }
+
+  function getReadyOrderPageTotal_() {
+    return Math.max(1, Math.ceil((getFilteredReadyOrders_().length || 0) / READY_ORDER_PAGE_SIZE));
+  }
+
+  function normalizeReadyOrderPage_() {
+    var totalPages = getReadyOrderPageTotal_();
+    var currentPage = Number(appState.readyOrderPage || 1);
+
+    if (!isFinite(currentPage) || currentPage < 1) {
+      currentPage = 1;
+    }
+
+    if (currentPage > totalPages) {
+      currentPage = totalPages;
+    }
+
+    appState.readyOrderPage = currentPage;
+    return currentPage;
+  }
+
+  function handleReadyOrderPageChange_(direction) {
+    var nextPage = normalizeReadyOrderPage_() + Number(direction || 0);
+    var totalPages = getReadyOrderPageTotal_();
+
+    if (nextPage < 1) {
+      nextPage = 1;
+    }
+
+    if (nextPage > totalPages) {
+      nextPage = totalPages;
+    }
+
+    if (nextPage === appState.readyOrderPage) {
+      return;
+    }
+
+    appState.readyOrderPage = nextPage;
+    renderReadyOrderTable_();
+  }
+
+  function handleReadyOrderSearchInput_() {
+    appState.readyOrderSearch = getFieldValue_('readyOrderSearch');
+    appState.readyOrderPage = 1;
+    renderReadyOrderTable_();
+  }
+
+  function normalizeReadyOrderSearchQuery_() {
+    return normalizeSearchText_(appState.readyOrderSearch || '');
+  }
+
+  function getFilteredReadyOrders_() {
+    var query = normalizeReadyOrderSearchQuery_();
+
+    if (query.length < 2) {
+      return appState.readyOrders || [];
+    }
+
+    return (appState.readyOrders || []).filter(function(row) {
+      var haystacks = [
+        row && row.nama_customer_input,
+        row && row.nama_customer,
+        row && row.no_so,
+        row && row.sales_nama,
+        row && row.item_summary
+      ];
+
+      return haystacks.some(function(value) {
+        return normalizeSearchText_(value).indexOf(query) !== -1;
+      });
+    });
   }
 
   function renderDeliveryTable_() {
@@ -1790,9 +2004,23 @@
       return;
     }
 
-    appState.currentDeliveryVerificationNoSo = String(noSo || '').trim();
-    renderDeliveryVerificationModal_(order);
-    document.getElementById('deliveryVerificationBackdrop').classList.remove('hidden');
+    setStatusText_('Memuat detail verifikasi pengiriman...');
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        var enrichedOrder = result || {};
+        var updateResult = updateDeliveryOrderInState_(noSo, enrichedOrder);
+
+        appState.currentDeliveryVerificationNoSo = String(noSo || '').trim();
+        renderDeliveryVerificationModal_(updateResult && updateResult.order ? updateResult.order : enrichedOrder);
+        document.getElementById('deliveryVerificationBackdrop').classList.remove('hidden');
+        setStatusText_('Detail verifikasi siap');
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal memuat detail verifikasi');
+        renderResult_('Gagal memuat detail verifikasi pengiriman: ' + (error && error.message ? error.message : error), true);
+      })
+      .getDeliveryVerificationDataFromDashboard(appState.currentUser.user_id, noSo);
   }
 
   function renderDeliveryVerificationModal_(order) {
@@ -1925,6 +2153,532 @@
   function closeDeliveryVerificationModal_() {
     appState.currentDeliveryVerificationNoSo = '';
     document.getElementById('deliveryVerificationBackdrop').classList.add('hidden');
+  }
+
+  function openCsRevisionModal_(noSo) {
+    setStatusText_('Memuat data revisi order...');
+    google.script.run
+      .withSuccessHandler(function(result) {
+        var draft = result || null;
+
+        if (draft && Array.isArray(draft.details)) {
+          draft.details = draft.details.map(function(item) {
+            var detail = item || {};
+            return {
+              detail_id: detail.detail_id || '',
+              kode_item: detail.kode_item || '',
+              nama_item: detail.nama_item || '',
+              qty: Number(detail.qty || 0),
+              original_qty: Number(detail.qty || 0),
+              satuan: detail.satuan || '',
+              harga: Number(detail.harga || 0),
+              original_harga: Number(detail.harga || 0),
+              diskon: Number(detail.diskon || 0),
+              subtotal: Number(detail.subtotal || 0),
+              is_new: false
+            };
+          });
+        }
+
+        appState.csRevisionDraft = draft;
+        renderCsRevisionDraft_();
+        document.getElementById('csRevisionBackdrop').classList.remove('hidden');
+        setStatusText_('Form Revisi CS siap dipakai');
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal memuat data revisi');
+        renderResult_('Gagal memuat data order untuk revisi: ' + error.message, true);
+      })
+      .getSalesOrderRevisionDataFromDashboard(appState.currentUser.user_id, noSo);
+  }
+
+  function closeCsRevisionModal_() {
+    appState.csRevisionDraft = null;
+    clearCsRevisionMessage_();
+    clearCsRevisionFieldErrors_();
+    document.getElementById('csRevisionBackdrop').classList.add('hidden');
+  }
+
+  function openCancelSalesOrderModal_(noSo) {
+    var order = (appState.readyOrders || []).find(function(row) {
+      return String(row.no_so || '').trim() === String(noSo || '').trim();
+    }) || null;
+
+    if (!order) {
+      renderResult_('Data order siap kirim tidak ditemukan.', true);
+      return;
+    }
+
+    appState.cancelSalesOrderDraft = {
+      no_so: String(order.no_so || '').trim()
+    };
+
+    setText_('cancelSalesOrderNoSo', order.no_so || '-');
+    setText_('cancelSalesOrderStatus', order.status_order || '-');
+    setText_('cancelSalesOrderCustomer', order.nama_customer_input || order.nama_customer || '-');
+    setText_('cancelSalesOrderDate', formatShortDateId_(order.tanggal_kirim_rencana || order.tanggal_kirim || order.tanggal_order || ''));
+    setFieldValue_('cancelSalesOrderReason', '');
+    clearCancelSalesOrderFieldError_();
+    document.getElementById('cancelSalesOrderBackdrop').classList.remove('hidden');
+  }
+
+  function closeCancelSalesOrderModal_() {
+    appState.cancelSalesOrderDraft = null;
+    clearCancelSalesOrderFieldError_();
+    document.getElementById('cancelSalesOrderBackdrop').classList.add('hidden');
+  }
+
+  function clearCancelSalesOrderFieldError_() {
+    var field = document.getElementById('cancelSalesOrderReason');
+
+    if (field) {
+      field.classList.remove('field-error');
+    }
+  }
+
+  function markCancelSalesOrderFieldError_() {
+    var field = document.getElementById('cancelSalesOrderReason');
+
+    if (!field) {
+      return;
+    }
+
+    field.classList.add('field-error');
+    if (typeof field.focus === 'function') {
+      field.focus();
+    }
+  }
+
+  function submitCancelSalesOrder_() {
+    var draft = appState.cancelSalesOrderDraft || null;
+    var reason = String(getFieldValue_('cancelSalesOrderReason') || '').trim();
+    var saveBtn = document.getElementById('saveCancelSalesOrderBtn');
+
+    if (!ensureAuthorizedSession_()) return;
+
+    clearCancelSalesOrderFieldError_();
+
+    if (!draft || !draft.no_so) {
+      renderResult_('Draft pembatalan order tidak ditemukan.', true);
+      return;
+    }
+
+    if (!reason) {
+      markCancelSalesOrderFieldError_();
+      renderResult_('Alasan pembatalan wajib diisi.', true);
+      return;
+    }
+
+    if (saveBtn) {
+      saveBtn.disabled = true;
+    }
+    setStatusText_('Membatalkan sales order...');
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+        }
+        closeCancelSalesOrderModal_();
+        setStatusText_('Sales order dibatalkan');
+        renderResult_(
+          (result && result.message ? result.message : 'Sales order berhasil dibatalkan.') +
+          '\nNo. SO: ' + (result.no_so || '-') +
+          '\nStatus Order: ' + (result.status_order || '-'),
+          false
+        );
+        loadAdminOperationsData_();
+      })
+      .withFailureHandler(function(error) {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+        }
+        setStatusText_('Gagal membatalkan sales order');
+        renderResult_('Gagal membatalkan sales order: ' + (error && error.message ? error.message : error), true);
+      })
+      .cancelSalesOrderFromDashboard(appState.currentUser.user_id, {
+        no_so: draft.no_so,
+        alasan_batal: reason
+      });
+  }
+
+  function renderCsRevisionDraft_() {
+    var draft = appState.csRevisionDraft || {};
+    var tbody = document.getElementById('csRevisionItemsBody');
+
+    clearCsRevisionMessage_();
+    clearCsRevisionFieldErrors_();
+    setText_('csRevisionNoSo', draft.no_so || '-');
+    setText_('csRevisionStatusOrder', draft.status_order || '-');
+    setText_('csRevisionCustomer', draft.nama_customer_input || '-');
+    setText_('csRevisionSales', draft.sales_nama || '-');
+    setText_('csRevisionTanggalOrder', formatShortDateId_(draft.tanggal_order || ''));
+    setFieldValue_('csRevisionTanggalKirim', draft.tanggal_kirim_rencana || '');
+    setFieldValue_('csRevisionTermPembayaran', draft.term_pembayaran || 'Cash');
+    setFieldValue_('csRevisionTanggalJatuhTempo', draft.tanggal_jatuh_tempo || '');
+    setFieldValue_('csRevisionCatatan', draft.catatan || '');
+    setFieldValue_('csRevisionAlasan', '');
+    renderCsRevisionAddItemOptions_();
+    resetCsRevisionAddItemDraft_();
+
+    if (!tbody) {
+      return;
+    }
+
+    if (!(draft.details && draft.details.length)) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty-cell">Belum ada item untuk direvisi.</td></tr>';
+      updateCsRevisionTotals_();
+      return;
+    }
+
+    tbody.innerHTML = draft.details.map(function(item, index) {
+      var qtyAwal = Number(item.original_qty || item.qty || 0);
+      var hargaAwal = Number(item.original_harga || item.harga || 0);
+      var currentQty = Number(item.qty || 0);
+      var currentHarga = Number(item.harga || 0);
+      var currentDiskon = Number(item.diskon || 0);
+      var subtotalBaru = Math.max((currentQty * currentHarga) - currentDiskon, 0);
+
+      return '' +
+        '<tr>' +
+          '<td><strong>' + escapeHtml_(item.nama_item || '-') + '</strong>' + (item.is_new ? '<br/><small>Item Baru</small>' : '') + '</td>' +
+          '<td>' + escapeHtml_(formatNumber_(qtyAwal)) + '</td>' +
+          '<td><input id="csRevisionQty-' + index + '" type="number" min="1" step="1" value="' + escapeHtml_(String(currentQty)) + '" oninput="handleCsRevisionLineInput_(' + index + ')" /></td>' +
+          '<td>' + escapeHtml_(formatCurrencyInput_(hargaAwal)) + '</td>' +
+          '<td><input id="csRevisionHarga-' + index + '" type="text" inputmode="numeric" value="' + escapeHtml_(formatPlainNumberInput_(currentHarga)) + '" oninput="handleCsRevisionLineInput_(' + index + ')" /></td>' +
+          '<td><input id="csRevisionDiskon-' + index + '" type="number" min="0" step="1" value="' + escapeHtml_(String(currentDiskon)) + '" oninput="handleCsRevisionLineInput_(' + index + ')" /></td>' +
+          '<td><input id="csRevisionSubtotal-' + index + '" type="text" readonly value="' + escapeHtml_(formatCurrencyInput_(subtotalBaru)) + '" /></td>' +
+          '<td>' + escapeHtml_(item.satuan || '-') + '</td>' +
+          '<td><button type="button" class="danger-btn" onclick="handleRemoveCsRevisionItem_(' + index + ')">Hapus</button></td>' +
+        '</tr>';
+    }).join('');
+
+    updateCsRevisionTotals_();
+  }
+
+  function collectCsRevisionPayload_() {
+    var draft = appState.csRevisionDraft || {};
+
+    return {
+      no_so: draft.no_so || '',
+      tanggal_kirim_rencana: getFieldValue_('csRevisionTanggalKirim'),
+      term_pembayaran: getFieldValue_('csRevisionTermPembayaran'),
+      tanggal_jatuh_tempo: getFieldValue_('csRevisionTanggalJatuhTempo'),
+      catatan: getFieldValue_('csRevisionCatatan'),
+      alasan_revisi: getFieldValue_('csRevisionAlasan'),
+      items: (draft.details || []).map(function(item, index) {
+        return {
+          detail_id: item.detail_id,
+          kode_item: item.kode_item || '',
+          nama_item: item.nama_item || '',
+          qty: Number(getFieldValue_('csRevisionQty-' + index) || 0),
+          harga: parseCurrencyInput_(getFieldValue_('csRevisionHarga-' + index)),
+          diskon: Number(getFieldValue_('csRevisionDiskon-' + index) || 0)
+        };
+      })
+    };
+  }
+
+  function validateCsRevisionPayload_(payload) {
+    if (!String(payload.no_so || '').trim()) {
+      return 'No. SO revisi tidak ditemukan.';
+    }
+
+    if (!String(payload.tanggal_kirim_rencana || '').trim()) {
+      return 'Tanggal kirim rencana wajib diisi.';
+    }
+
+    if (!String(payload.term_pembayaran || '').trim()) {
+      return 'Term pembayaran wajib diisi.';
+    }
+
+    if (!String(payload.tanggal_jatuh_tempo || '').trim()) {
+      return 'Tanggal jatuh tempo wajib diisi.';
+    }
+
+    if (!String(payload.alasan_revisi || '').trim()) {
+      return 'Alasan revisi wajib diisi.';
+    }
+
+    if (!Array.isArray(payload.items) || !payload.items.length) {
+      return 'Minimal satu item revisi wajib diisi.';
+    }
+
+    for (var i = 0; i < payload.items.length; i += 1) {
+      if (!(Number(payload.items[i].qty || 0) > 0)) {
+        return 'Qty revisi pada semua item harus lebih dari 0.';
+      }
+      if (Number(payload.items[i].harga || 0) < 0) {
+        return 'Harga revisi tidak boleh negatif.';
+      }
+      if (Number(payload.items[i].diskon || 0) < 0) {
+        return 'Diskon revisi tidak boleh negatif.';
+      }
+    }
+
+    return '';
+  }
+
+  function saveCsRevision_(event) {
+    var payload;
+    var validationMessage;
+    var saveBtn = document.getElementById('saveCsRevisionBtn');
+    var invalidFieldId = '';
+
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+
+    clearCsRevisionMessage_();
+    clearCsRevisionFieldErrors_();
+    payload = collectCsRevisionPayload_();
+    validationMessage = validateCsRevisionPayload_(payload);
+
+    if (validationMessage) {
+      if (!String(payload.term_pembayaran || '').trim()) {
+        invalidFieldId = 'csRevisionTermPembayaran';
+      } else if (!String(payload.tanggal_kirim_rencana || '').trim()) {
+        invalidFieldId = 'csRevisionTanggalKirim';
+      } else if (!String(payload.tanggal_jatuh_tempo || '').trim()) {
+        invalidFieldId = 'csRevisionTanggalJatuhTempo';
+      } else if (!String(payload.alasan_revisi || '').trim()) {
+        invalidFieldId = 'csRevisionAlasan';
+      }
+
+      showCsRevisionMessage_(validationMessage);
+      markCsRevisionFieldError_(invalidFieldId);
+      setStatusText_('Form Revisi CS belum lengkap');
+      renderResult_(validationMessage, true);
+      return;
+    }
+
+    saveBtn.disabled = true;
+    setStatusText_('Menyimpan Revisi CS...');
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        saveBtn.disabled = false;
+        closeCsRevisionModal_();
+        setStatusText_('Revisi CS berhasil disimpan');
+        renderResult_(
+          (result && result.message ? result.message : 'Revisi CS berhasil disimpan.') +
+          '\nNo. SO: ' + (result.no_so || '-') +
+          '\nStatus Order: ' + (result.status_order || '-'),
+          false
+        );
+        loadAdminOperationsData_();
+      })
+      .withFailureHandler(function(error) {
+        saveBtn.disabled = false;
+        showCsRevisionMessage_('Gagal menyimpan revisi order: ' + error.message);
+        setStatusText_('Gagal menyimpan Revisi CS');
+        renderResult_('Gagal menyimpan revisi order: ' + error.message, true);
+      })
+      .saveSalesOrderRevisionFromDashboard(appState.currentUser.user_id, payload);
+  }
+
+  function showCsRevisionMessage_(message) {
+    var messageEl = document.getElementById('csRevisionMessage');
+
+    if (!messageEl) {
+      return;
+    }
+
+    messageEl.textContent = String(message || '').trim();
+    messageEl.classList.toggle('hidden', !messageEl.textContent);
+  }
+
+  function clearCsRevisionMessage_() {
+    var messageEl = document.getElementById('csRevisionMessage');
+
+    if (!messageEl) {
+      return;
+    }
+
+    messageEl.textContent = '';
+    messageEl.classList.add('hidden');
+  }
+
+  function clearCsRevisionFieldErrors_() {
+    ['csRevisionTanggalKirim', 'csRevisionTermPembayaran', 'csRevisionTanggalJatuhTempo', 'csRevisionAlasan'].forEach(function(fieldId) {
+      var field = document.getElementById(fieldId);
+
+      if (field) {
+        field.classList.remove('field-error');
+      }
+    });
+  }
+
+  function markCsRevisionFieldError_(fieldId) {
+    var field = document.getElementById(fieldId);
+
+    if (!field) {
+      return;
+    }
+
+    field.classList.add('field-error');
+    if (typeof field.focus === 'function') {
+      field.focus();
+    }
+  }
+
+  function renderCsRevisionAddItemOptions_() {
+    var select = document.getElementById('csRevisionAddItem');
+
+    if (!select) {
+      return;
+    }
+
+    select.innerHTML = '<option value="">Pilih produk</option>';
+
+    (appState.products || []).forEach(function(product) {
+      var option = document.createElement('option');
+      option.value = product.kode_item || product.nama_item;
+      option.textContent = product.nama_item || product.kode_item || '-';
+      option.dataset.kodeItem = product.kode_item || '';
+      option.dataset.namaItem = product.nama_item || '';
+      option.dataset.harga = product.harga_default || product.harga_dasar || 0;
+      select.appendChild(option);
+    });
+  }
+
+  function resetCsRevisionAddItemDraft_() {
+    setFieldValue_('csRevisionAddItem', '');
+    setFieldValue_('csRevisionAddQty', '');
+    setFieldValue_('csRevisionAddHarga', '');
+    setFieldValue_('csRevisionAddDiskon', 0);
+  }
+
+  function handleCsRevisionAddItemChange_() {
+    var select = document.getElementById('csRevisionAddItem');
+    var option = select && select.options ? select.options[select.selectedIndex] : null;
+    var harga = option ? Number(option.dataset.harga || 0) : 0;
+
+    setFieldValue_('csRevisionAddHarga', formatPlainNumberInput_(harga));
+  }
+
+  function handleCsRevisionAddHargaInput_() {
+    var value = parseCurrencyInput_(getFieldValue_('csRevisionAddHarga'));
+    setFieldValue_('csRevisionAddHarga', formatPlainNumberInput_(value));
+  }
+
+  function handleAddCsRevisionItem_() {
+    var select = document.getElementById('csRevisionAddItem');
+    var option = select && select.options ? select.options[select.selectedIndex] : null;
+    var draft = appState.csRevisionDraft || {};
+    var kodeItem = option ? String(option.dataset.kodeItem || option.value || '').trim() : '';
+    var namaItem = option ? String(option.dataset.namaItem || option.textContent || '').trim() : '';
+    var qty = Number(getFieldValue_('csRevisionAddQty') || 0);
+    var harga = parseCurrencyInput_(getFieldValue_('csRevisionAddHarga'));
+    var diskon = Number(getFieldValue_('csRevisionAddDiskon') || 0);
+    var product;
+
+    clearCsRevisionMessage_();
+
+    if (!kodeItem || !namaItem) {
+      showCsRevisionMessage_('Pilih produk yang ingin ditambahkan.');
+      return;
+    }
+
+    if ((draft.details || []).some(function(item) {
+      return String(item.kode_item || '').trim() === kodeItem || String(item.nama_item || '').trim() === namaItem;
+    })) {
+      showCsRevisionMessage_('Produk ini sudah ada di SO. Silakan revisi qty atau harga pada baris yang sudah ada.');
+      return;
+    }
+
+    if (!(qty > 0)) {
+      showCsRevisionMessage_('Qty item baru harus lebih dari 0.');
+      return;
+    }
+
+    if (harga < 0) {
+      showCsRevisionMessage_('Harga item baru tidak boleh negatif.');
+      return;
+    }
+
+    if (diskon < 0) {
+      showCsRevisionMessage_('Diskon item baru tidak boleh negatif.');
+      return;
+    }
+
+    product = (appState.products || []).find(function(row) {
+      return String(row.kode_item || '').trim() === kodeItem;
+    }) || null;
+
+    draft.details = Array.isArray(draft.details) ? draft.details : [];
+    draft.details.push({
+      detail_id: '',
+      kode_item: kodeItem,
+      nama_item: namaItem,
+      qty: qty,
+      original_qty: 0,
+      satuan: product && product.satuan ? product.satuan : '',
+      harga: harga,
+      original_harga: 0,
+      diskon: diskon,
+      subtotal: Math.max((qty * harga) - diskon, 0),
+      is_new: true
+    });
+
+    appState.csRevisionDraft = draft;
+    renderCsRevisionDraft_();
+  }
+
+  function handleRemoveCsRevisionItem_(index) {
+    var draft = appState.csRevisionDraft || {};
+
+    if (!Array.isArray(draft.details) || !draft.details.length) {
+      return;
+    }
+
+    draft.details.splice(index, 1);
+    appState.csRevisionDraft = draft;
+    renderCsRevisionDraft_();
+  }
+
+  function handleCsRevisionLineInput_(index) {
+    var draft = appState.csRevisionDraft || {};
+    var detail = draft && draft.details ? draft.details[index] : null;
+    var qty = Number(getFieldValue_('csRevisionQty-' + index) || 0);
+    var harga = parseCurrencyInput_(getFieldValue_('csRevisionHarga-' + index));
+    var diskon = Number(getFieldValue_('csRevisionDiskon-' + index) || 0);
+    var subtotal = Math.max((qty * harga) - diskon, 0);
+
+    if (!detail) {
+      return;
+    }
+
+    detail.qty = qty;
+    detail.harga = harga;
+    detail.diskon = diskon;
+    detail.subtotal = subtotal;
+    setFieldValue_('csRevisionHarga-' + index, formatPlainNumberInput_(harga));
+    setFieldValue_('csRevisionSubtotal-' + index, formatCurrencyInput_(subtotal));
+    updateCsRevisionTotals_();
+  }
+
+  function updateCsRevisionTotals_() {
+    var draft = appState.csRevisionDraft || {};
+    var totals = (draft.details || []).reduce(function(result, item, index) {
+      var qty = Number(getFieldValue_('csRevisionQty-' + index) || item.qty || 0);
+      var harga = parseCurrencyInput_(getFieldValue_('csRevisionHarga-' + index) || item.harga || 0);
+      var diskon = Number(getFieldValue_('csRevisionDiskon-' + index) || item.diskon || 0);
+      var subtotal = Math.max((qty * harga) - diskon, 0);
+
+      result.subtotal += qty * harga;
+      result.diskon += diskon;
+      result.total += subtotal;
+      return result;
+    }, {
+      subtotal: 0,
+      diskon: 0,
+      total: 0
+    });
+
+    setText_('csRevisionSubtotal', formatCurrencyInput_(totals.subtotal));
+    setText_('csRevisionDiskon', formatCurrencyInput_(totals.diskon));
+    setText_('csRevisionTotal', formatCurrencyInput_(totals.total));
   }
 
   function renderAdminSummary_() {
@@ -2123,7 +2877,7 @@
     if (!tbody) return;
 
     if (!appState.adminOrderItems.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Belum ada item di order agen.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Belum ada item di order customer.</td></tr>';
       calculateAdminOrderTotals_();
       return;
     }
@@ -2183,6 +2937,189 @@
           '<td class="cell-right">' + escapeHtml_(formatNumber_(row.qty_total || 0)) + '</td>' +
         '</tr>';
     }).join('');
+  }
+
+  function getFilteredSalesHistoryOrders_() {
+    var query = normalizeSearchText_(appState.salesHistorySearch);
+    var statusFilter = normalizeSearchText_(appState.salesHistoryStatus);
+
+    return (appState.salesHistoryOrders || []).filter(function(row) {
+      var haystack;
+      var rowStatus = normalizeSearchText_(row.status_order);
+
+      if (statusFilter && rowStatus !== statusFilter) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      haystack = [
+        row.no_so,
+        row.nama_customer_input,
+        row.nama_customer,
+        row.item_summary,
+        row.qty_summary,
+        row.catatan,
+        row.alasan_hold,
+        row.alasan_batal
+      ].map(normalizeSearchText_).join(' ');
+
+      return haystack.indexOf(query) !== -1;
+    });
+  }
+
+  function getSalesHistoryPageTotal_() {
+    return Math.max(1, Math.ceil(getFilteredSalesHistoryOrders_().length / SALES_HISTORY_PAGE_SIZE));
+  }
+
+  function normalizeSalesHistoryPage_() {
+    var totalPages = getSalesHistoryPageTotal_();
+    var currentPage = Number(appState.salesHistoryPage || 1);
+
+    if (!isFinite(currentPage) || currentPage < 1) {
+      currentPage = 1;
+    }
+
+    if (currentPage > totalPages) {
+      currentPage = totalPages;
+    }
+
+    appState.salesHistoryPage = currentPage;
+    return currentPage;
+  }
+
+  function renderSalesHistoryStatusOptions_() {
+    var select = document.getElementById('salesHistoryStatusFilter');
+    var options = ['<option value="">Semua Status</option>'];
+    var statuses = {};
+
+    if (!select) return;
+
+    (appState.salesHistoryOrders || []).forEach(function(row) {
+      var status = String(row.status_order || '').trim();
+      if (status) {
+        statuses[status] = true;
+      }
+    });
+
+    Object.keys(statuses).sort(function(left, right) {
+      return normalizeSearchText_(left).localeCompare(normalizeSearchText_(right), 'id-ID');
+    }).forEach(function(status) {
+      options.push('<option value="' + escapeHtml_(status) + '">' + escapeHtml_(status) + '</option>');
+    });
+
+    select.innerHTML = options.join('');
+    setFieldValue_('salesHistoryStatusFilter', appState.salesHistoryStatus || '');
+  }
+
+  function renderSalesHistoryTable_() {
+    var tbody = document.getElementById('salesHistoryTableBody');
+    var pagination = document.getElementById('salesHistoryPagination');
+    var orders = getFilteredSalesHistoryOrders_();
+    var totalPages;
+    var currentPage;
+    var startIndex;
+    var endIndex;
+    var pageRows;
+    var pageInfo;
+
+    if (!tbody) return;
+
+    if (!orders.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Belum ada order yang cocok dengan filter.</td></tr>';
+      if (pagination) {
+        pagination.innerHTML = '';
+      }
+      return;
+    }
+
+    totalPages = getSalesHistoryPageTotal_();
+    currentPage = normalizeSalesHistoryPage_();
+    startIndex = (currentPage - 1) * SALES_HISTORY_PAGE_SIZE;
+    endIndex = Math.min(startIndex + SALES_HISTORY_PAGE_SIZE, orders.length);
+    pageRows = orders.slice(startIndex, endIndex);
+
+    tbody.innerHTML = pageRows.map(function(row) {
+      var customerName = String(row.nama_customer_input || row.nama_customer || '-').trim() || '-';
+      var note = String(row.alasan_hold || row.alasan_batal || row.catatan || '-').trim() || '-';
+
+      return '' +
+        '<tr>' +
+          '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
+          '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</td>' +
+          '<td>' + escapeHtml_(customerName) + '</td>' +
+          '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
+          '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
+          '<td>' + formatNumber_(row.total_final || row.total_order || row.total || 0) + '</td>' +
+          '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
+          '<td>' + escapeHtml_(note) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    if (!pagination) {
+      return;
+    }
+
+    pageInfo = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + orders.length + ' order';
+
+    pagination.innerHTML = '' +
+      '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
+      '<div class="table-pagination-actions">' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
+        '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
+      '</div>';
+  }
+
+  function handleSalesHistorySearchInput_() {
+    appState.salesHistorySearch = getFieldValue_('salesHistorySearch');
+    appState.salesHistoryPage = 1;
+    renderSalesHistoryTable_();
+  }
+
+  function handleSalesHistoryStatusChange_() {
+    appState.salesHistoryStatus = getFieldValue_('salesHistoryStatusFilter');
+    appState.salesHistoryPage = 1;
+    renderSalesHistoryTable_();
+  }
+
+  function handleSalesHistoryPageChange_(direction) {
+    var nextPage = normalizeSalesHistoryPage_() + Number(direction || 0);
+    var totalPages = getSalesHistoryPageTotal_();
+
+    if (nextPage < 1) {
+      nextPage = 1;
+    }
+
+    if (nextPage > totalPages) {
+      nextPage = totalPages;
+    }
+
+    if (nextPage === appState.salesHistoryPage) {
+      return;
+    }
+
+    appState.salesHistoryPage = nextPage;
+    renderSalesHistoryTable_();
+  }
+
+  function handleRefreshSalesHistory_() {
+    setStatusText_('Memuat ulang riwayat order sales...');
+    loadSalesData_(function() {
+      setStatusText_('Riwayat order sales berhasil diperbarui');
+    });
+  }
+
+  function openSalesHistoryModal_() {
+    renderSalesHistoryStatusOptions_();
+    renderSalesHistoryTable_();
+    document.getElementById('salesHistoryBackdrop').classList.remove('hidden');
+  }
+
+  function closeSalesHistoryModal_() {
+    document.getElementById('salesHistoryBackdrop').classList.add('hidden');
   }
 
   function resetTomorrowPlanOutput_() {
@@ -2336,7 +3273,13 @@
     if (!productSelect) return;
     var selectedOption = productSelect.options[productSelect.selectedIndex];
     var harga = selectedOption ? Number(selectedOption.dataset.harga || selectedOption.dataset.basePrice || 0) : 0;
-    setFieldValue_('harga', harga);
+    setFieldValue_('harga', formatPlainNumberInput_(harga));
+    calculateTotals_();
+  }
+
+  function handleSalesPriceInput_() {
+    var value = parseCurrencyInput_(getFieldValue_('harga'));
+    setFieldValue_('harga', formatPlainNumberInput_(value));
     calculateTotals_();
   }
 
@@ -2377,7 +3320,7 @@
       var draftItem = collectAdminItemDraft_();
 
       if (draftItem.validationMessage) {
-        setStatusText_('Detail item agen belum lengkap');
+        setStatusText_('Detail item customer belum lengkap');
         renderResult_(draftItem.validationMessage, true);
         return;
       }
@@ -2386,13 +3329,13 @@
       renderAdminOrderItems_();
       resetAdminItemDraft_();
       if (draftItem.item.butuh_persetujuan_harga) {
-        setStatusText_('Item agen ditambahkan, harga di bawah harga dasar akan masuk approval');
+        setStatusText_('Item customer ditambahkan, harga di bawah harga dasar akan masuk approval');
       } else {
-        setStatusText_('Item berhasil ditambahkan ke order agen');
+        setStatusText_('Item berhasil ditambahkan ke order customer');
       }
     } catch (error) {
-      setStatusText_('Gagal tambah item agen');
-      renderResult_('Gagal tambah item agen: ' + (error && error.message ? error.message : error), true);
+      setStatusText_('Gagal tambah item customer');
+      renderResult_('Gagal tambah item customer: ' + (error && error.message ? error.message : error), true);
     }
   }
 
@@ -2401,7 +3344,7 @@
       return itemIndex !== Number(index);
     });
     renderAdminOrderItems_();
-    setStatusText_('Item berhasil dihapus dari order agen');
+    setStatusText_('Item berhasil dihapus dari order customer');
   }
 
   function handleAdminProductChange_() {
@@ -2409,7 +3352,13 @@
     if (!productSelect) return;
     var selectedOption = productSelect.options[productSelect.selectedIndex];
     var harga = selectedOption ? Number(selectedOption.dataset.harga || selectedOption.dataset.basePrice || 0) : 0;
-    setFieldValue_('admin_harga', harga);
+    setFieldValue_('admin_harga', formatPlainNumberInput_(harga));
+    calculateAdminTotals_();
+  }
+
+  function handleAdminPriceInput_() {
+    var value = parseCurrencyInput_(getFieldValue_('admin_harga'));
+    setFieldValue_('admin_harga', formatPlainNumberInput_(value));
     calculateAdminTotals_();
   }
 
@@ -2419,6 +3368,10 @@
 
   function syncAdminPaymentDueDate_() {
     syncPaymentDueDateByField_('admin_tanggal_kirim_rencana', 'admin_term_pembayaran', 'admin_tanggal_jatuh_tempo');
+  }
+
+  function syncCsRevisionPaymentDueDate_() {
+    syncPaymentDueDateByField_('csRevisionTanggalKirim', 'csRevisionTermPembayaran', 'csRevisionTanggalJatuhTempo');
   }
 
   function syncPaymentDueDateByField_(deliveryFieldId, termFieldId, dueDateFieldId) {
@@ -2496,7 +3449,7 @@
 
   function calculateTotals_() {
     var qty = Number(getFieldValue_('qty') || 0);
-    var harga = Number(getFieldValue_('harga') || 0);
+    var harga = parseCurrencyInput_(getFieldValue_('harga'));
     var diskonPersen = clampDiscountPercent_(getFieldValue_('diskon'));
     var subtotal = qty * harga;
     var diskonNominal = subtotal * (diskonPersen / 100);
@@ -2524,7 +3477,7 @@
 
   function calculateAdminTotals_() {
     var qty = Number(getFieldValue_('admin_qty') || 0);
-    var harga = Number(getFieldValue_('admin_harga') || 0);
+    var harga = parseCurrencyInput_(getFieldValue_('admin_harga'));
     var diskonPersen = clampDiscountPercent_(getFieldValue_('admin_diskon'));
     var subtotal = qty * harga;
     var diskonNominal = subtotal * (diskonPersen / 100);
@@ -2584,8 +3537,13 @@
 
   function handleApproveOrder(noSo) {
     var catatan = getFieldValue_('approval-note-' + noSo);
+    var noteFieldId = 'approval-note-' + noSo;
 
+    clearApproverInlineMessage_(noSo);
+    clearApproverNoteError_(noteFieldId);
     if (!String(catatan || '').trim()) {
+      showApproverInlineMessage_(noSo, 'Catatan approval wajib diisi sebelum approve order.');
+      markApproverNoteError_(noteFieldId);
       renderResult_('Catatan approval wajib diisi sebelum approve order.', true);
       return;
     }
@@ -2598,6 +3556,7 @@
         loadApproverData_();
       })
       .withFailureHandler(function(error) {
+        showApproverInlineMessage_(noSo, 'Gagal approve order: ' + error.message);
         setStatusText_('Approval gagal');
         renderResult_('Gagal approve order: ' + error.message, true);
       })
@@ -2609,8 +3568,13 @@
 
   function handleRejectOrder(noSo) {
     var catatan = getFieldValue_('approval-note-' + noSo);
+    var noteFieldId = 'approval-note-' + noSo;
 
+    clearApproverInlineMessage_(noSo);
+    clearApproverNoteError_(noteFieldId);
     if (!String(catatan || '').trim()) {
+      showApproverInlineMessage_(noSo, 'Catatan approval wajib diisi sebelum reject order.');
+      markApproverNoteError_(noteFieldId);
       renderResult_('Catatan approval wajib diisi sebelum reject order.', true);
       return;
     }
@@ -2623,6 +3587,7 @@
         loadApproverData_();
       })
       .withFailureHandler(function(error) {
+        showApproverInlineMessage_(noSo, 'Gagal reject order: ' + error.message);
         setStatusText_('Reject gagal');
         renderResult_('Gagal reject order: ' + error.message, true);
       })
@@ -2630,6 +3595,49 @@
         no_so: noSo,
         catatan_approval: catatan
       });
+  }
+
+  function showApproverInlineMessage_(noSo, message) {
+    var messageEl = document.getElementById('approval-message-' + noSo);
+
+    if (!messageEl) {
+      return;
+    }
+
+    messageEl.textContent = String(message || '').trim();
+    messageEl.classList.toggle('hidden', !messageEl.textContent);
+  }
+
+  function clearApproverInlineMessage_(noSo) {
+    var messageEl = document.getElementById('approval-message-' + noSo);
+
+    if (!messageEl) {
+      return;
+    }
+
+    messageEl.textContent = '';
+    messageEl.classList.add('hidden');
+  }
+
+  function clearApproverNoteError_(fieldId) {
+    var field = document.getElementById(fieldId);
+
+    if (field) {
+      field.classList.remove('field-error');
+    }
+  }
+
+  function markApproverNoteError_(fieldId) {
+    var field = document.getElementById(fieldId);
+
+    if (!field) {
+      return;
+    }
+
+    field.classList.add('field-error');
+    if (typeof field.focus === 'function') {
+      field.focus();
+    }
   }
 
   function handleCreateSuratJalan(noSo) {
@@ -2720,6 +3728,20 @@
       .getSuratJalanPrintDataFromDashboard(appState.currentUser.user_id, noSo);
   }
 
+  function handlePreviewSuratJalan(noSo) {
+    setStatusText_('Menyiapkan preview surat jalan...');
+    google.script.run
+      .withSuccessHandler(function(data) {
+        setStatusText_('Preview surat jalan siap');
+        openPrintWindow_(data || {}, { mode: 'preview_combined' });
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal menyiapkan preview');
+        renderResult_('Gagal menyiapkan preview surat jalan: ' + error.message, true);
+      })
+      .getSuratJalanPreviewDataFromDashboard(appState.currentUser.user_id, noSo);
+  }
+
   function handlePrintSuratJalanOnly(noSo) {
     setStatusText_('Menyiapkan halaman print...');
     google.script.run
@@ -2742,20 +3764,20 @@
     var submitBtn = document.getElementById('submitAgentBtn');
 
     if (validationMessage) {
-      setStatusText_('Form pengiriman agen belum lengkap');
+      setStatusText_('Form pengiriman belum lengkap');
       renderResult_(validationMessage, true);
       return;
     }
 
     submitBtn.disabled = true;
-    setStatusText_('Mengirim pengiriman agen...');
+    setStatusText_('Mengirim pengiriman...');
 
     google.script.run
       .withSuccessHandler(function(result) {
         submitBtn.disabled = false;
-        setStatusText_('Pengiriman agen berhasil diproses');
+        setStatusText_('Pengiriman berhasil diproses');
         renderResult_(
-          'Order agen berhasil dibuat.\nNo. SO: ' + result.no_so + '\nStatus Order: ' + result.status_order,
+          'Order customer berhasil dibuat.\nNo. SO: ' + result.no_so + '\nStatus Order: ' + result.status_order,
           result.butuh_persetujuan === 'Ya'
         );
         resetAgentForm_();
@@ -2768,8 +3790,8 @@
       })
       .withFailureHandler(function(error) {
         submitBtn.disabled = false;
-        setStatusText_('Pengiriman agen gagal diproses');
-        renderResult_('Gagal submit pengiriman agen: ' + error.message, true);
+        setStatusText_('Pengiriman gagal diproses');
+        renderResult_('Gagal submit pengiriman: ' + error.message, true);
       })
       .submitAgentOrderFromAdmin(appState.currentUser.user_id, payload);
   }
@@ -2791,10 +3813,12 @@
 
   function submitLoginForm_(event) {
     var userId;
+    var password;
     var loginBtn = document.getElementById('loginBtn');
 
     event.preventDefault();
     userId = String(getFieldValue_('login_user_id') || '').trim().toUpperCase();
+    password = String(getFieldValue_('login_password') || '');
 
     if (!userId) {
       setStatusText_('Masukkan User ID terlebih dahulu');
@@ -2802,8 +3826,14 @@
       return;
     }
 
+    if (!password) {
+      setStatusText_('Masukkan password terlebih dahulu');
+      renderUnauthorizedMessage_('Password wajib diisi untuk masuk ke webapp.');
+      return;
+    }
+
     loginBtn.disabled = true;
-    setStatusText_('Memeriksa User ID...');
+    setStatusText_('Memeriksa kredensial login...');
 
     if (LAST_ASYNC_STATUS_TIMER) {
       clearTimeout(LAST_ASYNC_STATUS_TIMER);
@@ -2836,6 +3866,7 @@
         }
 
         saveUserSession_(appState.currentUser.user_id);
+        setFieldValue_('login_password', '');
         applyCurrentUserAccess_();
         setStatusText_('User berhasil masuk');
         renderResult_('Siap digunakan oleh ' + (appState.currentUser.nama_user || appState.currentUser.user_id), false);
@@ -2851,7 +3882,10 @@
         setStatusText_('Gagal login');
         renderUnauthorizedMessage_('Gagal login: ' + error.message);
       })
-      .getUserProfileByUserId(userId);
+      .loginFromDashboard({
+        user_id: userId,
+        password: password
+      });
   }
 
   function collectSalesItemDraft_() {
@@ -2859,7 +3893,7 @@
 
     var namaItem = String(getFieldValue_('item') || '').trim();
     var qty = Number(getFieldValue_('qty') || 0);
-    var harga = Number(getFieldValue_('harga') || 0);
+    var harga = parseCurrencyInput_(getFieldValue_('harga'));
     var diskonPersen = clampDiscountPercent_(getFieldValue_('diskon'));
     var grossSubtotal = qty * harga;
     var diskon = grossSubtotal * (diskonPersen / 100);
@@ -2921,7 +3955,7 @@
 
     var namaItem = String(getFieldValue_('admin_item') || '').trim();
     var qty = Number(getFieldValue_('admin_qty') || 0);
-    var harga = Number(getFieldValue_('admin_harga') || 0);
+    var harga = parseCurrencyInput_(getFieldValue_('admin_harga'));
     var diskonPersen = clampDiscountPercent_(getFieldValue_('admin_diskon'));
     var grossSubtotal = qty * harga;
     var diskon = grossSubtotal * (diskonPersen / 100);
@@ -2930,11 +3964,11 @@
     var hargaDasar = Number(product && (product.harga_dasar || product.harga_default) || 0);
 
     if (!namaItem) {
-      return { validationMessage: 'Produk wajib dipilih sebelum menambah item agen.' };
+      return { validationMessage: 'Produk wajib dipilih sebelum menambah item customer.' };
     }
 
     if (!product) {
-      return { validationMessage: 'Produk agen tidak ditemukan di master item.' };
+      return { validationMessage: 'Produk customer tidak ditemukan di master item.' };
     }
 
     if (hargaDasar <= 0 && harga > 0) {
@@ -2946,19 +3980,19 @@
     }
 
     if (qty <= 0) {
-      return { validationMessage: 'Qty item agen harus lebih dari 0.' };
+      return { validationMessage: 'Qty item customer harus lebih dari 0.' };
     }
 
     if (harga < 0) {
-      return { validationMessage: 'Harga item agen tidak boleh negatif.' };
+      return { validationMessage: 'Harga item customer tidak boleh negatif.' };
     }
 
     if (diskonPersen < 0) {
-      return { validationMessage: 'Diskon item agen tidak boleh negatif.' };
+      return { validationMessage: 'Diskon item customer tidak boleh negatif.' };
     }
 
     if (diskonPersen > 100) {
-      return { validationMessage: 'Diskon item agen maksimal 100%.' };
+      return { validationMessage: 'Diskon item customer maksimal 100%.' };
     }
 
     return {
@@ -3009,7 +4043,7 @@
   function resetSalesItemDraft_() {
     setFieldValue_('item', '');
     setFieldValue_('qty', '');
-    setFieldValue_('harga', 0);
+    setFieldValue_('harga', formatPlainNumberInput_(0));
     setFieldValue_('diskon', 0);
     setFieldValue_('line_subtotal', formatCurrencyInput_(0));
   }
@@ -3017,7 +4051,7 @@
   function resetAdminItemDraft_() {
     setFieldValue_('admin_item', '');
     setFieldValue_('admin_qty', '');
-    setFieldValue_('admin_harga', 0);
+    setFieldValue_('admin_harga', formatPlainNumberInput_(0));
     setFieldValue_('admin_diskon', 0);
     setFieldValue_('admin_line_subtotal', formatCurrencyInput_(0));
   }
@@ -3097,7 +4131,7 @@
 
   function validateAgentFormPayload_(payload) {
     if (!Array.isArray(payload.items) || !payload.items.length) {
-      return 'Minimal satu item order agen wajib ditambahkan.';
+      return 'Minimal satu item order customer wajib ditambahkan.';
     }
 
     if (!String(payload.tanggal_jatuh_tempo || '').trim()) {
@@ -3109,19 +4143,19 @@
     }
 
     if (!String(payload.nama_customer_input || '').trim()) {
-      return 'Nama Agen / Customer wajib diisi untuk agen baru.';
+      return 'Nama Cust / Customer wajib diisi untuk customer baru.';
     }
 
     if (!String(payload.pic_customer || '').trim()) {
-      return 'PIC Customer wajib diisi untuk agen baru.';
+      return 'PIC Customer wajib diisi untuk customer baru.';
     }
 
     if (!String(payload.alamat_kirim || '').trim()) {
-      return 'Alamat Kirim wajib diisi untuk agen baru.';
+      return 'Alamat Kirim wajib diisi untuk customer baru.';
     }
 
     if (!String(payload.no_hp_customer || '').trim()) {
-      return 'No. HP Customer wajib diisi untuk agen baru.';
+      return 'No. HP Customer wajib diisi untuk customer baru.';
     }
 
     return '';
@@ -3294,8 +4328,9 @@
     applyCurrentUserAccess_();
     document.getElementById('authNotice').classList.remove('hidden');
     setFieldValue_('login_user_id', appState.currentUser && appState.currentUser.user_id ? appState.currentUser.user_id : loadSavedUserSession_());
+    setFieldValue_('login_password', '');
     renderUnauthorizedMessage_(
-      'Silahkan Login Dengan ID anda'
+      'Silahkan Login Dengan ID dan password anda'
     );
     document.querySelectorAll('.tab-btn').forEach(function(button) {
       button.classList.add('hidden');
@@ -3473,7 +4508,7 @@
       loadAdminAgentFormData_(function() {
         resetAgentForm_();
         document.getElementById('agentModalBackdrop').classList.remove('hidden');
-        setStatusText_('Data siap, silakan input pengiriman agen');
+        setStatusText_('Data siap, silakan input pengiriman');
       });
       return;
     }
@@ -3864,6 +4899,21 @@
     return 'Rp ' + formatNumber_(value || 0);
   }
 
+  function formatPlainNumberInput_(value) {
+    var normalized = String(value);
+
+    if (value === null || typeof value === 'undefined') {
+      return '';
+    }
+
+    normalized = normalized.replace(/[^0-9-]/g, '');
+    if (!normalized) {
+      return '';
+    }
+
+    return formatNumber_(Number(normalized || 0));
+  }
+
   function formatPercentValue_(value) {
     return formatNumber_(Number(value || 0)) + '%';
   }
@@ -3936,6 +4986,8 @@
 
     if (normalized === 'menunggu persetujuan') {
       className = 'warning';
+    } else if (normalized === 'pending kirim') {
+      className = 'warning';
     } else if (normalized === 'menunggak') {
       className = 'warning';
     } else if (normalized === 'berhasil') {
@@ -3944,7 +4996,7 @@
       className = 'danger';
     } else if (normalized === 'siap export') {
       className = 'progress';
-    } else if (normalized === 'ditahan' || normalized === 'ditolak') {
+    } else if (normalized === 'ditahan' || normalized === 'ditolak' || normalized === 'dibatalkan') {
       className = 'danger';
     } else if (normalized === 'terkirim') {
       className = 'progress';
@@ -4084,6 +5136,36 @@
     return String(day).padStart(2, '0') + ' ' + monthNames[monthIndex] + ' ' + year;
   }
 
+  function formatTimeLabelWib_(value) {
+    var text = String(value || '').trim();
+    var match;
+    var parsed;
+    var hours;
+    var minutes;
+
+    if (!text) {
+      return '-';
+    }
+
+    match = text.match(/T(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
+      match = text.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+    }
+
+    if (match) {
+      return match[1] + ':' + match[2] + ' WIB';
+    }
+
+    parsed = new Date(text);
+    if (!isNaN(parsed.getTime())) {
+      hours = String(parsed.getHours()).padStart(2, '0');
+      minutes = String(parsed.getMinutes()).padStart(2, '0');
+      return hours + ':' + minutes + ' WIB';
+    }
+
+    return text;
+  }
+
   function normalizeDateKey_(value) {
     var match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
 
@@ -4189,8 +5271,9 @@
   function buildPrintDocument_(data, options) {
     var safeOptions = options || {};
     var mode = String(safeOptions.mode || '').trim().toLowerCase();
-    var titlePrefix = mode === 'sj_only' ? 'Surat Jalan (SJ)' : 'Surat Jalan';
-    var title = titlePrefix + ' ' + escapeHtml_(data.no_surat_jalan || '');
+    var isPreview = mode === 'preview_sj' || mode === 'preview_combined';
+    var titlePrefix = isPreview ? 'Preview Surat Jalan' : (mode === 'sj_only' ? 'Surat Jalan (SJ)' : 'Surat Jalan');
+    var title = titlePrefix + ' ' + escapeHtml_(isPreview ? (data.no_so || '') : (data.no_surat_jalan || ''));
     var printBodyHtml = buildCombinedPrintSheet_(data, safeOptions);
 
     return '' +
@@ -4236,6 +5319,7 @@
           '.nota-note{font-size:0.11in;line-height:1.2;}' +
           '.perforation{position:relative;text-align:center;font-size:0.12in;font-weight:700;margin:0.09in 0 0.08in;border-top:3px dashed #222;}' +
           '.perforation span{position:relative;top:-0.09in;background:transparent;padding:0 0.08in;}' +
+          '.preview-banner{border:2px dashed #107e3e;background:#edf8f1;color:#0b5d2d;padding:0.08in 0.12in;margin-bottom:0.08in;font-weight:700;font-size:0.12in;display:flex;justify-content:space-between;gap:0.12in;}' +
           '.split-grid{display:grid;grid-template-columns:62% 38%;gap:0.12in;}' +
           '.summary table td:first-child{font-weight:700;}' +
           '.summary .grand td{font-weight:700;}' +
@@ -4244,7 +5328,7 @@
           '@media print{body{background:#fff}.sheet{margin:0 auto;page-break-inside:avoid;}}' +
         '</style>' +
       '</head>' +
-      '<body onload="window.print()">' +
+      '<body' + (isPreview ? '' : ' onload="window.print()"') + '>' +
         printBodyHtml +
       '</body>' +
       '</html>';
@@ -4253,11 +5337,15 @@
   function buildCombinedPrintSheet_(data, options) {
     var safeOptions = options || {};
     var mode = String(safeOptions.mode || '').trim().toLowerCase();
-    var isSjOnly = mode === 'sj_only';
+    var isPreview = mode === 'preview_sj' || mode === 'preview_combined';
+    var isSjOnly = mode === 'sj_only' || mode === 'preview_sj';
 
     return '' +
       '<div class="sheet">' +
         '<div class="print-area">' +
+          (isPreview
+            ? '<div class="preview-banner"><span>PREVIEW SJ</span><span>Dokumen belum dibuat</span></div>'
+            : '') +
           buildSuratJalanSection_(data) +
           (isSjOnly ? '' : '<div class="perforation"><span> </span></div>' + buildNotaSection_(data)) +
         '</div>' +
@@ -4266,13 +5354,16 @@
 
   function buildSuratJalanSection_(data) {
     var detailRows = buildPrintSuratJalanRows_(data.items);
+    var isPreview = String(data.status_kirim || '').trim() === 'Preview';
+    var headerTitle = isPreview ? 'PREVIEW SURAT JALAN' : 'SURAT JALAN';
+    var headerNumber = String(data.no_surat_jalan || '').trim() || 'Belum Dibuat';
 
     return '' +
       '<section>' +
-        buildPrintHeader_('SURAT JALAN', data.no_surat_jalan || '-') +
+        buildPrintHeader_(headerTitle, headerNumber) +
         '<div class="fields">' +
           buildPrintField_('TANGGAL', formatPrintDate_(data.tanggal_kirim || data.tanggal_cetak || '')) +
-          buildPrintField_('NO SJ', data.no_surat_jalan || '-') +
+          buildPrintField_('NO SJ', headerNumber) +
           buildPrintField_('NO SO', data.no_so || '-') +
           buildPrintField_('NO NOTA', buildPrintNotaNumber_(data)) +
           buildPrintField_('CUSTOMER', data.nama_customer || '-') +
