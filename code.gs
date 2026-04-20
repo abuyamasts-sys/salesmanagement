@@ -53,9 +53,15 @@ function toClientValue_(value) {
 function getSalesOrderFormData(userId) {
   requireCurrentUserRole_(['Sales'], userId);
   var currentUser = getCurrentUserProfile(userId);
+  var customers = currentUser.is_freelance
+    ? getCustomersOwnedBySales_(currentUser.user_id).filter(function(customer) {
+      return normalizeText_(customer.sales_owner_id) === normalizeText_(currentUser.user_id) &&
+        normalizeText_(customer.status_customer) !== 'ditahan';
+    })
+    : getActiveCustomers();
 
   return toClientValue_({
-    customers: getActiveCustomers(),
+    customers: customers,
     currentUser: currentUser,
     users: [currentUser],
     products: getProductCatalog_(),
@@ -659,9 +665,13 @@ function shouldIncludeTomorrowOrder_(row, tomorrowDate) {
 
 function submitSalesOrderFromForm(userId, formData) {
   var currentUser = requireCurrentUserRole_(['Sales'], userId);
+  var currentUserProfile = getCurrentUserProfile(currentUser.user_id);
   var payload = {
     sales_id: currentUser.user_id,
     sales_nama: currentUser.nama_user,
+    tipe_sales: currentUserProfile.tipe_sales,
+    channel_sales: currentUserProfile.channel_sales_default,
+    is_freelance: currentUserProfile.is_freelance,
     jenis_customer: formData.jenis_customer,
     customer_id: formData.customer_id,
     nama_customer_input: formData.nama_customer_input,
@@ -940,11 +950,7 @@ function getApproverKpiTargetDataFromDashboard(userId, formData) {
   requireCurrentUserRole_(['Approver'], userId);
   var bulan = String(formData && formData.bulan ? formData.bulan : '').trim();
 
-  return toClientValue_({
-    bulan: bulan,
-    salesUsers: listSalesUsers_(),
-    targets: listSalesKpiTargetsByMonth_(bulan)
-  });
+  return toClientValue_(getApproverKpiProgressData_(bulan));
 }
 
 function upsertSalesKpiTargetFromDashboard(userId, formData) {
@@ -973,6 +979,7 @@ function upsertSalesKpiTargetFromDashboard(userId, formData) {
 
   result.bulan = bulan;
   result.targets = listSalesKpiTargetsByMonth_(bulan);
+  result.progressData = getApproverKpiProgressData_(bulan);
 
   return toClientValue_(result);
 }

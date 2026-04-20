@@ -354,6 +354,10 @@ function applyTagihanPayment_(currentUser, payload) {
     });
   }
 
+  if (statusBaru === 'Lunas') {
+    markSlfCommissionReadyByCustomer_(target.kode_customer);
+  }
+
   return {
     success: true,
     message: statusBaru === 'Lunas' ? 'Tagihan berhasil dilunasi.' : 'Pembayaran berhasil disimpan.',
@@ -395,4 +399,23 @@ function appendCustomerCatatanPiutang_(catatanLama, nowParts, userId, catatanPel
   }
 
   return base + ' | ' + suffix;
+}
+
+function markSlfCommissionReadyByCustomer_(kodeCustomer) {
+  var customerCode = String(kodeCustomer || '').trim();
+
+  if (!customerCode) {
+    return;
+  }
+
+  getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).filter(function(order) {
+    return String(order.customer_id || '').trim() === customerCode &&
+      normalizeText_(order.channel_sales) === 'slf' &&
+      normalizeText_(order.status_order) === 'selesai' &&
+      normalizeText_(order.status_komisi) === 'menunggu pembayaran';
+  }).forEach(function(order) {
+    updateSalesOrderCommissionStatus_(order.no_so, 'Siap Cair', {
+      catatan: 'Tagihan lunas, komisi siap cair'
+    });
+  });
 }

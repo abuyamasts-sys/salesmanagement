@@ -8,6 +8,7 @@
     products: [],
     salesOrderItems: [],
     salesHistoryOrders: [],
+    salesCommissionSummary: null,
     salesHistorySearch: '',
     salesHistoryStatus: '',
     salesHistoryPage: 1,
@@ -17,6 +18,8 @@
     exportOrders: [],
     approverSearch: '',
     approverPriceSearch: '',
+    approverCommissionMaster: [],
+    approverCommissionReadyToPay: [],
     approverFilterDate: '',
     approverExportFilterDate: '',
     readyOrders: [],
@@ -35,6 +38,8 @@
     approverKpiMonth: '',
     approverKpiSalesUsers: [],
     approverKpiTargets: [],
+    approverKpiSummary: null,
+    approverKpiRows: [],
     backupSummary: null,
     backupHistory: [],
     sessionUserId: '',
@@ -143,6 +148,9 @@
     safeBindById_('approverFilterTodayBtn', 'click', handleApproverFilterToday_);
     safeBindById_('approverFilterAllBtn', 'click', handleApproverFilterAll_);
     safeBindById_('approver_price_search', 'input', handleApproverPriceSearchInput_);
+    safeBindById_('refreshApproverCommissionBtn', 'click', loadApproverCommissionData_);
+    safeBindById_('saveApproverCommissionBtn', 'click', handleSaveApproverCommission_);
+    safeBindById_('approverCommissionItem', 'change', handleApproverCommissionItemChange_);
     safeBindById_('refreshApproverKpiBtn', 'click', loadApproverKpiData_);
     safeBindById_('approverKpiMonth', 'change', handleApproverKpiMonthChange_);
     safeBindById_('approverKpiSales', 'change', handleApproverKpiSalesChange_);
@@ -275,6 +283,7 @@
     window.handleCsRevisionLineInput_ = handleCsRevisionLineInput_;
     window.handleBillingPartialPay_ = handleBillingPartialPay_;
     window.handleMarkBillingPaid_ = handleMarkBillingPaid_;
+    window.handleMarkSlfCommissionPaid_ = handleMarkSlfCommissionPaid_;
   }
 
   function openBillingPaymentModal_(tagihanId, mode) {
@@ -446,10 +455,12 @@
           syncCurrentUser_(payload.currentUser);
 
           renderSalesOptions_();
+          applySalesModeUi_();
           renderCustomerOptions_();
           renderProductOptions_();
           renderSalesHistoryStatusOptions_();
           renderSalesHistoryTable_();
+          renderSalesCommissionSummary_();
           renderSalesOrderItems_();
           handleSalesChange_();
           handleCustomerChange_();
@@ -530,6 +541,7 @@
           renderApproverExportTable_();
           renderApproverBackupSummary_();
           renderApproverBackupTable_();
+          loadApproverCommissionData_();
           setFieldValue_('approver_search', '');
           setFieldValue_('approver_price_search', '');
           setFieldValue_('approverFilterDate', appState.approverFilterDate);
@@ -570,9 +582,12 @@
           appState.approverKpiMonth = normalizeMonthKeyClient_(payload.bulan) || monthKey;
           appState.approverKpiSalesUsers = Array.isArray(payload.salesUsers) ? payload.salesUsers : [];
           appState.approverKpiTargets = Array.isArray(payload.targets) ? payload.targets : [];
+          appState.approverKpiSummary = payload.summary || null;
+          appState.approverKpiRows = Array.isArray(payload.rows) ? payload.rows : [];
 
           setFieldValue_('approverKpiMonth', appState.approverKpiMonth);
           renderApproverKpiSalesOptions_();
+          renderApproverKpiSummary_();
           renderApproverKpiTable_();
           handleApproverKpiSalesChange_();
           setStatusText_('Target KPI siap');
@@ -949,39 +964,78 @@
 
   function renderApproverKpiTable_() {
     var tbody = document.getElementById('approverKpiTableBody');
+    var rows;
+    var statusPriorityMap = {
+      'Belum Ada Target': 1,
+      'Belum Mulai': 2,
+      'Berjalan': 3,
+      'Tercapai': 4,
+      'Melebihi': 5
+    };
     if (!tbody) return;
 
-    var targets = (appState.approverKpiTargets || []).slice().sort(function(left, right) {
-      return String(left.sales_id || '').localeCompare(String(right.sales_id || ''), 'id-ID');
+    rows = (appState.approverKpiRows || []).slice().sort(function(left, right) {
+      var leftRank = statusPriorityMap[String(left.status_kpi || '').trim()] || 99;
+      var rightRank = statusPriorityMap[String(right.status_kpi || '').trim()] || 99;
+
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+
+      if (Number(left.progress_percent || 0) !== Number(right.progress_percent || 0)) {
+        return Number(left.progress_percent || 0) - Number(right.progress_percent || 0);
+      }
+
+      return String(left.sales_name || left.sales_id || '').localeCompare(String(right.sales_name || right.sales_id || ''), 'id-ID');
     });
 
-    if (!targets.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty-cell">Belum ada target KPI.</td></tr>';
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Belum ada data progress KPI.</td></tr>';
       return;
     }
 
-    var userMap = {};
-    (appState.approverKpiSalesUsers || []).forEach(function(user) {
-      userMap[String(user.user_id || '').trim()] = String(user.nama_user || user.user_id || '').trim();
-    });
-
-    tbody.innerHTML = targets.map(function(row) {
+    tbody.innerHTML = rows.map(function(row) {
       var salesId = String(row.sales_id || '').trim();
-      var salesName = userMap[salesId] || salesId || '-';
+      var salesName = String(row.sales_name || salesId || '-').trim() || '-';
       var targetQty = Number(row.target_qty || 0);
-      var note = String(row.catatan || '').trim() || '-';
+      var achievedQty = Number(row.achieved_qty || 0);
+      var remainingQty = Number(row.remaining_qty || 0);
+      var progressPercent = Number(row.progress_percent || 0);
+      var orderCount = Number(row.order_count || 0);
       var updateMeta = [];
-      if (row.diinput_oleh) updateMeta.push('Oleh ' + String(row.diinput_oleh));
-      if (row.tanggal_input) updateMeta.push(String(row.tanggal_input));
+      var note = String(row.catatan_target || '').trim();
+      var progressBarClass = 'kpi-progress-bar-fill';
+      if (row.last_target_updated_by) updateMeta.push('Oleh ' + String(row.last_target_updated_by));
+      if (row.last_target_update) updateMeta.push(String(row.last_target_update));
+      if (note) updateMeta.push('Catatan: ' + note);
+
+      if (progressPercent >= 100) {
+        progressBarClass += ' is-success';
+      } else if (progressPercent === 0 || String(row.status_kpi || '') === 'Belum Mulai') {
+        progressBarClass += ' is-warning';
+      }
 
       return '' +
         '<tr>' +
-          '<td>' + escapeHtml_(salesName + (salesId ? (' (' + salesId + ')') : '')) + '</td>' +
+          '<td><div class="kpi-sales-cell"><strong>' + escapeHtml_(salesName) + '</strong><small>' + escapeHtml_(salesId || '-') + '</small></div></td>' +
           '<td class="cell-right">' + escapeHtml_(formatNumber_(targetQty)) + '</td>' +
-          '<td>' + escapeHtml_(note) + '</td>' +
+          '<td class="cell-right">' + escapeHtml_(formatNumber_(achievedQty)) + '</td>' +
+          '<td class="cell-right">' + escapeHtml_(formatNumber_(remainingQty)) + '</td>' +
+          '<td><div class="kpi-progress-cell"><div class="kpi-progress-value">' + escapeHtml_(String(progressPercent) + '%') + '</div><div class="kpi-progress-bar"><div class="' + progressBarClass + '" style="width:' + escapeHtml_(String(Math.max(Math.min(progressPercent, 100), 0))) + '%"></div></div></div></td>' +
+          '<td class="cell-right">' + escapeHtml_(formatNumber_(orderCount)) + '</td>' +
+          '<td>' + buildStatusBadge_(row.status_kpi || 'Belum Ada Target') + '</td>' +
           '<td><small>' + escapeHtml_(updateMeta.join(' | ') || '-') + '</small></td>' +
         '</tr>';
     }).join('');
+  }
+
+  function renderApproverKpiSummary_() {
+    var summary = appState.approverKpiSummary || {};
+
+    setText_('summaryKpiAchievedSales', String(summary.sales_achieved || 0));
+    setText_('summaryKpiNotAchievedSales', String(summary.sales_not_achieved || 0));
+    setText_('summaryKpiAchievedQty', formatNumber_(summary.total_achieved_qty || 0));
+    setText_('summaryKpiAverageProgress', String(summary.average_progress_percent || 0) + '%');
   }
 
   function renderApproverTable_() {
@@ -1113,6 +1167,42 @@
     setText_('summaryBasePriceItems', String(products.length || 0));
     setText_('summaryBasePriceReady', String(readyCount));
     setText_('summaryBasePriceMissing', String((products.length || 0) - readyCount));
+  }
+
+  function loadApproverCommissionData_(callback) {
+    if (!ensureAuthorizedSession_()) return;
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        try {
+          var payload = data || {};
+
+          appState.products = Array.isArray(payload.products) ? payload.products : appState.products;
+          appState.approverCommissionMaster = Array.isArray(payload.master_komisi_slf) ? payload.master_komisi_slf : [];
+
+          renderApproverCommissionItemOptions_();
+          renderApproverCommissionTable_();
+
+          google.script.run
+            .withSuccessHandler(function(rows) {
+              appState.approverCommissionReadyToPay = Array.isArray(rows) ? rows : [];
+              renderApproverCommissionReadyToPayTable_();
+              if (callback) callback();
+            })
+            .withFailureHandler(function(error) {
+              appState.approverCommissionReadyToPay = [];
+              renderApproverCommissionReadyToPayTable_();
+              renderResult_('Gagal memuat daftar komisi siap bayar: ' + (error && error.message ? error.message : error), true);
+            })
+            .getApproverSlfCommissionReadyToPay(appState.currentUser.user_id);
+        } catch (error) {
+          renderResult_('Gagal render data komisi SLF: ' + error.message, true);
+        }
+      })
+      .withFailureHandler(function(error) {
+        renderResult_('Gagal memuat master komisi SLF: ' + (error && error.message ? error.message : error), true);
+      })
+      .getApproverCommissionSlfData(appState.currentUser.user_id);
   }
 
   function renderApproverBackupSummary_() {
@@ -1693,6 +1783,57 @@
     renderApproverPriceTable_();
   }
 
+  function handleSaveApproverCommission_() {
+    var payload = {
+      jenis_komisi: getFieldValue_('approverCommissionJenis'),
+      kode_item: getFieldValue_('approverCommissionItem'),
+      nama_item: getFieldValue_('approverCommissionItemName'),
+      satuan_komisi: getFieldValue_('approverCommissionUnit'),
+      nominal_komisi: Number(getFieldValue_('approverCommissionNominal') || 0),
+      tanggal_berlaku_mulai: getFieldValue_('approverCommissionStart'),
+      tanggal_berlaku_sampai: getFieldValue_('approverCommissionEnd'),
+      status_aktif: getFieldValue_('approverCommissionStatus'),
+      catatan: getFieldValue_('approverCommissionNote')
+    };
+
+    setStatusText_('Menyimpan master komisi SLF...');
+    google.script.run
+      .withSuccessHandler(function(result) {
+        setStatusText_('Master komisi SLF tersimpan');
+        renderResult_('Master komisi SLF berhasil disimpan.', false);
+        loadApproverCommissionData_();
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal simpan master komisi SLF');
+        renderResult_('Gagal simpan master komisi SLF: ' + (error && error.message ? error.message : error), true);
+      })
+      .upsertSlfCommissionRateFromApprover(appState.currentUser.user_id, payload);
+  }
+
+  function handleMarkSlfCommissionPaid_(noSo) {
+    var note = window.prompt('Catatan pembayaran komisi untuk ' + noSo + ':', 'Komisi dibayar sesuai approval');
+
+    if (note === null) {
+      return;
+    }
+
+    setStatusText_('Menandai komisi SLF sebagai sudah dibayar...');
+    google.script.run
+      .withSuccessHandler(function() {
+        setStatusText_('Komisi SLF ditandai sudah dibayar');
+        renderResult_('Komisi SLF untuk order ' + noSo + ' ditandai sudah dibayar.', false);
+        loadApproverCommissionData_();
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal update pembayaran komisi');
+        renderResult_('Gagal update pembayaran komisi: ' + (error && error.message ? error.message : error), true);
+      })
+      .markSlfCommissionPaidFromApprover(appState.currentUser.user_id, {
+        no_so: noSo,
+        catatan: String(note || '').trim()
+      });
+  }
+
   function handleApproverKpiMonthChange_() {
     appState.approverKpiMonth = normalizeMonthKeyClient_(getFieldValue_('approverKpiMonth')) || getTodayMonthKey_();
     appState.approverKpiTargets = [];
@@ -1781,8 +1922,20 @@
           renderResult_('Target KPI berhasil disimpan.', false);
         }
         appState.approverKpiMonth = monthKey;
-        if (result && Array.isArray(result.targets)) {
+        if (result && result.progressData) {
+          appState.approverKpiMonth = normalizeMonthKeyClient_(result.progressData.bulan) || monthKey;
+          appState.approverKpiSalesUsers = Array.isArray(result.progressData.salesUsers) ? result.progressData.salesUsers : appState.approverKpiSalesUsers;
+          appState.approverKpiTargets = Array.isArray(result.progressData.targets) ? result.progressData.targets : [];
+          appState.approverKpiSummary = result.progressData.summary || null;
+          appState.approverKpiRows = Array.isArray(result.progressData.rows) ? result.progressData.rows : [];
+          setFieldValue_('approverKpiMonth', appState.approverKpiMonth);
+          renderApproverKpiSalesOptions_();
+          renderApproverKpiSummary_();
+          renderApproverKpiTable_();
+          handleApproverKpiSalesChange_();
+        } else if (result && Array.isArray(result.targets)) {
           appState.approverKpiTargets = result.targets;
+          renderApproverKpiSummary_();
           renderApproverKpiTable_();
           handleApproverKpiSalesChange_();
         } else {
@@ -2939,6 +3092,143 @@
     }).join('');
   }
 
+  function renderApproverCommissionItemOptions_() {
+    var select = document.getElementById('approverCommissionItem');
+
+    if (!select) return;
+
+    select.innerHTML = '<option value="">Pilih item</option>' + (appState.products || []).map(function(product) {
+      return '<option value="' + escapeHtml_(product.kode_item || '') + '" data-name="' + escapeHtml_(product.nama_item || '') + '" data-unit="' + escapeHtml_(product.satuan || '') + '">' +
+        escapeHtml_((product.nama_item || '-') + ' (' + (product.kode_item || '-') + ')') +
+      '</option>';
+    }).join('');
+
+    handleApproverCommissionItemChange_();
+  }
+
+  function handleApproverCommissionItemChange_() {
+    var select = document.getElementById('approverCommissionItem');
+    var selectedOption = select && select.options ? select.options[select.selectedIndex] : null;
+
+    setFieldValue_('approverCommissionItemName', selectedOption ? (selectedOption.dataset.name || '') : '');
+
+    if (!getFieldValue_('approverCommissionUnit')) {
+      setFieldValue_('approverCommissionUnit', selectedOption ? (selectedOption.dataset.unit || '') : '');
+    }
+  }
+
+  function renderApproverCommissionTable_() {
+    var tbody = document.getElementById('approverCommissionTableBody');
+    var rows = (appState.approverCommissionMaster || []).slice().sort(function(left, right) {
+      return normalizeSearchText_(left.jenis_komisi || left.nama_skema_komisi).localeCompare(
+        normalizeSearchText_(right.jenis_komisi || right.nama_skema_komisi),
+        'id-ID'
+      );
+    });
+
+    if (!tbody) return;
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Belum ada master komisi SLF.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function(row) {
+      var jenis = String(row.jenis_komisi || row.nama_skema_komisi || '-').trim() || '-';
+      var kodeItem = String(row.kode_item || row.produk_komisi || '-').trim() || '-';
+      var nominal = Number(row.nominal_komisi || row.tarif_komisi_per_unit || 0);
+      var periode = [
+        formatShortDateId_(row.tanggal_berlaku_mulai || row.tanggal_mulai || ''),
+        formatShortDateId_(row.tanggal_berlaku_sampai || row.tanggal_berakhir || '')
+      ].filter(Boolean).join(' s/d ') || '-';
+      var updateMeta = [
+        String(row.diinput_oleh || '').trim(),
+        String(row.tanggal_input || '').trim()
+      ].filter(Boolean).join(' | ') || '-';
+
+      return '' +
+        '<tr>' +
+          '<td>' + escapeHtml_(jenis) + '</td>' +
+          '<td>' + escapeHtml_(kodeItem) + '</td>' +
+          '<td>' + escapeHtml_(String(row.nama_item || '-').trim() || '-') + '</td>' +
+          '<td>' + escapeHtml_(String(row.satuan_komisi || '-').trim() || '-') + '</td>' +
+          '<td>Rp ' + escapeHtml_(formatNumber_(nominal)) + '</td>' +
+          '<td>' + escapeHtml_(periode) + '</td>' +
+          '<td>' + buildStatusBadge_(row.status_aktif || '-') + '</td>' +
+          '<td><small>' + escapeHtml_(updateMeta) + '</small></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderApproverCommissionReadyToPayTable_() {
+    var tbody = document.getElementById('approverCommissionReadyTableBody');
+    var rows = (appState.approverCommissionReadyToPay || []).slice().sort(function(left, right) {
+      return normalizeDateKey_(right.tanggal_siap_cair || right.tanggal_status_komisi || '').
+        localeCompare(normalizeDateKey_(left.tanggal_siap_cair || left.tanggal_status_komisi || ''), 'id-ID');
+    });
+
+    if (!tbody) return;
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Belum ada komisi SLF yang siap dibayar.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function(row) {
+      var estimasi = Number(row.estimasi_komisi || 0);
+      var realisasi = Number(row.komisi_realisasi || estimasi || 0);
+
+      return '' +
+        '<tr>' +
+          '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
+          '<td>' + escapeHtml_(String(row.sales_nama || row.sales_id || '-')) + '</td>' +
+          '<td>' + escapeHtml_(String(row.nama_customer_input || row.nama_customer || '-')) + '</td>' +
+          '<td>' + escapeHtml_(String(row.jenis_komisi_order || '-')) + '</td>' +
+          '<td>Rp ' + escapeHtml_(formatNumber_(estimasi)) + '</td>' +
+          '<td>Rp ' + escapeHtml_(formatNumber_(realisasi)) + '</td>' +
+          '<td>' + buildStatusBadge_(row.status_komisi || '-') + '</td>' +
+          '<td class="commission-action-cell"><button type="button" class="primary-btn tiny-btn" onclick="handleMarkSlfCommissionPaid_(\'' + escapeJs_(row.no_so || '') + '\')">Tandai Sudah Dibayar</button></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderSalesCommissionSummary_() {
+    var summary = calculateSalesCommissionSummary_();
+
+    appState.salesCommissionSummary = summary;
+    setText_('salesCommissionPotensial', formatCurrencyInput_(summary.potensial.amount));
+    setText_('salesCommissionPotensialCount', String(summary.potensial.count) + ' order');
+    setText_('salesCommissionWaiting', formatCurrencyInput_(summary.menunggu_pembayaran.amount));
+    setText_('salesCommissionWaitingCount', String(summary.menunggu_pembayaran.count) + ' order');
+    setText_('salesCommissionReady', formatCurrencyInput_(summary.siap_cair.amount));
+    setText_('salesCommissionReadyCount', String(summary.siap_cair.count) + ' order');
+    setText_('salesCommissionPaid', formatCurrencyInput_(summary.sudah_dibayar.amount));
+    setText_('salesCommissionPaidCount', String(summary.sudah_dibayar.count) + ' order');
+  }
+
+  function calculateSalesCommissionSummary_() {
+    var summary = {
+      potensial: { count: 0, amount: 0 },
+      menunggu_pembayaran: { count: 0, amount: 0 },
+      siap_cair: { count: 0, amount: 0 },
+      sudah_dibayar: { count: 0, amount: 0 }
+    };
+
+    (appState.salesHistoryOrders || []).forEach(function(order) {
+      var statusKey = normalizeClientText_(order.status_komisi).replace(/\s+/g, '_');
+      var amount = resolveCommissionAmountForStatus_(order);
+
+      if (!summary[statusKey]) {
+        return;
+      }
+
+      summary[statusKey].count += 1;
+      summary[statusKey].amount += amount;
+    });
+
+    return summary;
+  }
+
   function getFilteredSalesHistoryOrders_() {
     var query = normalizeSearchText_(appState.salesHistorySearch);
     var statusFilter = normalizeSearchText_(appState.salesHistoryStatus);
@@ -3028,7 +3318,7 @@
     if (!tbody) return;
 
     if (!orders.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Belum ada order yang cocok dengan filter.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">Belum ada order yang cocok dengan filter.</td></tr>';
       if (pagination) {
         pagination.innerHTML = '';
       }
@@ -3053,6 +3343,9 @@
           '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
           '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
           '<td>' + formatNumber_(row.total_final || row.total_order || row.total || 0) + '</td>' +
+          '<td>' + escapeHtml_(String(row.jenis_komisi_order || '-').trim() || '-') + '</td>' +
+          '<td>' + formatCommissionDisplayValue_(row) + '</td>' +
+          '<td>' + buildStatusBadge_(row.status_komisi || '-') + '</td>' +
           '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
           '<td>' + escapeHtml_(note) + '</td>' +
         '</tr>';
@@ -3524,8 +3817,10 @@
         submitBtn.disabled = false;
         setStatusText_('Order berhasil diproses');
         clearSalesOrderFormAfterSubmit_();
-        renderSubmitResult_(result);
-        loadSalesData_();
+        loadSalesData_(function() {
+          var refreshedResult = getSalesHistoryOrderByNoSo_(result && result.no_so) || result;
+          renderSubmitResult_(refreshedResult);
+        });
       })
       .withFailureHandler(function(error) {
         submitBtn.disabled = false;
@@ -4209,6 +4504,12 @@
       lines.push('Alasan Hold: ' + result.alasan_hold);
     }
 
+    if (currentUserIsFreelance_()) {
+      lines.push('Jenis Komisi: ' + (result.jenis_komisi_order || '-'));
+      lines.push('Estimasi Komisi: ' + formatCommissionDisplayText_(result));
+      lines.push('Status Komisi: ' + (result.status_komisi || '-'));
+    }
+
     renderSalesSubmitResult_(result, {
       isWarning: isWarning,
       statusOrder: statusOrder
@@ -4243,6 +4544,13 @@
       '<div class="submit-meta-line submit-status-line"><strong>Status Order:</strong> ' + statusBadgeHtml + '</div>' +
       '<div class="submit-meta-line"><strong>Tanggal Jatuh Tempo:</strong> ' + escapeHtml_(result.tanggal_jatuh_tempo || '-') + '</div>' +
       '<div class="submit-meta-line"><strong>Butuh Persetujuan:</strong> ' + escapeHtml_(result.butuh_persetujuan || '-') + '</div>' +
+      (currentUserIsFreelance_()
+        ? '<div class="submit-commission-grid">' +
+            '<div class="submit-meta-line"><strong>Jenis Komisi:</strong> ' + escapeHtml_(result.jenis_komisi_order || '-') + '</div>' +
+            '<div class="submit-meta-line"><strong>Estimasi Komisi:</strong> ' + escapeHtml_(formatCommissionDisplayText_(result)) + '</div>' +
+            '<div class="submit-meta-line submit-status-line"><strong>Status Komisi:</strong> ' + buildStatusBadge_(result.status_komisi || '-') + '</div>' +
+          '</div>'
+        : '') +
       (result.alasan_hold
         ? '<div class="submit-meta-line submit-alasan-hold"><strong>Alasan Hold:</strong> ' + escapeHtml_(result.alasan_hold || '-') + '</div>'
         : '') +
@@ -4400,6 +4708,10 @@
       role: incomingUser.role || currentUser.role || '',
       role_key: incomingUser.role_key || currentUser.role_key || '',
       status_aktif: incomingUser.status_aktif || currentUser.status_aktif || '',
+      tipe_sales: incomingUser.tipe_sales || currentUser.tipe_sales || '',
+      kode_sales: incomingUser.kode_sales || currentUser.kode_sales || '',
+      channel_sales_default: incomingUser.channel_sales_default || currentUser.channel_sales_default || '',
+      is_freelance: typeof incomingUser.is_freelance === 'boolean' ? incomingUser.is_freelance : !!currentUser.is_freelance,
       authorized: typeof incomingUser.authorized === 'boolean' ? incomingUser.authorized : !!currentUser.authorized
     };
   }
@@ -4431,7 +4743,7 @@
   function activateApproverView_(viewName) {
     var targetView = 'approval';
 
-    if (viewName === 'pricing' || viewName === 'export' || viewName === 'kpi' || viewName === 'backup') {
+    if (viewName === 'pricing' || viewName === 'export' || viewName === 'commission' || viewName === 'kpi' || viewName === 'backup') {
       targetView = viewName;
     }
 
@@ -4445,6 +4757,28 @@
 
     if (targetView === 'kpi') {
       ensureApproverKpiDataLoaded_();
+    } else if (targetView === 'commission') {
+      loadApproverCommissionData_();
+    }
+  }
+
+  function currentUserIsFreelance_() {
+    return !!(appState.currentUser && appState.currentUser.is_freelance);
+  }
+
+  function applySalesModeUi_() {
+    var summarySection = document.getElementById('salesCommissionSummarySection');
+    var customerSearch = document.getElementById('customer_search');
+    var isFreelance = currentUserIsFreelance_();
+
+    if (summarySection) {
+      summarySection.classList.toggle('hidden', !isFreelance);
+    }
+
+    if (customerSearch) {
+      customerSearch.placeholder = isFreelance
+        ? 'Ketik customer milik Anda: nama, kode customer, PIC, atau no. HP'
+        : 'Ketik nama, kode customer, PIC, atau no. HP';
     }
   }
 
@@ -4599,23 +4933,32 @@
     var selectedCustomerId = getFieldValue_('customer_id');
     var normalizedQuery = normalizeSearchText_(query);
     var filteredCustomers;
+    var emptyMessage = currentUserIsFreelance_()
+      ? 'Ketik minimal 2 huruf untuk mencari customer milik Anda.'
+      : 'Ketik minimal 2 huruf untuk mencari customer lama.';
+    var continueMessage = currentUserIsFreelance_()
+      ? 'Lanjutkan ketik minimal 2 huruf agar daftar customer milik Anda muncul.'
+      : 'Lanjutkan ketik minimal 2 huruf agar hasil customer muncul.';
+    var notFoundMessage = currentUserIsFreelance_()
+      ? 'Customer tidak ditemukan. Coba ketik nama, kode customer, PIC, atau no. HP dari customer milik Anda.'
+      : 'Customer tidak ditemukan. Coba ketik nama, kode customer, PIC, atau no. HP.';
 
     if (!container) return;
 
     if (!normalizedQuery) {
-      container.innerHTML = '<div class="customer-search-empty">Ketik minimal 2 huruf untuk mencari customer lama.</div>';
+      container.innerHTML = '<div class="customer-search-empty">' + emptyMessage + '</div>';
       return;
     }
 
     if (normalizedQuery.length < 2) {
-      container.innerHTML = '<div class="customer-search-empty">Lanjutkan ketik minimal 2 huruf agar hasil customer muncul.</div>';
+      container.innerHTML = '<div class="customer-search-empty">' + continueMessage + '</div>';
       return;
     }
 
     filteredCustomers = filterCustomersByQuery_(query).slice(0, 10);
 
     if (!filteredCustomers.length) {
-      container.innerHTML = '<div class="customer-search-empty">Customer tidak ditemukan. Coba ketik nama, kode customer, PIC, atau no. HP.</div>';
+      container.innerHTML = '<div class="customer-search-empty">' + notFoundMessage + '</div>';
       return;
     }
 
@@ -4895,6 +5238,26 @@
     return number.toLocaleString('id-ID');
   }
 
+  function resolveCommissionAmountForStatus_(row) {
+    var normalizedStatus = String((row && row.status_komisi) || '').trim().toLowerCase();
+    var estimasi = Number((row && row.estimasi_komisi) || 0);
+    var realisasi = Number((row && row.komisi_realisasi) || 0);
+
+    if (normalizedStatus === 'siap cair' || normalizedStatus === 'sudah dibayar') {
+      return realisasi || estimasi || 0;
+    }
+
+    return estimasi || realisasi || 0;
+  }
+
+  function formatCommissionDisplayValue_(row) {
+    return 'Rp ' + formatNumber_(resolveCommissionAmountForStatus_(row));
+  }
+
+  function formatCommissionDisplayText_(row) {
+    return formatCommissionDisplayValue_(row || {});
+  }
+
   function formatCurrencyInput_(value) {
     return 'Rp ' + formatNumber_(value || 0);
   }
@@ -4996,6 +5359,22 @@
       className = 'danger';
     } else if (normalized === 'siap export') {
       className = 'progress';
+    } else if (normalized === 'potensial') {
+      className = 'progress';
+    } else if (normalized === 'menunggu pembayaran') {
+      className = 'warning';
+    } else if (normalized === 'siap cair') {
+      className = 'done';
+    } else if (normalized === 'sudah dibayar') {
+      className = 'done';
+    } else if (normalized === 'belum ada target') {
+      className = 'ready';
+    } else if (normalized === 'belum mulai') {
+      className = 'warning';
+    } else if (normalized === 'berjalan') {
+      className = 'progress';
+    } else if (normalized === 'tercapai' || normalized === 'melebihi') {
+      className = 'done';
     } else if (normalized === 'ditahan' || normalized === 'ditolak' || normalized === 'dibatalkan') {
       className = 'danger';
     } else if (normalized === 'terkirim') {
@@ -5007,6 +5386,18 @@
     }
 
     return '<span class="status-badge ' + className + '">' + escapeHtml_(text) + '</span>';
+  }
+
+  function getSalesHistoryOrderByNoSo_(noSo) {
+    var normalizedNoSo = String(noSo || '').trim();
+
+    if (!normalizedNoSo) {
+      return null;
+    }
+
+    return (appState.salesHistoryOrders || []).find(function(row) {
+      return String(row.no_so || '').trim() === normalizedNoSo;
+    }) || null;
   }
 
   function buildPaymentBadge_(status) {

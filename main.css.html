@@ -408,6 +408,42 @@
     line-height: 1.4;
   }
 
+  .sales-commission-summary-grid .summary-card {
+    border-color: #d7e4f2;
+    background: linear-gradient(180deg, #ffffff 0%, #f3f8fd 100%);
+  }
+
+  .submit-commission-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #cfdbe7;
+  }
+
+  .commission-table-note {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--sap-muted);
+  }
+
+  .commission-action-cell {
+    white-space: nowrap;
+  }
+
+  .commission-action-cell .ghost-btn {
+    min-width: 170px;
+  }
+
+  #approver-view-commission .panel-header {
+    margin-bottom: 18px;
+  }
+
+  #approver-view-commission .table-card + .table-card {
+    margin-top: 18px;
+  }
+
   .form-grid {
     display: grid;
     gap: 14px;
@@ -1054,6 +1090,11 @@
     margin-bottom: 16px;
   }
 
+  .approver-kpi-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 18px;
+  }
+
   .approver-price-table td {
     vertical-align: middle;
   }
@@ -1202,6 +1243,50 @@
     font-size: 12px;
     line-height: 1.4;
     color: var(--sap-muted);
+  }
+
+  .kpi-sales-cell {
+    display: grid;
+    gap: 4px;
+    min-width: 180px;
+  }
+
+  .kpi-sales-cell strong {
+    font-size: 13px;
+    color: var(--sap-text);
+  }
+
+  .kpi-progress-cell {
+    min-width: 160px;
+  }
+
+  .kpi-progress-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--sap-text);
+    margin-bottom: 6px;
+  }
+
+  .kpi-progress-bar {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: #eaf0f5;
+    overflow: hidden;
+  }
+
+  .kpi-progress-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #0a6ed1 0%, #39a4f5 100%);
+  }
+
+  .kpi-progress-bar-fill.is-warning {
+    background: linear-gradient(90deg, #f0ab00 0%, #f6c84c 100%);
+  }
+
+  .kpi-progress-bar-fill.is-success {
+    background: linear-gradient(90deg, #107e3e 0%, #39b86a 100%);
   }
 
   .result-card {
@@ -1356,6 +1441,10 @@
   }
 
   @media (max-width: 760px) {
+    .approver-kpi-summary-grid {
+      grid-template-columns: 1fr;
+    }
+
     .table-pagination {
       align-items: stretch;
     }
@@ -1449,6 +1538,10 @@
     }
 
     .summary-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .submit-commission-grid {
       grid-template-columns: 1fr;
     }
 

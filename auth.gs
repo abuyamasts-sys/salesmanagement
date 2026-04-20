@@ -1,5 +1,8 @@
 function getCurrentUserProfile(userId) {
   var user = getCurrentUserRecord_(userId);
+  var tipeSales;
+  var isFreelance;
+  var channelSalesDefault;
 
   if (!user) {
     return {
@@ -9,9 +12,17 @@ function getCurrentUserProfile(userId) {
       role: '',
       role_key: '',
       status_aktif: '',
+      tipe_sales: '',
+      kode_sales: '',
+      channel_sales_default: '',
+      is_freelance: false,
       authorized: false
     };
   }
+
+  tipeSales = String(user.tipe_sales || '').trim() || 'Internal';
+  isFreelance = normalizeText_(tipeSales) === 'freelance';
+  channelSalesDefault = String(user.channel_sales_default || '').trim() || (isFreelance ? 'SLF' : 'SLS');
 
   return {
     email: user.email || '',
@@ -20,6 +31,10 @@ function getCurrentUserProfile(userId) {
     role: user.role || '',
     role_key: normalizeRoleKey_(user.role),
     status_aktif: user.status_aktif || '',
+    tipe_sales: tipeSales,
+    kode_sales: String(user.kode_sales || '').trim(),
+    channel_sales_default: channelSalesDefault,
+    is_freelance: isFreelance,
     authorized: true
   };
 }

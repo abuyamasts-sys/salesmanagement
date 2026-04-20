@@ -131,6 +131,38 @@
               </div>
             </section>
 
+            <section class="form-card hidden" id="salesCommissionSummarySection">
+              <div class="panel-header">
+                <div>
+                  <h2>Ringkasan Komisi SLF</h2>
+                  <p class="panel-subtitle">Ringkasan komisi dari riwayat order freelance pada sesi ini.</p>
+                </div>
+              </div>
+
+              <div class="summary-grid sales-commission-summary-grid">
+                <article class="summary-card">
+                  <span class="summary-label">Potensial</span>
+                  <strong class="summary-value" id="salesCommissionPotensial">Rp 0</strong>
+                  <span class="summary-note" id="salesCommissionPotensialCount">0 order</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Menunggu Pembayaran</span>
+                  <strong class="summary-value" id="salesCommissionWaiting">Rp 0</strong>
+                  <span class="summary-note" id="salesCommissionWaitingCount">0 order</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Siap Cair</span>
+                  <strong class="summary-value" id="salesCommissionReady">Rp 0</strong>
+                  <span class="summary-note" id="salesCommissionReadyCount">0 order</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Sudah Dibayar</span>
+                  <strong class="summary-value" id="salesCommissionPaid">Rp 0</strong>
+                  <span class="summary-note" id="salesCommissionPaidCount">0 order</span>
+                </article>
+              </div>
+            </section>
+
             <section class="form-card">
               <h2>Jenis Customer</h2>
               <div class="radio-row">
@@ -318,6 +350,7 @@
             <button type="button" class="approver-subtab-btn active" data-approver-view="approval">Approval Order</button>
             <button type="button" class="approver-subtab-btn" data-approver-view="export">Export Kledo</button>
             <button type="button" class="approver-subtab-btn" data-approver-view="pricing">Harga Dasar Item</button>
+            <button type="button" class="approver-subtab-btn" data-approver-view="commission">Komisi SLF</button>
             <button type="button" class="approver-subtab-btn" data-approver-view="kpi">Target KPI</button>
             <button type="button" class="approver-subtab-btn" data-approver-view="backup">Backup Database</button>
           </div>
@@ -509,6 +542,109 @@
             </section>
           </section>
 
+          <section class="approver-view-panel" id="approver-view-commission">
+            <section class="form-card">
+              <div class="panel-header">
+                <div>
+                  <h2>Master Komisi SLF</h2>
+                  <p class="panel-subtitle">Kelola tarif komisi freelance per jenis komisi dan item, lalu tandai komisi yang sudah dibayar.</p>
+                </div>
+                <button type="button" class="ghost-btn" id="refreshApproverCommissionBtn">Refresh</button>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Jenis Komisi</span>
+                  <select id="approverCommissionJenis">
+                    <option value="BARU">BARU</option>
+                    <option value="REPEAT">REPEAT</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Item</span>
+                  <select id="approverCommissionItem"></select>
+                </label>
+                <label class="field">
+                  <span>Nama Item</span>
+                  <input id="approverCommissionItemName" type="text" readonly />
+                </label>
+                <label class="field">
+                  <span>Satuan Komisi</span>
+                  <input id="approverCommissionUnit" type="text" placeholder="pcs / dus / galon" />
+                </label>
+                <label class="field">
+                  <span>Nominal Komisi</span>
+                  <input id="approverCommissionNominal" type="number" min="0" step="1" placeholder="Contoh: 1500" />
+                </label>
+                <label class="field">
+                  <span>Status Aktif</span>
+                  <select id="approverCommissionStatus">
+                    <option value="Aktif">Aktif</option>
+                    <option value="Nonaktif">Nonaktif</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Berlaku Mulai</span>
+                  <input id="approverCommissionStart" type="date" />
+                </label>
+                <label class="field">
+                  <span>Berlaku Sampai</span>
+                  <input id="approverCommissionEnd" type="date" />
+                </label>
+                <label class="field field-wide">
+                  <span>Catatan</span>
+                  <input id="approverCommissionNote" type="text" placeholder="Catatan opsional master komisi" />
+                </label>
+              </div>
+
+              <div class="action-row">
+                <button type="button" class="primary-btn" id="saveApproverCommissionBtn">Simpan Master Komisi</button>
+              </div>
+
+              <h3 class="section-title">Daftar Master Komisi Aktif</h3>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Jenis</th>
+                      <th>Kode Item</th>
+                      <th>Nama Item</th>
+                      <th>Satuan</th>
+                      <th>Nominal</th>
+                      <th>Periode</th>
+                      <th>Status</th>
+                      <th>Update</th>
+                    </tr>
+                  </thead>
+                  <tbody id="approverCommissionTableBody">
+                    <tr><td colspan="8" class="empty-cell">Belum ada master komisi SLF.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 class="section-title">Komisi SLF Siap Cair</h3>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>No SO</th>
+                      <th>Sales</th>
+                      <th>Customer</th>
+                      <th>Jenis</th>
+                      <th>Estimasi</th>
+                      <th>Realisasi</th>
+                      <th>Status</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="approverCommissionReadyTableBody">
+                    <tr><td colspan="8" class="empty-cell">Belum ada komisi SLF yang siap dibayar.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
           <section class="approver-view-panel" id="approver-view-kpi">
             <section class="form-card">
               <div class="panel-header">
@@ -542,19 +678,46 @@
                 <button type="button" class="primary-btn" id="saveApproverKpiBtn">Simpan Target</button>
               </div>
 
-              <h3 class="section-title">Daftar Target Bulan Ini</h3>
+              <div class="summary-grid approver-summary-grid approver-kpi-summary-grid">
+                <article class="summary-card">
+                  <span class="summary-label">Capai Target</span>
+                  <strong class="summary-value" id="summaryKpiAchievedSales">0</strong>
+                  <span class="summary-note">Sales yang sudah capai atau melebihi target bulan ini</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Belum Capai</span>
+                  <strong class="summary-value" id="summaryKpiNotAchievedSales">0</strong>
+                  <span class="summary-note">Sales dengan target aktif yang masih perlu dikejar</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Total Realisasi</span>
+                  <strong class="summary-value" id="summaryKpiAchievedQty">0</strong>
+                  <span class="summary-note">Akumulasi qty customer baru yang sudah masuk progress KPI</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Rata-rata Progress</span>
+                  <strong class="summary-value" id="summaryKpiAverageProgress">0%</strong>
+                  <span class="summary-note">Rata-rata progres seluruh sales yang sudah punya target</span>
+                </article>
+              </div>
+
+              <h3 class="section-title">Progress KPI Bulan Ini</h3>
               <div class="table-wrap">
                 <table class="data-table">
                   <thead>
                     <tr>
                       <th>Sales</th>
                       <th class="cell-right">Target Qty</th>
-                      <th>Catatan</th>
+                      <th class="cell-right">Realisasi</th>
+                      <th class="cell-right">Sisa</th>
+                      <th>Progress</th>
+                      <th class="cell-right">SO</th>
+                      <th>Status</th>
                       <th>Update</th>
                     </tr>
                   </thead>
                   <tbody id="approverKpiTableBody">
-                    <tr><td colspan="4" class="empty-cell">Belum ada target KPI.</td></tr>
+                    <tr><td colspan="8" class="empty-cell">Belum ada data progress KPI.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -894,12 +1057,15 @@
                 <th>Item</th>
                 <th>Qty</th>
                 <th>Total</th>
+                <th>Jenis Komisi</th>
+                <th>Estimasi Komisi</th>
+                <th>Status Komisi</th>
                 <th>Status</th>
                 <th>Keterangan</th>
               </tr>
             </thead>
             <tbody id="salesHistoryTableBody">
-              <tr><td colspan="8" class="empty-cell">Belum ada riwayat order.</td></tr>
+              <tr><td colspan="11" class="empty-cell">Belum ada riwayat order.</td></tr>
             </tbody>
           </table>
         </div>

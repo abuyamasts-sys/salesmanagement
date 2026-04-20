@@ -1,25 +1,82 @@
 function setupAppSheets() {
   try {
-    if (!APP_CONFIG || !APP_CONFIG.SPREADSHEET_ID) {
-      throw new Error('APP_CONFIG.SPREADSHEET_ID belum diisi.');
-    }
-
-    Object.keys(APP_CONFIG.HEADERS).forEach(function(sheetKey) {
-      var sheetName = APP_CONFIG.SHEETS[sheetKey];
-      var headers = APP_CONFIG.HEADERS[sheetKey];
-
-      if (!sheetName) {
-        throw new Error('Nama sheet tidak ditemukan untuk key: ' + sheetKey);
-      }
-
-      ensureSheetWithHeaders_(sheetName, headers);
-    });
-
-    return { success: true, message: 'Setup sheet selesai.' };
+    validateSheetSetupConfig_();
+    return ensureConfiguredSheetsSafely_();
   } catch (error) {
     Logger.log(error && error.stack ? error.stack : error);
     throw new Error('Setup sheet gagal: ' + (error && error.message ? error.message : error));
   }
+}
+
+function setupMissingSheetsNow() {
+  try {
+    validateSheetSetupConfig_();
+    return ensureConfiguredSheetsSafely_([
+      'MASTER_KOMISI_SLF',
+      'KOMISI_SLF_MUTASI'
+    ]);
+  } catch (error) {
+    Logger.log(error && error.stack ? error.stack : error);
+    throw new Error('Setup missing sheets gagal: ' + (error && error.message ? error.message : error));
+  }
+}
+
+function validateSheetSetupConfig_() {
+  if (!APP_CONFIG || !APP_CONFIG.SPREADSHEET_ID) {
+    throw new Error('APP_CONFIG.SPREADSHEET_ID belum diisi.');
+  }
+}
+
+function ensureConfiguredSheetsSafely_(sheetKeys) {
+  var keys = Array.isArray(sheetKeys) && sheetKeys.length
+    ? sheetKeys
+    : Object.keys(APP_CONFIG.HEADERS);
+  var results = [];
+
+  keys.forEach(function(sheetKey) {
+    var sheetName = APP_CONFIG.SHEETS[sheetKey];
+    var headers = APP_CONFIG.HEADERS[sheetKey];
+    var existingSheet;
+    var existingHeaders;
+    var missingHeaders;
+    var ensuredSheet;
+
+    if (!sheetName) {
+      throw new Error('Nama sheet tidak ditemukan untuk key: ' + sheetKey);
+    }
+
+    existingSheet = getSheetByNameOrNull_(sheetName);
+    existingHeaders = existingSheet && existingSheet.getLastColumn() > 0
+      ? existingSheet.getRange(1, 1, 1, existingSheet.getLastColumn()).getValues()[0].map(function(header) {
+        return String(header || '').trim();
+      })
+      : [];
+    missingHeaders = (headers || []).filter(function(header) {
+      return existingHeaders.indexOf(header) === -1;
+    });
+
+    ensuredSheet = ensureSheetHeadersContain_(sheetName, headers);
+    if (ensuredSheet) {
+      ensuredSheet.setFrozenRows(1);
+    }
+
+    results.push({
+      sheet_key: sheetKey,
+      sheet_name: sheetName,
+      created: !existingSheet,
+      appended_headers: missingHeaders
+    });
+  });
+
+  return {
+    success: true,
+    message: 'Setup sheet aman selesai.',
+    sheets: results
+  };
+}
+
+function ensureSheetWithHeaders_(sheetName, headers) {
+  return ensureSheetHeadersContain_(sheetName, headers);
 }
 
 function seedDummyDataAsSales() {
@@ -118,35 +175,6 @@ function clearDataRows_() {
   ].forEach(function(sheetName) {
     clearSheetRowsPreserveHeader_(sheetName);
   });
-}
-
-function ensureSheetWithHeaders_(sheetName, headers) {
-  var spreadsheet = getSpreadsheet_();
-  var sheet = spreadsheet.getSheetByName(sheetName);
-
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet(sheetName);
-  }
-
-  var safeHeaders = headers || [];
-  var currentHeaders = safeHeaders.length
-    ? sheet.getRange(1, 1, 1, safeHeaders.length).getValues()[0].map(function(header) {
-      return String(header || '').trim();
-    })
-    : [];
-
-  if (currentHeaders.join('|') !== safeHeaders.join('|')) {
-    sheet.clear();
-    if (safeHeaders.length) {
-      sheet.getRange(1, 1, 1, safeHeaders.length).setValues([safeHeaders]);
-      sheet.setFrozenRows(1);
-    }
-    return;
-  }
-
-  if (safeHeaders.length) {
-    sheet.setFrozenRows(1);
-  }
 }
 
 function clearSheetRowsPreserveHeader_(sheetName) {

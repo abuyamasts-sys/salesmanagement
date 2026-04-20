@@ -43,6 +43,76 @@ function testCheckCustomerEligibility() {
   Logger.log(checkCustomerEligibility('CUST003'));
 }
 
+function getCustomersOwnedBySales_(salesId) {
+  var normalizedSalesId = normalizeText_(salesId);
+
+  if (!normalizedSalesId) {
+    return [];
+  }
+
+  return getCustomers().filter(function(customer) {
+    var ownerId = normalizeText_(customer.sales_owner_id);
+    return !ownerId || ownerId === normalizedSalesId;
+  });
+}
+
+function isCustomerOwnedBySales_(kodeCustomer, salesId) {
+  var customer = findCustomerByCode_(kodeCustomer);
+  var normalizedSalesId = normalizeText_(salesId);
+  var ownerId;
+
+  if (!customer) {
+    return false;
+  }
+
+  if (!normalizedSalesId) {
+    return false;
+  }
+
+  ownerId = normalizeText_(customer.sales_owner_id);
+  return !ownerId || ownerId === normalizedSalesId;
+}
+
+function assignCustomerOwnership_(kodeCustomer, salesId, salesName, updatedBy, note) {
+  var customer = findCustomerByCode_(kodeCustomer);
+  var normalizedSalesId = String(salesId || '').trim();
+  var normalizedUpdatedBy = String(updatedBy || '').trim();
+  var profile;
+  var resolvedSalesName;
+  var now;
+  var ownershipNote;
+  var updates;
+
+  if (!customer) {
+    throw new Error('Customer tidak ditemukan: ' + kodeCustomer);
+  }
+
+  if (!normalizedSalesId) {
+    throw new Error('salesId wajib diisi untuk assign ownership customer.');
+  }
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_CUSTOMER, APP_CONFIG.HEADERS.MASTER_CUSTOMER);
+  profile = getCurrentUserProfile(normalizedSalesId);
+  resolvedSalesName = String(salesName || '').trim() || profile.nama_user || '';
+  now = getNowParts_();
+  ownershipNote = String(note || '').trim() || 'Ownership customer di-assign manual';
+
+  if (normalizedUpdatedBy) {
+    ownershipNote += ' oleh ' + normalizedUpdatedBy;
+  }
+
+  updates = {
+    sales_owner_id: normalizedSalesId,
+    sales_owner_nama: resolvedSalesName,
+    channel_akuisisi: String(customer.channel_akuisisi || '').trim() || profile.channel_sales_default || '',
+    status_kepemilikan: 'Aktif',
+    tanggal_update_owner: now.tanggal,
+    catatan_kepemilikan: ownershipNote
+  };
+
+  return updateRowByKey_(APP_CONFIG.SHEETS.MASTER_CUSTOMER, 'kode_customer', customer.kode_customer, updates);
+}
+
 function findCustomerByCode_(kodeCustomer) {
   var targetCode = normalizeText_(kodeCustomer);
 
@@ -125,10 +195,13 @@ function formatNumberServer_(value) {
 
 function ensureCustomerMasterForNewOrder_(payload) {
   var existingCustomer = findExistingCustomerForNewOrder_(payload);
+  var ownershipMeta;
 
   if (existingCustomer) {
     return existingCustomer;
   }
+
+  ownershipMeta = buildCustomerOwnershipMetaForNewOrder_(payload);
 
   var customerRow = {
     kode_customer: generateNextCustomerCode_(),
@@ -148,11 +221,40 @@ function ensureCustomerMasterForNewOrder_(payload) {
     tanggal_jatuh_tempo_terdekat: '',
     catatan_piutang: '',
     limit_tunggakan: 0,
-    catatan: 'Auto dibuat dari sales order customer baru'
+    catatan: 'Auto dibuat dari sales order customer baru',
+    dibuat_oleh_user_id: ownershipMeta.dibuat_oleh_user_id,
+    dibuat_oleh_nama: ownershipMeta.dibuat_oleh_nama,
+    sales_owner_id: ownershipMeta.sales_owner_id,
+    sales_owner_nama: ownershipMeta.sales_owner_nama,
+    channel_akuisisi: ownershipMeta.channel_akuisisi,
+    tanggal_akuisisi: ownershipMeta.tanggal_akuisisi,
+    status_kepemilikan: ownershipMeta.status_kepemilikan,
+    tanggal_update_owner: ownershipMeta.tanggal_update_owner,
+    catatan_kepemilikan: ownershipMeta.catatan_kepemilikan
   };
 
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_CUSTOMER, APP_CONFIG.HEADERS.MASTER_CUSTOMER);
   appendRowByHeaders_(APP_CONFIG.SHEETS.MASTER_CUSTOMER, customerRow);
   return customerRow;
+}
+
+function buildCustomerOwnershipMetaForNewOrder_(payload) {
+  var salesId = String(payload && payload.sales_id || '').trim();
+  var salesName = String(payload && payload.sales_nama || '').trim();
+  var profile = salesId ? getCurrentUserProfile(salesId) : null;
+  var now = getNowParts_();
+
+  return {
+    dibuat_oleh_user_id: salesId,
+    dibuat_oleh_nama: salesName || profile && profile.nama_user || '',
+    sales_owner_id: salesId,
+    sales_owner_nama: salesName || profile && profile.nama_user || '',
+    channel_akuisisi: String(payload && payload.channel_sales || '').trim() || profile && profile.channel_sales_default || '',
+    tanggal_akuisisi: now.tanggal,
+    status_kepemilikan: 'Aktif',
+    tanggal_update_owner: now.tanggal,
+    catatan_kepemilikan: 'Auto assign saat customer baru dibuat dari sales order'
+  };
 }
 
 function findExistingCustomerForNewOrder_(payload) {

@@ -244,6 +244,12 @@ function verifyDeliveredOrder(noSo, userId, payload) {
     catatan_verifikasi_cs: verificationPayload.catatan_verifikasi_cs || ''
   });
 
+  if (normalizeText_(salesOrder.channel_sales) === 'slf') {
+    updateSalesOrderCommissionStatus_(noSo, 'Menunggu Pembayaran', {
+      catatan: 'Order sudah diverifikasi CS, menunggu pembayaran diterima perusahaan'
+    });
+  }
+
   return {
     success: true,
     no_so: noSo,

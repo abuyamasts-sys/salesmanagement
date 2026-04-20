@@ -379,3 +379,167 @@ function getSalesKpiSummary_(bulan, salesId) {
     })
   };
 }
+
+function deriveSalesKpiProgressStatus_(targetQty, achievedQty) {
+  var target = Number(targetQty || 0);
+  var achieved = Number(achievedQty || 0);
+
+  if (!(target > 0)) {
+    return 'Belum Ada Target';
+  }
+
+  if (!(achieved > 0)) {
+    return 'Belum Mulai';
+  }
+
+  if (achieved < target) {
+    return 'Berjalan';
+  }
+
+  if (achieved === target) {
+    return 'Tercapai';
+  }
+
+  return 'Melebihi';
+}
+
+function buildApproverKpiProgressSummary_(rows) {
+  var safeRows = Array.isArray(rows) ? rows : [];
+  var rowsWithTarget = safeRows.filter(function(row) {
+    return Number(row.target_qty || 0) > 0;
+  });
+  var achievedRows = rowsWithTarget.filter(function(row) {
+    var status = String(row.status_kpi || '').trim();
+    return status === 'Tercapai' || status === 'Melebihi';
+  });
+  var averageProgress = 0;
+
+  if (rowsWithTarget.length) {
+    averageProgress = Math.round(rowsWithTarget.reduce(function(sum, row) {
+      return sum + Number(row.progress_percent || 0);
+    }, 0) / rowsWithTarget.length);
+  }
+
+  return {
+    total_sales: safeRows.length,
+    sales_with_target: rowsWithTarget.length,
+    sales_achieved: achievedRows.length,
+    sales_not_achieved: Math.max(rowsWithTarget.length - achievedRows.length, 0),
+    sales_without_target: Math.max(safeRows.length - rowsWithTarget.length, 0),
+    total_target_qty: safeRows.reduce(function(sum, row) {
+      return sum + Number(row.target_qty || 0);
+    }, 0),
+    total_achieved_qty: safeRows.reduce(function(sum, row) {
+      return sum + Number(row.achieved_qty || 0);
+    }, 0),
+    average_progress_percent: averageProgress
+  };
+}
+
+function buildApproverKpiProgressRows_(bulan) {
+  var monthKey = normalizeMonthKey_(bulan) || getCurrentMonthKey_();
+  var salesUsers = listSalesUsers_();
+  var targets = listSalesKpiTargetsByMonth_(monthKey);
+  var targetMap = {};
+  var kpiLogRows;
+  var logMap = {};
+
+  targets.forEach(function(target) {
+    var salesId = String(target.sales_id || '').trim();
+    if (!salesId) {
+      return;
+    }
+
+    targetMap[salesId] = target;
+  });
+
+  ensureSheetWithHeaders_(APP_CONFIG.SHEETS.KPI_LOG, APP_CONFIG.HEADERS.KPI_LOG);
+  kpiLogRows = getSheetData_(APP_CONFIG.SHEETS.KPI_LOG).filter(function(row) {
+    return normalizeMonthKey_(row.bulan) === monthKey &&
+      normalizeText_(row.jenis_customer) === 'baru';
+  });
+
+  kpiLogRows.forEach(function(row) {
+    var salesId = String(row.sales_id || '').trim();
+    var logRow;
+
+    if (!salesId) {
+      return;
+    }
+
+    if (!logMap[salesId]) {
+      logMap[salesId] = [];
+    }
+
+    logRow = {
+      no_so: String(row.no_so || '').trim(),
+      qty_total: Number(row.qty_total || 0),
+      tanggal_siap_kirim: String(row.tanggal_siap_kirim || '').trim()
+    };
+    logMap[salesId].push(logRow);
+  });
+
+  return salesUsers.map(function(user) {
+    var salesId = String(user.user_id || '').trim();
+    var targetRow = targetMap[salesId] || null;
+    var orders = (logMap[salesId] || []).slice().sort(function(left, right) {
+      return String(right.tanggal_siap_kirim || '').localeCompare(String(left.tanggal_siap_kirim || ''));
+    });
+    var targetQty = Number(targetRow && targetRow.target_qty || 0);
+    var achievedQty = orders.reduce(function(sum, row) {
+      return sum + Number(row.qty_total || 0);
+    }, 0);
+    var remainingQty = Math.max(targetQty - achievedQty, 0);
+    var progressPercent = targetQty > 0 ? Math.round((achievedQty / targetQty) * 100) : 0;
+
+    return {
+      sales_id: salesId,
+      sales_name: String(user.nama_user || salesId || '').trim(),
+      target_qty: targetQty,
+      achieved_qty: achievedQty,
+      remaining_qty: remainingQty,
+      progress_percent: progressPercent,
+      order_count: orders.length,
+      status_kpi: deriveSalesKpiProgressStatus_(targetQty, achievedQty),
+      last_target_update: targetRow ? String(targetRow.tanggal_input || '').trim() : '',
+      last_target_updated_by: targetRow ? String(targetRow.diinput_oleh || '').trim() : '',
+      catatan_target: targetRow ? String(targetRow.catatan || '').trim() : '',
+      orders: orders
+    };
+  });
+}
+
+function getApproverKpiProgressData_(bulan) {
+  var monthKey = normalizeMonthKey_(bulan) || getCurrentMonthKey_();
+  var rows = buildApproverKpiProgressRows_(monthKey);
+
+  rows.sort(function(left, right) {
+    var statusOrder = {
+      'Belum Ada Target': 1,
+      'Belum Mulai': 2,
+      'Berjalan': 3,
+      'Tercapai': 4,
+      'Melebihi': 5
+    };
+    var leftRank = statusOrder[left.status_kpi] || 99;
+    var rightRank = statusOrder[right.status_kpi] || 99;
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    if (Number(left.progress_percent || 0) !== Number(right.progress_percent || 0)) {
+      return Number(left.progress_percent || 0) - Number(right.progress_percent || 0);
+    }
+
+    return String(left.sales_name || '').localeCompare(String(right.sales_name || ''), 'id-ID');
+  });
+
+  return {
+    bulan: monthKey,
+    salesUsers: listSalesUsers_(),
+    targets: listSalesKpiTargetsByMonth_(monthKey),
+    summary: buildApproverKpiProgressSummary_(rows),
+    rows: rows
+  };
+}

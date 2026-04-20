@@ -4,11 +4,18 @@ function submitSalesOrder(payload) {
   var now = getNowParts_();
   var noSo = generateDocNumber_(APP_CONFIG.DOC_PREFIX.SALES_ORDER);
   var items = normalizeOrderItems_(payload);
+  var commissionInfo;
   var customerCheck = buildOrderCustomerCheck_(payload);
   var priceCheck = buildOrderPriceCheck_(items);
   var approvalDecision = mergeOrderApprovalChecks_(customerCheck, priceCheck);
   var totals = calculateOrderTotals_(items);
   var prioritasKirim = resolvePrioritasKirim_(payload.tanggal_kirim_rencana, now.timestamp);
+
+  payload._normalized_items = items;
+  validateFreelanceCustomerAccess_(payload);
+  validateFreelanceCommissionCoverage_(payload, customerCheck.customer_id, noSo);
+  commissionInfo = calculateSalesOrderCommission_(payload, customerCheck.customer_id, noSo);
+
   var salesOrderRow = {
     no_so: noSo,
     tanggal_order: now.tanggal,
@@ -54,7 +61,23 @@ function submitSalesOrder(payload) {
     tanggal_kirim_rencana: payload.tanggal_kirim_rencana,
     catatan: payload.catatan || '',
     butuh_persetujuan: approvalDecision.butuh_persetujuan,
-    alasan_hold: approvalDecision.alasan_hold
+    alasan_hold: approvalDecision.alasan_hold,
+    tipe_sales: String(payload.tipe_sales || '').trim() || (payload.is_freelance ? 'Freelance' : 'Internal'),
+    channel_sales: String(payload.channel_sales || '').trim() || (payload.is_freelance ? 'SLF' : 'SLS'),
+    customer_owner_id: customerCheck.customer_owner_id || '',
+    customer_owner_nama: customerCheck.customer_owner_nama || '',
+    jenis_komisi_order: commissionInfo.jenis_komisi_order || '',
+    komisi_scheme_source: commissionInfo.komisi_scheme_source || '',
+    komisi_id_referensi: commissionInfo.komisi_id_referensi || '',
+    tarif_komisi_per_unit: commissionInfo.tarif_komisi_per_unit || '',
+    qty_komisi: commissionInfo.qty_komisi || 0,
+    estimasi_komisi: commissionInfo.total_estimasi_komisi || 0,
+    komisi_realisasi: commissionInfo.komisi_realisasi || 0,
+    status_komisi: commissionInfo.status_komisi || '',
+    tanggal_status_komisi: commissionInfo.tanggal_status_komisi || '',
+    tanggal_siap_cair: commissionInfo.tanggal_siap_cair || '',
+    tanggal_bayar_komisi: commissionInfo.tanggal_bayar_komisi || '',
+    catatan_komisi: commissionInfo.catatan_komisi || ''
   };
 
   ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
@@ -445,6 +468,8 @@ function buildOrderCustomerCheck_(payload) {
       jumlah_nota_overdue: 0,
       tanggal_jatuh_tempo_terdekat: '',
       catatan_piutang: '',
+      customer_owner_id: customer.sales_owner_id || '',
+      customer_owner_nama: customer.sales_owner_nama || '',
       status_order: 'Siap Kirim',
       butuh_persetujuan: 'Tidak',
       alasan_hold: ''
@@ -462,10 +487,268 @@ function buildOrderCustomerCheck_(payload) {
     jumlah_nota_overdue: Number(customer.jumlah_nota_overdue || 0),
     tanggal_jatuh_tempo_terdekat: customer.tanggal_jatuh_tempo_terdekat || '',
     catatan_piutang: customer.catatan_piutang || customer.catatan || '',
+    customer_owner_id: customer.sales_owner_id || '',
+    customer_owner_nama: customer.sales_owner_nama || '',
     status_order: eligibility.butuh_persetujuan === 'Ya' ? 'Menunggu Persetujuan' : 'Siap Kirim',
     butuh_persetujuan: eligibility.butuh_persetujuan,
     alasan_hold: eligibility.alasan_hold
   };
+}
+
+function validateFreelanceCustomerAccess_(payload) {
+  var safePayload = payload || {};
+  var customer;
+  var ownerId;
+
+  if (!safePayload.is_freelance) {
+    return null;
+  }
+
+  if (normalizeText_(safePayload.jenis_customer) !== 'lama') {
+    return null;
+  }
+
+  customer = findCustomerByCode_(safePayload.customer_id);
+  if (!customer) {
+    throw new Error('Customer lama tidak ditemukan.');
+  }
+
+  ownerId = String(customer.sales_owner_id || '').trim();
+  if (!ownerId || normalizeText_(ownerId) !== normalizeText_(safePayload.sales_id)) {
+    throw new Error('Akses customer ditolak. Sales freelance hanya boleh membuat order untuk customer lama yang dimilikinya.');
+  }
+
+  return customer;
+}
+
+function getCustomerCommissionType_(customerId, excludeNoSo) {
+  var safeCustomerId = String(customerId || '').trim();
+  var excludedNoSo = String(excludeNoSo || '').trim();
+  var hasCompletedOrder;
+
+  if (!safeCustomerId) {
+    return 'BARU';
+  }
+
+  hasCompletedOrder = getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).some(function(row) {
+    var noSo = String(row.no_so || '').trim();
+
+    if (!noSo || (excludedNoSo && noSo === excludedNoSo)) {
+      return false;
+    }
+
+    return String(row.customer_id || '').trim() === safeCustomerId &&
+      normalizeText_(row.status_order) === 'selesai';
+  });
+
+  return hasCompletedOrder ? 'REPEAT' : 'BARU';
+}
+
+function getActiveCommissionRate_(jenisKomisi, kodeItem, tanggalRef) {
+  var sheet = getSheetByNameOrNull_(APP_CONFIG.SHEETS.MASTER_KOMISI_SLF);
+  var safeJenisKomisi = String(jenisKomisi || '').trim().toUpperCase();
+  var safeKodeItem = String(kodeItem || '').trim().toUpperCase();
+  var refDate = normalizeSheetDateToYmd_(tanggalRef);
+
+  if (!sheet || !safeJenisKomisi || !safeKodeItem) {
+    return null;
+  }
+
+  return getSheetData_(APP_CONFIG.SHEETS.MASTER_KOMISI_SLF).find(function(row) {
+    var statusAktif = normalizeText_(row.status_aktif || 'aktif');
+    var rowJenisKomisi = resolveCommissionJenisKomisi_(row);
+    var rowKodeItem = resolveCommissionKodeItem_(row);
+
+    if (statusAktif !== 'aktif') {
+      return false;
+    }
+
+    if (rowJenisKomisi !== safeJenisKomisi) {
+      return false;
+    }
+
+    if (rowKodeItem !== safeKodeItem) {
+      return false;
+    }
+
+    return isCommissionDateActive_(refDate, row.tanggal_mulai, row.tanggal_berakhir);
+  }) || null;
+}
+
+function calculateSalesOrderCommission_(payload, customerId, excludeNoSo) {
+  var safePayload = payload || {};
+  var result = {
+    jenis_komisi_order: '',
+    total_estimasi_komisi: 0,
+    qty_komisi: 0,
+    lines: [],
+    komisi_scheme_source: '',
+    komisi_id_referensi: '',
+    tarif_komisi_per_unit: '',
+    komisi_realisasi: 0,
+    status_komisi: '',
+    tanggal_status_komisi: '',
+    tanggal_siap_cair: '',
+    tanggal_bayar_komisi: '',
+    catatan_komisi: ''
+  };
+  var items;
+  var jenisKomisi;
+  var tanggalRef;
+  var uniqueKomisiIds = [];
+  var uniqueTarif = [];
+
+  if (!safePayload.is_freelance) {
+    return result;
+  }
+
+  items = Array.isArray(safePayload._normalized_items) ? safePayload._normalized_items : normalizeOrderItems_(safePayload);
+  jenisKomisi = getCustomerCommissionType_(customerId, excludeNoSo);
+  tanggalRef = safePayload.tanggal_order || safePayload.tanggal_kirim_rencana || new Date();
+  result.jenis_komisi_order = jenisKomisi;
+  result.komisi_scheme_source = 'MASTER_KOMISI_SLF';
+  result.komisi_realisasi = 0;
+  result.status_komisi = 'Potensial';
+  result.tanggal_status_komisi = Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, 'yyyy-MM-dd');
+  result.tanggal_siap_cair = '';
+  result.tanggal_bayar_komisi = '';
+
+  items.forEach(function(item) {
+    var commissionRate = getActiveCommissionRate_(jenisKomisi, item.kode_item, tanggalRef);
+    var tarif = Number(commissionRate && commissionRate.tarif_komisi_per_unit || 0);
+    var qtyKomisi = Number(item.qty || 0);
+    var estimasi = qtyKomisi * tarif;
+    var line = {
+      kode_item: item.kode_item || '',
+      nama_item: item.nama_item || '',
+      qty: qtyKomisi,
+      jenis_komisi: jenisKomisi,
+      komisi_id: commissionRate && String(commissionRate.komisi_id || '').trim() || '',
+      tarif_komisi_per_unit: tarif,
+      estimasi_komisi: estimasi
+    };
+
+    if (commissionRate) {
+      result.qty_komisi += qtyKomisi;
+      result.total_estimasi_komisi += estimasi;
+
+      if (line.komisi_id && uniqueKomisiIds.indexOf(line.komisi_id) === -1) {
+        uniqueKomisiIds.push(line.komisi_id);
+      }
+
+      if (String(tarif) && uniqueTarif.indexOf(String(tarif)) === -1) {
+        uniqueTarif.push(String(tarif));
+      }
+    }
+
+    result.lines.push(line);
+  });
+
+  result.komisi_id_referensi = uniqueKomisiIds.join(', ');
+  result.tarif_komisi_per_unit = uniqueTarif.join(', ');
+  result.catatan_komisi = buildSalesOrderCommissionNote_(result.lines);
+
+  return result;
+}
+
+function validateFreelanceCommissionCoverage_(payload, customerId, excludeNoSo) {
+  var safePayload = payload || {};
+  var items;
+  var jenisKomisi;
+  var tanggalRef;
+  var missingItems = [];
+
+  if (!safePayload.is_freelance) {
+    return;
+  }
+
+  items = Array.isArray(safePayload._normalized_items) ? safePayload._normalized_items : normalizeOrderItems_(safePayload);
+  jenisKomisi = getCustomerCommissionType_(customerId, excludeNoSo);
+  tanggalRef = safePayload.tanggal_order || safePayload.tanggal_kirim_rencana || new Date();
+
+  items.forEach(function(item) {
+    var kodeItem = String(item.kode_item || '').trim().toUpperCase();
+    var namaItem = String(item.nama_item || kodeItem || '').trim();
+    var commissionRate;
+
+    if (!kodeItem) {
+      missingItems.push(namaItem || 'Item tanpa kode');
+      return;
+    }
+
+    commissionRate = getActiveCommissionRate_(jenisKomisi, kodeItem, tanggalRef);
+    if (!commissionRate) {
+      missingItems.push((namaItem || kodeItem) + ' (' + kodeItem + ')');
+    }
+  });
+
+  if (missingItems.length) {
+    throw new Error(
+      'Master komisi SLF aktif belum tersedia untuk item berikut: ' +
+      missingItems.join(', ') +
+      '. Hubungi Approver atau jalankan seed master komisi terlebih dahulu.'
+    );
+  }
+}
+
+function resolveCommissionJenisKomisi_(row) {
+  var directValue = String(row && row.jenis_komisi || '').trim().toUpperCase();
+  var fallbackValue = String(row && row.nama_skema_komisi || '').trim().toUpperCase();
+
+  if (directValue) {
+    return directValue;
+  }
+
+  if (fallbackValue === 'BARU' || fallbackValue === 'REPEAT') {
+    return fallbackValue;
+  }
+
+  return '';
+}
+
+function resolveCommissionKodeItem_(row) {
+  return String(row && (row.kode_item || row.produk_komisi) || '').trim().toUpperCase();
+}
+
+function isCommissionDateActive_(tanggalRef, tanggalMulai, tanggalBerakhir) {
+  var ref = normalizeSheetDateToYmd_(tanggalRef);
+  var start = normalizeSheetDateToYmd_(tanggalMulai);
+  var end = normalizeSheetDateToYmd_(tanggalBerakhir);
+
+  if (!ref) {
+    return true;
+  }
+
+  if (start && ref < start) {
+    return false;
+  }
+
+  if (end && ref > end) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildSalesOrderCommissionNote_(lines) {
+  var baseNote = 'Menunggu progres order dan pembayaran';
+  var snapshots = (lines || []).filter(function(line) {
+    return Number(line.tarif_komisi_per_unit || 0) > 0;
+  }).map(function(line) {
+    return [
+      line.kode_item || '-',
+      line.jenis_komisi || '-',
+      'x' + String(Number(line.qty || 0)),
+      '@' + String(Number(line.tarif_komisi_per_unit || 0)),
+      '=' + String(Number(line.estimasi_komisi || 0))
+    ].join(' ');
+  });
+
+  if (!snapshots.length) {
+    return baseNote;
+  }
+
+  return baseNote + ' | Snapshot: ' + snapshots.join('; ');
 }
 
 function buildRevisionCustomerCheck_(salesOrder, termPembayaran) {
