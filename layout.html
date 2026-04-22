@@ -2,6 +2,10 @@
 <html>
   <head>
     <base target="_top">
+    <script
+      src="https://www.gstatic.com/charts/loader.js"
+      onerror="window.__googleChartsScriptFailed = true;"
+    ></script>
     <?!= include('main.css'); ?>
   </head>
   <body>
@@ -36,9 +40,10 @@
           <div id="globalResultContent">Belum ada proses yang dijalankan.</div>
         </section>
 
-        <nav class="app-tabs hidden">
+        <nav class="app-tabs hidden" id="appTabs">
           <button type="button" class="tab-btn active" data-tab="sales" data-role="sales">Sales Order</button>
           <button type="button" class="tab-btn" data-tab="approver" data-role="approver">Approver</button>
+          <button type="button" class="tab-btn" data-tab="controller" data-role="controller">Controller</button>
           <button type="button" class="tab-btn" data-tab="admin" data-role="cs_admin">CS/Admin</button>
         </nav>
 
@@ -121,14 +126,16 @@
                     <tr>
                       <th>No SO</th>
                       <th>Tanggal</th>
+                      <th>Nama Customer</th>
                       <th class="cell-right">Qty</th>
                     </tr>
                   </thead>
                   <tbody id="salesKpiOrdersBody">
-                    <tr><td colspan="3" class="empty-cell">Belum ada data KPI.</td></tr>
+                    <tr><td colspan="4" class="empty-cell">Belum ada data KPI.</td></tr>
                   </tbody>
                 </table>
               </div>
+              <div class="table-pagination" id="salesKpiOrdersPagination"></div>
             </section>
 
             <section class="form-card hidden" id="salesCommissionSummarySection">
@@ -146,7 +153,7 @@
                   <span class="summary-note" id="salesCommissionPotensialCount">0 order</span>
                 </article>
                 <article class="summary-card">
-                  <span class="summary-label">Menunggu Pembayaran</span>
+                  <span class="summary-label">Dalam Proses</span>
                   <strong class="summary-value" id="salesCommissionWaiting">Rp 0</strong>
                   <span class="summary-note" id="salesCommissionWaitingCount">0 order</span>
                 </article>
@@ -160,6 +167,43 @@
                   <strong class="summary-value" id="salesCommissionPaid">Rp 0</strong>
                   <span class="summary-note" id="salesCommissionPaidCount">0 order</span>
                 </article>
+              </div>
+
+              <div class="summary-grid sales-payout-summary-grid">
+                <article class="summary-card">
+                  <span class="summary-label">Saldo Siap Cair</span>
+                  <strong class="summary-value" id="salesPayoutReadyAmount">Rp 0</strong>
+                  <span class="summary-note" id="salesPayoutReadyCount">0 order siap masuk batch</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Minimum Pencairan</span>
+                  <strong class="summary-value" id="salesPayoutMinAmount">Rp 0</strong>
+                  <span class="summary-note">Pengajuan batch baru aktif jika saldo sudah memenuhi batas minimum</span>
+                </article>
+              </div>
+
+              <div class="action-row">
+                <button type="button" class="primary-btn" id="submitSalesPayoutBtn">Ajukan Pencairan</button>
+              </div>
+              <div class="commission-table-note" id="salesPayoutInfoText">Saldo siap cair Anda akan tampil di sini.</div>
+
+              <h3 class="section-title">Riwayat Pengajuan Pencairan</h3>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>No Batch</th>
+                      <th>Tanggal</th>
+                      <th>Jumlah SO</th>
+                      <th>Total</th>
+                      <th>Status</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="salesPayoutBatchTableBody">
+                    <tr><td colspan="6" class="empty-cell">Belum ada pengajuan pencairan.</td></tr>
+                  </tbody>
+                </table>
               </div>
             </section>
 
@@ -598,6 +642,7 @@
               </div>
 
               <div class="action-row">
+                <button type="button" class="ghost-btn hidden" id="cancelApproverCommissionEditBtn">Batal Edit</button>
                 <button type="button" class="primary-btn" id="saveApproverCommissionBtn">Simpan Master Komisi</button>
               </div>
 
@@ -614,15 +659,17 @@
                       <th>Periode</th>
                       <th>Status</th>
                       <th>Update</th>
+                      <th>Aksi</th>
                     </tr>
                   </thead>
                   <tbody id="approverCommissionTableBody">
-                    <tr><td colspan="8" class="empty-cell">Belum ada master komisi SLF.</td></tr>
+                    <tr><td colspan="9" class="empty-cell">Belum ada master komisi SLF.</td></tr>
                   </tbody>
                 </table>
               </div>
 
-              <h3 class="section-title">Komisi SLF Siap Cair</h3>
+              <h3 class="section-title">SO Siap Cair (Referensi)</h3>
+              <div class="commission-table-note">Daftar ini hanya referensi SO yang sudah eligible. Pencairan utama diproses melalui batch payout di tabel bawah.</div>
               <div class="table-wrap">
                 <table class="data-table">
                   <thead>
@@ -634,11 +681,65 @@
                       <th>Estimasi</th>
                       <th>Realisasi</th>
                       <th>Status</th>
-                      <th>Aksi</th>
+                      <th>Keterangan</th>
                     </tr>
                   </thead>
                   <tbody id="approverCommissionReadyTableBody">
                     <tr><td colspan="8" class="empty-cell">Belum ada komisi SLF yang siap dibayar.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 class="section-title">Batch Payout Komisi SLF</h3>
+              <div class="commission-table-note">Approver memproses pencairan per batch agar lebih ringan daripada per SO satuan.</div>
+              <div class="summary-grid approver-payout-summary-grid">
+                <article class="summary-card">
+                  <span class="summary-label">Batch Diajukan</span>
+                  <strong class="summary-value" id="approverPayoutPendingCount">0</strong>
+                  <span class="summary-note" id="approverPayoutPendingAmount">Rp 0</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Batch Diproses</span>
+                  <strong class="summary-value" id="approverPayoutProcessingCount">0</strong>
+                  <span class="summary-note" id="approverPayoutProcessingAmount">Rp 0</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Batch Dibayar</span>
+                  <strong class="summary-value" id="approverPayoutPaidCount">0</strong>
+                  <span class="summary-note" id="approverPayoutPaidAmount">Rp 0</span>
+                </article>
+                <article class="summary-card">
+                  <span class="summary-label">Total Batch</span>
+                  <strong class="summary-value" id="approverPayoutTotalCount">0</strong>
+                  <span class="summary-note" id="approverPayoutTotalAmount">Rp 0</span>
+                </article>
+              </div>
+              <div class="form-grid approver-payout-filter-grid">
+                <label class="field">
+                  <span>Status Batch</span>
+                  <select id="approverPayoutStatusFilter">
+                    <option value="">Semua</option>
+                    <option value="Diajukan">Diajukan</option>
+                    <option value="Diproses">Diproses</option>
+                    <option value="Dibayar">Dibayar</option>
+                  </select>
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>No Batch</th>
+                      <th>Tanggal</th>
+                      <th>Sales</th>
+                      <th>Jumlah SO</th>
+                      <th>Total</th>
+                      <th>Status</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="approverPayoutBatchTableBody">
+                    <tr><td colspan="7" class="empty-cell">Belum ada batch payout komisi SLF.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -804,6 +905,254 @@
           </section>
         </section>
 
+        <section class="tab-panel hidden" id="tab-controller" data-role="controller">
+          <section class="form-card controller-hero-card">
+            <div class="panel-header">
+              <div>
+                <p class="controller-kicker">Monitoring Read-Only</p>
+                <h2>Dashboard Global</h2>
+                <p class="panel-subtitle">Ringkasan Sales Order dan Operasional</p>
+              </div>
+              <div class="controller-status-chip">Mode Controller</div>
+            </div>
+          </section>
+
+          <section class="form-card controller-filter-card">
+            <div class="panel-header">
+              <div>
+                <h3 class="section-title compact">Filter Periode</h3>
+                <p class="panel-subtitle">Pilih rentang waktu untuk melihat ringkasan operasional.</p>
+              </div>
+            </div>
+            <div class="controller-filter-shell">
+              <div class="controller-preset-row" id="controllerPresetRow">
+                <button type="button" class="ghost-btn controller-preset-btn" data-controller-preset="today">Hari Ini</button>
+                <button type="button" class="ghost-btn controller-preset-btn" data-controller-preset="week">Minggu Ini</button>
+                <button type="button" class="ghost-btn controller-preset-btn" data-controller-preset="month">Bulan Ini</button>
+                <button type="button" class="ghost-btn controller-preset-btn" data-controller-preset="last_month">Bulan Lalu</button>
+                <button type="button" class="ghost-btn controller-preset-btn" data-controller-preset="all">Semua</button>
+              </div>
+              <div class="form-grid controller-filter-grid">
+                <label class="field">
+                  <span>Tanggal Mulai</span>
+                  <input id="controllerStartDate" type="date" />
+                </label>
+                <label class="field">
+                  <span>Tanggal Akhir</span>
+                  <input id="controllerEndDate" type="date" />
+                </label>
+                <div class="field controller-filter-action">
+                  <span>&nbsp;</span>
+                  <button type="button" class="primary-btn" id="refreshControllerBtn">Refresh</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="summary-grid controller-kpi-grid">
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">SO Hari Ini</span>
+              <strong class="summary-value" id="controllerKpiSoToday">-</strong>
+              <span class="summary-note">Order masuk hari ini</span>
+            </article>
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">Omzet Hari Ini</span>
+              <strong class="summary-value" id="controllerKpiOmzetToday">-</strong>
+              <span class="summary-note">Nilai order hari ini</span>
+            </article>
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">Customer Unik Hari Ini</span>
+              <strong class="summary-value" id="controllerKpiCustomersToday">-</strong>
+              <span class="summary-note">Customer bertransaksi hari ini</span>
+            </article>
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">Qty Hari Ini</span>
+              <strong class="summary-value" id="controllerKpiQtyToday">-</strong>
+              <span class="summary-note">Total qty order hari ini</span>
+            </article>
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">SO Minggu Ini</span>
+              <strong class="summary-value" id="controllerKpiSoWeek">-</strong>
+              <span class="summary-note">Akumulasi sejak Senin</span>
+            </article>
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">Omzet Minggu Ini</span>
+              <strong class="summary-value" id="controllerKpiOmzetWeek">-</strong>
+              <span class="summary-note">Nilai order minggu berjalan</span>
+            </article>
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">SO Bulan Ini</span>
+              <strong class="summary-value" id="controllerKpiSoMonth">-</strong>
+              <span class="summary-note">Akumulasi bulan berjalan</span>
+            </article>
+            <article class="summary-card controller-summary-card">
+              <span class="summary-label">Omzet Bulan Ini</span>
+              <strong class="summary-value" id="controllerKpiOmzetMonth">-</strong>
+              <span class="summary-note">Nilai order bulan berjalan</span>
+            </article>
+          </section>
+
+          <section class="form-card controller-kpi-snapshot-card">
+            <div class="panel-header">
+              <div>
+                <h3 class="section-title compact">KPI Sales Bulan Ini</h3>
+                <p class="panel-subtitle">Ringkasan target dan realisasi customer baru per sales</p>
+              </div>
+            </div>
+
+            <div class="summary-grid controller-kpi-snapshot-grid">
+              <article class="summary-card controller-kpi-snapshot-item">
+                <span class="summary-label">Total Target</span>
+                <strong class="summary-value" id="controllerKpiSalesTotalTarget">0</strong>
+                <span class="summary-note">Akumulasi target qty semua sales aktif</span>
+              </article>
+              <article class="summary-card controller-kpi-snapshot-item">
+                <span class="summary-label">Realisasi</span>
+                <strong class="summary-value" id="controllerKpiSalesTotalAchieved">0</strong>
+                <span class="summary-note">Total qty customer baru bulan berjalan</span>
+              </article>
+              <article class="summary-card controller-kpi-snapshot-item">
+                <span class="summary-label">Sisa</span>
+                <strong class="summary-value" id="controllerKpiSalesTotalRemaining">0</strong>
+                <span class="summary-note">Sisa target yang masih perlu dikejar</span>
+              </article>
+              <article class="summary-card controller-kpi-snapshot-item">
+                <span class="summary-label">Capaian</span>
+                <strong class="summary-value" id="controllerKpiSalesTotalProgress">0%</strong>
+                <span class="summary-note">Persentase capaian total tim bulan ini</span>
+              </article>
+            </div>
+
+            <div class="table-wrap controller-kpi-snapshot-table-wrap">
+              <table class="data-table controller-data-table">
+                <thead>
+                  <tr>
+                    <th>Sales</th>
+                    <th class="cell-right">Target</th>
+                    <th class="cell-right">Realisasi</th>
+                    <th class="cell-right">Sisa</th>
+                    <th class="cell-right">%</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="controllerSalesKpiBody">
+                  <tr><td colspan="6" class="empty-cell">Belum ada data KPI.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="controller-panel-grid">
+            <section class="form-card controller-panel-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="section-title compact">Trend 7 Hari</h3>
+                  <p class="panel-subtitle">Ringkasan order dan omzet harian dalam 7 hari terakhir.</p>
+                </div>
+              </div>
+              <div class="controller-trend-strip" id="controllerTrend7Days"></div>
+            </section>
+
+            <section class="form-card controller-panel-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="section-title compact">Ringkasan Status Order</h3>
+                  <p class="panel-subtitle">Komposisi status order global secara read-only.</p>
+                </div>
+              </div>
+              <div class="controller-stat-list" id="controllerStatusSummary"></div>
+            </section>
+
+            <section class="form-card controller-panel-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="section-title compact">Ringkasan Operasional</h3>
+                  <p class="panel-subtitle">Posisi order, surat jalan, dan tagihan terbuka saat ini.</p>
+                </div>
+              </div>
+              <div class="controller-stat-list" id="controllerOpsSummary"></div>
+            </section>
+          </section>
+
+          <section class="controller-table-grid">
+            <section class="form-card controller-table-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="section-title compact">Top Sales</h3>
+                  <p class="panel-subtitle">Peringkat berdasarkan omzet dan jumlah order.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table controller-data-table">
+                  <thead>
+                    <tr>
+                      <th>Peringkat</th>
+                      <th>Sales</th>
+                      <th>SO</th>
+                      <th>Omzet</th>
+                    </tr>
+                  </thead>
+                  <tbody id="controllerTopSalesBody">
+                    <tr><td colspan="4" class="empty-cell">Belum ada data ranking sales.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="form-card controller-table-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="section-title compact">Top Customer</h3>
+                  <p class="panel-subtitle">Customer dengan kontribusi transaksi tertinggi.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table controller-data-table">
+                  <thead>
+                    <tr>
+                      <th>Peringkat</th>
+                      <th>Customer</th>
+                      <th>SO</th>
+                      <th>Omzet</th>
+                    </tr>
+                  </thead>
+                  <tbody id="controllerTopCustomersBody">
+                    <tr><td colspan="4" class="empty-cell">Belum ada data ranking customer.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="form-card controller-table-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="section-title compact">Top Item</h3>
+                  <p class="panel-subtitle">Item dengan qty tertinggi dan order terbanyak.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table controller-data-table">
+                  <thead>
+                    <tr>
+                      <th>Peringkat</th>
+                      <th>Item</th>
+                      <th>Qty</th>
+                      <th>Order SO</th>
+                    </tr>
+                  </thead>
+                  <tbody id="controllerTopItemsBody">
+                    <tr><td colspan="4" class="empty-cell">Belum ada data ranking item.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="form-card controller-footer-card">
+            <small id="controllerLastUpdated">Terakhir diperbarui: -</small>
+          </section>
+        </section>
+
         <section class="tab-panel hidden" id="tab-admin" data-role="cs_admin">
           <section class="form-card">
             <div class="panel-header">
@@ -885,6 +1234,7 @@
                   <p class="panel-subtitle">Default menampilkan surat jalan tanggal hari ini agar tidak menumpuk.</p>
                 </div>
                 <div class="inline-actions delivery-filter-actions">
+                  <input type="search" id="deliverySearch" placeholder="Cari No SJ / No SO / Customer" autocomplete="off" />
                   <input type="date" id="deliveryFilterDate" />
                   <button type="button" class="ghost-btn" id="deliveryFilterTodayBtn">Hari Ini</button>
                   <button type="button" class="ghost-btn" id="deliveryFilterAllBtn">Semua</button>
@@ -907,6 +1257,7 @@
                   </tbody>
                 </table>
               </div>
+              <div class="table-pagination" id="deliveryPagination"></div>
             </section>
 
             <section class="admin-view-panel" id="admin-view-planning">
@@ -1070,6 +1421,75 @@
           </table>
         </div>
         <div class="table-pagination" id="salesHistoryPagination"></div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="payoutBatchDetailBackdrop">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="payoutBatchDetailTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="payoutBatchDetailTitle">Detail Batch Payout</h2>
+            <p class="panel-subtitle">Ringkasan batch payout dan daftar SO yang termasuk di dalamnya.</p>
+          </div>
+          <div class="modal-header-actions">
+            <button type="button" class="ghost-btn" id="copyPayoutBatchSummaryBtn">Copy Ringkasan</button>
+            <button type="button" class="ghost-btn" id="closePayoutBatchDetailBtn">Tutup</button>
+          </div>
+        </div>
+
+        <div class="customer-info">
+          <div><strong>No Batch:</strong> <span id="payoutBatchDetailId">-</span></div>
+          <div><strong>Sales:</strong> <span id="payoutBatchDetailSales">-</span></div>
+          <div><strong>Tanggal:</strong> <span id="payoutBatchDetailDate">-</span></div>
+          <div><strong>Status:</strong> <span id="payoutBatchDetailStatus">-</span></div>
+          <div><strong>Jumlah SO:</strong> <span id="payoutBatchDetailCount">0</span></div>
+          <div><strong>Total Komisi:</strong> <span id="payoutBatchDetailTotal">Rp 0</span></div>
+          <div><strong>Catatan Sales:</strong> <span id="payoutBatchDetailSalesNote">-</span></div>
+          <div><strong>Catatan Approver:</strong> <span id="payoutBatchDetailApproverNote">-</span></div>
+        </div>
+
+        <div class="table-wrap payout-batch-detail-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>No SO</th>
+                <th>Customer</th>
+                <th>Nominal Komisi</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="payoutBatchDetailTableBody">
+              <tr><td colspan="4" class="empty-cell">Belum ada detail batch payout.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="payoutActionBackdrop">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="payoutActionTitle" style="width:min(560px,100%);">
+        <div class="panel-header">
+          <div>
+            <h2 id="payoutActionTitle">Proses Payout Komisi</h2>
+            <p class="panel-subtitle" id="payoutActionSubtitle">Isi catatan proses payout komisi di bawah ini.</p>
+          </div>
+          <button type="button" class="ghost-btn" id="closePayoutActionBtn">Tutup</button>
+        </div>
+
+        <div class="customer-info payout-action-summary">
+          <div><strong>Referensi:</strong> <span id="payoutActionReference">-</span></div>
+          <div><strong>Total:</strong> <span id="payoutActionAmount">-</span></div>
+        </div>
+
+        <label class="field payout-action-field">
+          <span id="payoutActionNoteLabel">Catatan</span>
+          <textarea id="payoutActionNote" rows="3" placeholder="Tulis catatan singkat jika diperlukan"></textarea>
+        </label>
+
+        <div class="action-row" style="margin-top:16px;">
+          <button type="button" class="ghost-btn" id="cancelPayoutActionBtn">Batal</button>
+          <button type="button" class="primary-btn" id="savePayoutActionBtn">Simpan</button>
+        </div>
       </section>
     </div>
 

@@ -13,7 +13,9 @@ function setupMissingSheetsNow() {
     validateSheetSetupConfig_();
     return ensureConfiguredSheetsSafely_([
       'MASTER_KOMISI_SLF',
-      'KOMISI_SLF_MUTASI'
+      'KOMISI_SLF_MUTASI',
+      'KOMISI_PAYOUT',
+      'KOMISI_PAYOUT_DETAIL'
     ]);
   } catch (error) {
     Logger.log(error && error.stack ? error.stack : error);
@@ -101,6 +103,8 @@ function clearDummyTransactionsOnly() {
     APP_CONFIG.SHEETS.SURAT_JALAN,
     APP_CONFIG.SHEETS.LOG_STATUS_ORDER,
     APP_CONFIG.SHEETS.LOG_REVISI_ORDER,
+    APP_CONFIG.SHEETS.KOMISI_PAYOUT,
+    APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL,
     APP_CONFIG.SHEETS.TAGIHAN,
     APP_CONFIG.SHEETS.KPI_TARGET_SALES,
     APP_CONFIG.SHEETS.KPI_LOG
@@ -169,6 +173,8 @@ function clearDataRows_() {
     APP_CONFIG.SHEETS.SURAT_JALAN,
     APP_CONFIG.SHEETS.LOG_STATUS_ORDER,
     APP_CONFIG.SHEETS.LOG_REVISI_ORDER,
+    APP_CONFIG.SHEETS.KOMISI_PAYOUT,
+    APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL,
     APP_CONFIG.SHEETS.TAGIHAN,
     APP_CONFIG.SHEETS.KPI_TARGET_SALES,
     APP_CONFIG.SHEETS.KPI_LOG
@@ -208,7 +214,8 @@ function buildDummyUsers_(currentEmail, currentRole) {
   var defaultUsers = {
     'Sales': { user_id: 'U001', nama_user: 'Andi Sales', role: 'Sales' },
     'CS/Admin': { user_id: 'U002', nama_user: 'Citra Admin', role: 'CS/Admin' },
-    'Approver': { user_id: 'U003', nama_user: 'Bima Approver', role: 'Approver' }
+    'Approver': { user_id: 'U003', nama_user: 'Bima Approver', role: 'Approver' },
+    'Controller': { user_id: 'CTR1', nama_user: 'Controller', role: 'Controller' }
   };
   var activeUser = defaultUsers[currentRole] || defaultUsers.Sales;
 
@@ -247,6 +254,15 @@ function buildDummyUsers_(currentEmail, currentRole) {
       no_hp: '081300000030',
       email: 'approver.dummy@airtis.local',
       password: 'U030',
+      status_aktif: 'Aktif'
+    },
+    {
+      user_id: 'CTR1',
+      nama_user: 'Controller',
+      role: 'Controller',
+      no_hp: '081300000031',
+      email: 'controller.dummy@airtis.local',
+      password: 'CTR1',
       status_aktif: 'Aktif'
     }
   ];

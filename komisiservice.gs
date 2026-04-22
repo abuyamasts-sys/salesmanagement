@@ -75,12 +75,14 @@ function getApproverCommissionSlfData(userId) {
 
   return {
     products: getProductCatalog_(),
-    master_komisi_slf: getMasterKomisiSlf_()
+    master_komisi_slf: getMasterKomisiSlf_(),
+    ready_to_pay: getApproverSlfCommissionReadyToPay(userId)
   };
 }
 
 function getApproverSlfCommissionReadyToPay(userId) {
   requireCurrentUserRole_(['Approver'], userId);
+  syncCompletedSlfCashOrdersToReadyCommission_();
 
   ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
 
@@ -102,6 +104,381 @@ function getApproverSlfCommissionReadyToPay(userId) {
       tanggal_siap_cair: row.tanggal_siap_cair || ''
     };
   });
+}
+
+function getSlfMinPayoutAmount_() {
+  return Number((APP_CONFIG.COMMISSION && APP_CONFIG.COMMISSION.SLF_MIN_PAYOUT) || 100000);
+}
+
+function getSlfReadyToPayoutOrdersBySales_(salesId) {
+  var salesIdKey = String(salesId || '').trim();
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
+
+  if (!salesIdKey) {
+    return [];
+  }
+
+  return getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).filter(function(row) {
+    return normalizeText_(row.channel_sales) === 'slf' &&
+      String(row.sales_id || '').trim() === salesIdKey &&
+      normalizeText_(row.status_komisi) === 'siap cair' &&
+      !String(row.payout_batch_id || '').trim();
+  }).map(function(row) {
+    var nominalKomisi = Number(row.komisi_realisasi || row.estimasi_komisi || 0);
+
+    return {
+      no_so: row.no_so || '',
+      tanggal_order: row.tanggal_order || '',
+      sales_id: row.sales_id || '',
+      sales_nama: row.sales_nama || '',
+      customer_id: row.customer_id || '',
+      nama_customer: row.nama_customer_input || row.nama_customer || '',
+      estimasi_komisi: Number(row.estimasi_komisi || 0),
+      komisi_realisasi: Number(row.komisi_realisasi || 0),
+      nominal_komisi: nominalKomisi,
+      status_komisi: row.status_komisi || '',
+      tanggal_siap_cair: row.tanggal_siap_cair || ''
+    };
+  });
+}
+
+function buildSlfPayoutBatchSummary_(batchRow) {
+  var statusPayout = String(batchRow.status_payout || 'Diajukan').trim() || 'Diajukan';
+
+  return {
+    payout_batch_id: batchRow.payout_batch_id || '',
+    tanggal_pengajuan: batchRow.tanggal_pengajuan || '',
+    sales_id: batchRow.sales_id || '',
+    sales_nama: batchRow.sales_nama || '',
+    jumlah_so: Number(batchRow.jumlah_so || 0),
+    total_komisi: Number(batchRow.total_komisi || 0),
+    status_payout: statusPayout,
+    catatan_sales: batchRow.catatan_sales || '',
+    catatan_approver: batchRow.catatan_approver || '',
+    dibuat_oleh: batchRow.dibuat_oleh || '',
+    disetujui_oleh: batchRow.disetujui_oleh || '',
+    dibayar_oleh: batchRow.dibayar_oleh || '',
+    tanggal_dibayar: batchRow.tanggal_dibayar || '',
+    created_at: batchRow.created_at || '',
+    updated_at: batchRow.updated_at || ''
+  };
+}
+
+function listSlfPayoutBatchesForSales_(salesId) {
+  var salesIdKey = String(salesId || '').trim();
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, APP_CONFIG.HEADERS.KOMISI_PAYOUT);
+
+  if (!salesIdKey) {
+    return [];
+  }
+
+  return getSheetData_(APP_CONFIG.SHEETS.KOMISI_PAYOUT).filter(function(row) {
+    return String(row.sales_id || '').trim() === salesIdKey;
+  }).sort(function(left, right) {
+    return normalizeSheetDateToYmd_(right.tanggal_pengajuan || right.created_at || '').localeCompare(
+      normalizeSheetDateToYmd_(left.tanggal_pengajuan || left.created_at || ''),
+      'id-ID'
+    );
+  }).map(buildSlfPayoutBatchSummary_);
+}
+
+function listSlfPayoutBatchesForApprover_() {
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, APP_CONFIG.HEADERS.KOMISI_PAYOUT);
+
+  return getSheetData_(APP_CONFIG.SHEETS.KOMISI_PAYOUT).sort(function(left, right) {
+    return normalizeSheetDateToYmd_(right.tanggal_pengajuan || right.created_at || '').localeCompare(
+      normalizeSheetDateToYmd_(left.tanggal_pengajuan || left.created_at || ''),
+      'id-ID'
+    );
+  }).map(buildSlfPayoutBatchSummary_);
+}
+
+function getSlfPayoutBatchDetail_(payoutBatchId) {
+  var batchId = String(payoutBatchId || '').trim();
+  var batchRow;
+  var detailRows;
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, APP_CONFIG.HEADERS.KOMISI_PAYOUT);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL, APP_CONFIG.HEADERS.KOMISI_PAYOUT_DETAIL);
+
+  if (!batchId) {
+    throw new Error('Payout batch ID wajib diisi.');
+  }
+
+  batchRow = getSheetData_(APP_CONFIG.SHEETS.KOMISI_PAYOUT).find(function(row) {
+    return String(row.payout_batch_id || '').trim() === batchId;
+  }) || null;
+
+  if (!batchRow) {
+    throw new Error('Batch payout tidak ditemukan: ' + batchId);
+  }
+
+  detailRows = getSheetData_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL).filter(function(row) {
+    return String(row.payout_batch_id || '').trim() === batchId;
+  }).map(function(row) {
+    return {
+      payout_detail_id: row.payout_detail_id || '',
+      payout_batch_id: row.payout_batch_id || '',
+      no_so: row.no_so || '',
+      sales_id: row.sales_id || '',
+      sales_nama: row.sales_nama || '',
+      customer_id: row.customer_id || '',
+      nama_customer: row.nama_customer || '',
+      nominal_komisi: Number(row.nominal_komisi || 0),
+      status_detail: row.status_detail || '',
+      created_at: row.created_at || ''
+    };
+  });
+
+  return {
+    batch: buildSlfPayoutBatchSummary_(batchRow),
+    rows: detailRows
+  };
+}
+
+function createSlfPayoutBatch_(userId, payload) {
+  var currentUser = requireCurrentUserRole_(['Sales'], userId);
+  var safePayload = payload || {};
+  var now = getNowParts_();
+  var readyRows;
+  var totalKomisi;
+  var payoutBatchId;
+  var batchRow;
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, APP_CONFIG.HEADERS.KOMISI_PAYOUT);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL, APP_CONFIG.HEADERS.KOMISI_PAYOUT_DETAIL);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
+  syncCompletedSlfCashOrdersToReadyCommission_();
+
+  readyRows = getSlfReadyToPayoutOrdersBySales_(currentUser.user_id);
+  totalKomisi = readyRows.reduce(function(total, row) {
+    return total + Number(row.nominal_komisi || 0);
+  }, 0);
+
+  if (!readyRows.length) {
+    throw new Error('Belum ada komisi Siap Cair yang bisa diajukan.');
+  }
+
+  if (totalKomisi < getSlfMinPayoutAmount_()) {
+    throw new Error('Total komisi siap cair belum memenuhi minimum pencairan Rp ' + String(getSlfMinPayoutAmount_()) + '.');
+  }
+
+  payoutBatchId = generateDocNumber_('PBT');
+  batchRow = {
+    payout_batch_id: payoutBatchId,
+    tanggal_pengajuan: now.tanggal,
+    sales_id: currentUser.user_id || '',
+    sales_nama: currentUser.nama_user || '',
+    jumlah_so: readyRows.length,
+    total_komisi: totalKomisi,
+    status_payout: 'Diajukan',
+    catatan_sales: String(safePayload.catatan_sales || '').trim(),
+    catatan_approver: '',
+    dibuat_oleh: currentUser.user_id || '',
+    disetujui_oleh: '',
+    dibayar_oleh: '',
+    tanggal_dibayar: '',
+    created_at: now.tanggal + ' ' + now.jam,
+    updated_at: now.tanggal + ' ' + now.jam
+  };
+
+  appendRowByHeaders_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, batchRow);
+
+  readyRows.forEach(function(row, index) {
+    appendRowByHeaders_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL, {
+      payout_detail_id: payoutBatchId + '-D' + String(index + 1),
+      payout_batch_id: payoutBatchId,
+      no_so: row.no_so || '',
+      sales_id: row.sales_id || '',
+      sales_nama: row.sales_nama || '',
+      customer_id: row.customer_id || '',
+      nama_customer: row.nama_customer || '',
+      nominal_komisi: Number(row.nominal_komisi || 0),
+      status_detail: 'Diajukan',
+      created_at: now.tanggal + ' ' + now.jam
+    });
+
+    updateSalesOrderCommissionStatus_(row.no_so, 'Masuk Batch', {
+      catatan: 'Masuk batch payout ' + payoutBatchId,
+      payout_batch_id: payoutBatchId,
+      tanggal_masuk_batch: now.tanggal,
+      alasan_komisi: ''
+    });
+  });
+
+  return {
+    success: true,
+    payout_batch_id: payoutBatchId,
+    jumlah_so: readyRows.length,
+    total_komisi: totalKomisi,
+    rows: readyRows
+  };
+}
+
+function markSlfPayoutBatchInProcess_(userId, payload) {
+  var currentUser = requireCurrentUserRole_(['Approver'], userId);
+  var safePayload = payload || {};
+  var batchId = String(safePayload.payout_batch_id || '').trim();
+  var note = String(safePayload.catatan_approver || '').trim();
+  var now = getNowParts_();
+  var detail;
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, APP_CONFIG.HEADERS.KOMISI_PAYOUT);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL, APP_CONFIG.HEADERS.KOMISI_PAYOUT_DETAIL);
+
+  if (!batchId) {
+    throw new Error('Payout batch ID wajib diisi.');
+  }
+
+  detail = getSlfPayoutBatchDetail_(batchId);
+
+  if (normalizeText_(detail.batch.status_payout) === 'dibayar') {
+    throw new Error('Batch payout sudah dibayar dan tidak bisa diubah ke Diproses.');
+  }
+
+  updateRowByKey_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, 'payout_batch_id', batchId, {
+    status_payout: 'Diproses',
+    catatan_approver: note,
+    disetujui_oleh: currentUser.user_id || '',
+    updated_at: now.tanggal + ' ' + now.jam
+  });
+
+  detail.rows.forEach(function(row) {
+    updateRowByKey_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL, 'payout_detail_id', row.payout_detail_id, {
+      status_detail: 'Diproses'
+    });
+  });
+
+  return {
+    success: true,
+    payout_batch_id: batchId,
+    updated_count: detail.rows.length
+  };
+}
+
+function markSlfPayoutBatchPaid_(userId, payload) {
+  var currentUser = requireCurrentUserRole_(['Approver'], userId);
+  var safePayload = payload || {};
+  var batchId = String(safePayload.payout_batch_id || '').trim();
+  var note = String(safePayload.catatan_approver || '').trim();
+  var now = getNowParts_();
+  var detail;
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, APP_CONFIG.HEADERS.KOMISI_PAYOUT);
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL, APP_CONFIG.HEADERS.KOMISI_PAYOUT_DETAIL);
+
+  if (!batchId) {
+    throw new Error('Payout batch ID wajib diisi.');
+  }
+
+  detail = getSlfPayoutBatchDetail_(batchId);
+
+  if (normalizeText_(detail.batch.status_payout) === 'dibayar') {
+    return {
+      success: true,
+      payout_batch_id: batchId,
+      already_paid: true,
+      updated_count: detail.rows.length
+    };
+  }
+
+  updateRowByKey_(APP_CONFIG.SHEETS.KOMISI_PAYOUT, 'payout_batch_id', batchId, {
+    status_payout: 'Dibayar',
+    catatan_approver: note,
+    disetujui_oleh: currentUser.user_id || '',
+    dibayar_oleh: currentUser.user_id || '',
+    tanggal_dibayar: now.tanggal,
+    updated_at: now.tanggal + ' ' + now.jam
+  });
+
+  detail.rows.forEach(function(row) {
+    updateRowByKey_(APP_CONFIG.SHEETS.KOMISI_PAYOUT_DETAIL, 'payout_detail_id', row.payout_detail_id, {
+      status_detail: 'Dibayar'
+    });
+
+    updateSalesOrderCommissionStatus_(row.no_so, 'Sudah Dibayar', {
+      catatan: note || ('Komisi dibayar via batch payout ' + batchId),
+      payout_batch_id: batchId,
+      alasan_komisi: ''
+    });
+  });
+
+  return {
+    success: true,
+    payout_batch_id: batchId,
+    updated_count: detail.rows.length
+  };
+}
+
+function debugSlfCommissionReadyByNoSo_(noSo) {
+  var noSoKey = String(noSo || '').trim();
+  var salesOrder;
+  var normalizedChannel;
+  var normalizedStatusKomisi;
+  var normalizedTerm;
+  var normalizedStatusOrder;
+  var normalizedVerification;
+  var readyRows;
+
+  if (!noSoKey) {
+    throw new Error('No SO wajib diisi.');
+  }
+
+  syncCompletedSlfCashOrdersToReadyCommission_();
+  salesOrder = findSalesOrderByNoSo_(noSoKey);
+
+  if (!salesOrder) {
+    return {
+      no_so: noSoKey,
+      found: false,
+      eligible_ready_to_pay: false,
+      reason: 'sales order tidak ditemukan'
+    };
+  }
+
+  normalizedChannel = normalizeText_(salesOrder.channel_sales);
+  normalizedStatusKomisi = normalizeText_(salesOrder.status_komisi);
+  normalizedTerm = normalizeText_(salesOrder.term_pembayaran);
+  normalizedStatusOrder = normalizeText_(salesOrder.status_order);
+  normalizedVerification = normalizeText_(salesOrder.status_verifikasi_cs);
+  readyRows = getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).filter(function(row) {
+    return normalizeText_(row.channel_sales) === 'slf' &&
+      normalizeText_(row.status_komisi) === 'siap cair' &&
+      String(row.no_so || '').trim() === noSoKey;
+  });
+
+  return {
+    no_so: noSoKey,
+    found: true,
+    eligible_ready_to_pay: readyRows.length > 0,
+    checks: {
+      channel_sales_is_slf: normalizedChannel === 'slf',
+      status_komisi_is_siap_cair: normalizedStatusKomisi === 'siap cair',
+      term_pembayaran_is_cash: normalizedTerm === 'cash',
+      status_order_is_selesai: normalizedStatusOrder === 'selesai',
+      verification_is_sudah_dicek: normalizedVerification === 'sudah dicek'
+    },
+    current_values: {
+      channel_sales: salesOrder.channel_sales || '',
+      term_pembayaran: salesOrder.term_pembayaran || '',
+      status_order: salesOrder.status_order || '',
+      status_verifikasi_cs: salesOrder.status_verifikasi_cs || '',
+      status_komisi: salesOrder.status_komisi || '',
+      tanggal_status_komisi: salesOrder.tanggal_status_komisi || '',
+      tanggal_siap_cair: salesOrder.tanggal_siap_cair || '',
+      tanggal_bayar_komisi: salesOrder.tanggal_bayar_komisi || '',
+      sales_id: salesOrder.sales_id || '',
+      sales_nama: salesOrder.sales_nama || '',
+      customer_id: salesOrder.customer_id || '',
+      nama_customer: salesOrder.nama_customer_input || salesOrder.nama_customer || '',
+      estimasi_komisi: Number(salesOrder.estimasi_komisi || 0),
+      komisi_realisasi: Number(salesOrder.komisi_realisasi || 0)
+    },
+    approver_query_match_count: readyRows.length,
+    reason: readyRows.length > 0 ? 'order lolos query siap cair approver' : 'order belum lolos query siap cair approver'
+  };
 }
 
 function seedDefaultSlfCommissionMaster(userId, options) {
@@ -286,6 +663,7 @@ function upsertSlfCommissionRateFromApprover(userId, payload) {
   var currentUser = requireCurrentUserRole_(['Approver'], userId);
   var safePayload = payload || {};
   var now = getNowParts_();
+  var targetKomisiId = String(safePayload.komisi_id || '').trim();
   var jenisKomisi = String(safePayload.jenis_komisi || '').trim().toUpperCase();
   var kodeItem = String(safePayload.kode_item || '').trim().toUpperCase();
   var key = [jenisKomisi, kodeItem, String(safePayload.tanggal_berlaku_mulai || '').trim()].join('|');
@@ -296,6 +674,10 @@ function upsertSlfCommissionRateFromApprover(userId, payload) {
   ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_KOMISI_SLF, APP_CONFIG.HEADERS.MASTER_KOMISI_SLF);
 
   existing = getMasterKomisiSlf_().find(function(row) {
+    if (targetKomisiId) {
+      return String(row.komisi_id || '').trim() === targetKomisiId;
+    }
+
     return [
       String(row.jenis_komisi || row.nama_skema_komisi || '').trim().toUpperCase(),
       String(row.kode_item || row.nama_item || row.produk_komisi || '').trim().toUpperCase(),
@@ -372,6 +754,18 @@ function updateSalesOrderCommissionStatus_(noSo, nextStatus, options) {
     updates.tanggal_bayar_komisi = now.tanggal;
   }
 
+  if (Object.prototype.hasOwnProperty.call(safeOptions, 'payout_batch_id')) {
+    updates.payout_batch_id = String(safeOptions.payout_batch_id || '').trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(safeOptions, 'alasan_komisi')) {
+    updates.alasan_komisi = String(safeOptions.alasan_komisi || '').trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(safeOptions, 'tanggal_masuk_batch')) {
+    updates.tanggal_masuk_batch = String(safeOptions.tanggal_masuk_batch || '').trim();
+  }
+
   if (Object.prototype.hasOwnProperty.call(safeOptions, 'komisi_realisasi')) {
     updates.komisi_realisasi = Number(safeOptions.komisi_realisasi || 0);
   }
@@ -423,4 +817,27 @@ function markSlfCommissionPaidFromApprover(userId, payload) {
   return updateSalesOrderCommissionStatus_(noSo, 'Sudah Dibayar', {
     catatan: String(safePayload.catatan || '').trim() || 'Komisi dibayar oleh approver'
   });
+}
+
+function syncCompletedSlfCashOrdersToReadyCommission_() {
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
+
+  var updatedCount = 0;
+
+  getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).filter(function(order) {
+    return normalizeText_(order.channel_sales) === 'slf' &&
+      normalizeText_(order.term_pembayaran) === 'cash' &&
+      normalizeText_(order.status_order) === 'selesai' &&
+      normalizeText_(order.status_verifikasi_cs) === 'sudah dicek' &&
+      normalizeText_(order.status_komisi) === 'menunggu pembayaran';
+  }).forEach(function(order) {
+    updateSalesOrderCommissionStatus_(order.no_so, 'Siap Cair', {
+      catatan: 'Auto sync: order cash selesai dan sudah diverifikasi CS, komisi siap cair'
+    });
+    updatedCount += 1;
+  });
+
+  return {
+    updated_count: updatedCount
+  };
 }

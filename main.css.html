@@ -250,6 +250,333 @@
     display: block;
   }
 
+  #tab-controller {
+    gap: 18px;
+  }
+
+  #tab-controller.tab-panel.active {
+    display: grid;
+  }
+
+  #tab-controller .form-card {
+    border-radius: 0;
+    border-color: #9ca8b5;
+    background: linear-gradient(180deg, #f5f7fa 0%, #eef2f6 100%);
+    box-shadow: none;
+  }
+
+  #tab-controller .panel-subtitle,
+  #tab-controller .summary-note {
+    color: #51606f;
+  }
+
+  .controller-hero-card {
+    border-top: 3px solid #7f9db9;
+    background: linear-gradient(180deg, #f7f8fb 0%, #e7edf5 100%);
+  }
+
+  .controller-kicker {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #35506f;
+  }
+
+  .controller-status-chip {
+    padding: 8px 12px;
+    border: 1px solid #8b98a8;
+    background: linear-gradient(180deg, #ffffff 0%, #dfe6ef 100%);
+    color: #2b4157;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .controller-filter-shell {
+    display: grid;
+    gap: 12px;
+  }
+
+  .controller-preset-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .controller-preset-btn {
+    min-width: 112px;
+    border-radius: 0;
+    border-color: #94a3b3;
+    background: linear-gradient(180deg, #fafbfc 0%, #dce4ec 100%);
+    box-shadow: inset 1px 1px 0 #ffffff;
+  }
+
+  .controller-preset-btn:hover,
+  .controller-preset-btn.active {
+    border-color: #49698a;
+    color: #1f3650;
+    background: linear-gradient(180deg, #e9f0f7 0%, #c7d5e4 100%);
+  }
+
+  .controller-filter-grid {
+    align-items: end;
+  }
+
+  .controller-filter-action {
+    align-self: end;
+  }
+
+  .controller-filter-action .primary-btn {
+    min-height: 42px;
+    border-radius: 0;
+    background: linear-gradient(180deg, #ecf2f8 0%, #c8d7e6 100%);
+    color: #1f3650;
+    border-color: #74879b;
+    box-shadow: inset 1px 1px 0 #ffffff;
+  }
+
+  .controller-filter-action .primary-btn:hover {
+    background: linear-gradient(180deg, #f5f8fb 0%, #d5e1ed 100%);
+    color: #153047;
+    border-color: #61778e;
+  }
+
+  #tab-controller input {
+    border-radius: 0;
+    border-color: #94a3b3;
+    background: #ffffff;
+  }
+
+  .controller-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 0;
+    gap: 10px;
+  }
+
+  .controller-summary-card {
+    min-height: 126px;
+    border-radius: 0;
+    border-color: #95a2b1;
+    background: linear-gradient(180deg, #ffffff 0%, #e6ebf2 100%);
+    box-shadow: inset 1px 1px 0 #ffffff;
+    padding: 14px 16px;
+    gap: 8px;
+    align-content: start;
+  }
+
+  .controller-summary-card .summary-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: #5b6b7b;
+  }
+
+  .controller-summary-card .summary-value {
+    font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+    font-size: 31px;
+    letter-spacing: -0.02em;
+    color: #22384f;
+  }
+
+  .controller-summary-card .summary-note {
+    margin-top: auto;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #61707f;
+  }
+
+  .controller-panel-grid,
+  .controller-table-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .controller-kpi-snapshot-card {
+    display: grid;
+    gap: 12px;
+  }
+
+  .controller-kpi-snapshot-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 0;
+  }
+
+  .controller-kpi-snapshot-item {
+    min-height: 96px;
+    border-radius: 0;
+    border-color: #95a2b1;
+    background: linear-gradient(180deg, #ffffff 0%, #ebf0f6 100%);
+    box-shadow: inset 1px 1px 0 #ffffff;
+    padding: 12px 14px;
+    gap: 6px;
+  }
+
+  .controller-kpi-snapshot-item .summary-value {
+    font-size: 24px;
+    color: #22384f;
+  }
+
+  .controller-kpi-snapshot-item .summary-note {
+    font-size: 11px;
+    color: #61707f;
+  }
+
+  .controller-kpi-snapshot-table-wrap {
+    min-height: 0;
+  }
+
+  .controller-kpi-sales-cell strong {
+    display: block;
+    color: #22384f;
+    line-height: 1.35;
+  }
+
+  .controller-kpi-sales-cell small {
+    display: block;
+    margin-top: 3px;
+    color: #5d6d7d;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .controller-panel-card,
+  .controller-table-card,
+  .controller-footer-card {
+    border-radius: 0;
+  }
+
+  .controller-trend-strip {
+    display: block;
+  }
+
+  .controller-trend-chart-wrap {
+    width: 100%;
+    min-height: 248px;
+    border: 1px solid #b7c2cd;
+    background: #f7f9fb;
+    box-sizing: border-box;
+    padding: 8px;
+  }
+
+  .controller-trend-chart {
+    width: 100%;
+    height: 230px;
+  }
+
+  .controller-trend-fallback-note {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #556575;
+  }
+
+  .controller-trend-table-wrap,
+  .controller-table-card .table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .controller-trend-table,
+  .controller-data-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .controller-trend-table th,
+  .controller-data-table th {
+    background: linear-gradient(180deg, #d7e0ea 0%, #c0ccd8 100%);
+    color: #25394d;
+    border-bottom-color: #95a2b1;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .controller-trend-table td,
+  .controller-data-table td {
+    background: #fdfefe;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .controller-stat-list {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+  }
+
+  .controller-stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #98a5b5;
+    background: linear-gradient(180deg, #ffffff 0%, #e8edf4 100%);
+    box-shadow: inset 1px 1px 0 #ffffff;
+  }
+
+  .controller-stat-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .controller-stat-item strong,
+  .controller-stat-value {
+    color: #22384f;
+  }
+
+  .controller-stat-item strong {
+    display: block;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .controller-stat-item small {
+    display: block;
+    margin-top: 4px;
+    color: #5d6d7d;
+    line-height: 1.35;
+    font-size: 11px;
+  }
+
+  .controller-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    white-space: nowrap;
+    padding-left: 12px;
+    flex: 0 0 auto;
+  }
+
+  .controller-table-card .panel-header {
+    margin-bottom: 10px;
+  }
+
+  .controller-table-card .table-wrap {
+    min-height: 268px;
+    border-color: #98a5b5;
+    background: #fff;
+  }
+
+  .controller-footer-card {
+    padding-top: 14px;
+    padding-bottom: 14px;
+    background: linear-gradient(180deg, #eef3f8 0%, #dde5ee 100%);
+  }
+
+  .controller-footer-card small {
+    color: #425466;
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
   .order-form {
     display: grid;
     gap: 16px;
@@ -333,6 +660,14 @@
     align-items: flex-start;
     gap: 12px;
     margin-bottom: 14px;
+  }
+
+  .modal-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .section-header {
@@ -434,6 +769,37 @@
 
   .commission-action-cell .ghost-btn {
     min-width: 170px;
+  }
+
+  .sales-payout-summary-grid {
+    margin-top: 16px;
+    margin-bottom: 12px;
+  }
+
+  #salesCommissionSummarySection .action-row {
+    margin-top: 12px;
+    justify-content: flex-start;
+  }
+
+  #salesPayoutInfoText {
+    margin-bottom: 14px;
+  }
+
+  .approver-payout-filter-grid {
+    margin-top: 12px;
+    margin-bottom: 12px;
+    max-width: 240px;
+  }
+
+  .approver-payout-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 16px;
+    margin-bottom: 16px;
+  }
+
+  #approverPayoutBatchTableBody .commission-action-cell .ghost-btn,
+  #approverPayoutBatchTableBody .commission-action-cell .primary-btn {
+    min-width: 120px;
   }
 
   #approver-view-commission .panel-header {
@@ -722,6 +1088,18 @@
 
   .customer-info strong {
     color: var(--sap-muted);
+  }
+
+  .payout-batch-detail-table-wrap {
+    margin-top: 16px;
+  }
+
+  .payout-action-summary {
+    margin-top: 8px;
+  }
+
+  .payout-action-field {
+    margin-top: 16px;
   }
 
   #csRevisionItemsBody input[type="number"] {
@@ -1047,10 +1425,31 @@
 
   .delivery-filter-actions {
     align-items: center;
+    justify-content: flex-end;
+    margin-left: auto;
+    width: min(100%, 620px);
+    flex-wrap: nowrap;
+  }
+
+  .delivery-filter-actions input[type="search"] {
+    flex: 1 1 280px;
+    min-width: 280px;
+    max-width: 320px;
+    min-height: 42px;
+    padding: 10px 14px;
   }
 
   .delivery-filter-actions input[type="date"] {
-    min-width: 160px;
+    flex: 0 0 170px;
+    min-width: 170px;
+    min-height: 42px;
+    padding: 10px 12px;
+  }
+
+  .delivery-filter-actions .ghost-btn {
+    flex: 0 0 auto;
+    min-height: 42px;
+    white-space: nowrap;
   }
 
   .table-pagination {
@@ -1335,7 +1734,7 @@
 
   button:disabled {
     opacity: 0.6;
-    cursor: wait;
+    cursor: not-allowed;
   }
 
   .primary-btn,
@@ -1445,6 +1844,17 @@
       grid-template-columns: 1fr;
     }
 
+    .controller-kpi-grid,
+    .controller-kpi-snapshot-grid,
+    .controller-panel-grid,
+    .controller-table-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .controller-trend-strip {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
     .table-pagination {
       align-items: stretch;
     }
@@ -1452,6 +1862,16 @@
     .table-pagination-actions {
       width: 100%;
       justify-content: space-between;
+    }
+
+    .delivery-filter-actions {
+      width: 100%;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
+
+    .delivery-filter-actions input[type="search"] {
+      max-width: 100%;
     }
 
     .approver-summary-grid {
@@ -1541,6 +1961,19 @@
       grid-template-columns: 1fr;
     }
 
+    .controller-kpi-grid,
+    .controller-kpi-snapshot-grid,
+    .controller-panel-grid,
+    .controller-table-grid,
+    .controller-trend-strip {
+      grid-template-columns: 1fr;
+    }
+
+    .controller-stat-item {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
     .submit-commission-grid {
       grid-template-columns: 1fr;
     }
@@ -1555,6 +1988,11 @@
 
     .panel-header {
       flex-direction: column;
+    }
+
+    .modal-header-actions {
+      width: 100%;
+      justify-content: flex-start;
     }
 
     .section-header {

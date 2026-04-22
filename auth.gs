@@ -45,6 +45,7 @@ function getUserProfileByUserId(userId) {
 
 function ensureMasterUserPasswords_() {
   ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_USER, APP_CONFIG.HEADERS.MASTER_USER);
+  ensureDefaultControllerUser_();
 
   getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).forEach(function(user) {
     var userId = String(user.user_id || '').trim();
@@ -102,12 +103,8 @@ function requireAuthorizedUser_(userId) {
 
 function requireCurrentUserRole_(allowedRoles, userId) {
   var user = requireAuthorizedUser_(userId);
-  var roleKeys = (allowedRoles || []).map(function(role) {
-    return normalizeRoleKey_(role);
-  });
-  var userRoleKey = normalizeRoleKey_(user.role);
 
-  if (roleKeys.indexOf(userRoleKey) === -1) {
+  if (!userHasAllowedRole_(user, allowedRoles)) {
     throw new Error('Akses ditolak. Role Anda (' + (user.role || '-') + ') tidak memiliki otorisasi untuk proses ini.');
   }
 
@@ -135,4 +132,39 @@ function normalizeRoleKey_(role) {
   }
 
   return value.replace(/[^a-z0-9]+/g, '_');
+}
+
+function userHasAllowedRole_(user, allowedRoles) {
+  var roleKeys = (allowedRoles || []).map(function(role) {
+    return normalizeRoleKey_(role);
+  });
+  var userRoleKey = normalizeRoleKey_(user && user.role);
+
+  return roleKeys.indexOf(userRoleKey) !== -1;
+}
+
+function ensureDefaultControllerUser_() {
+  var controllerUserId = 'CTR1';
+  var existingController = getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).find(function(user) {
+    return normalizeText_(user.user_id) === normalizeText_(controllerUserId);
+  });
+
+  if (existingController) {
+    return;
+  }
+
+  appendRowByHeaders_(APP_CONFIG.SHEETS.MASTER_USER, {
+    user_id: controllerUserId,
+    nama_user: 'Controller',
+    role: 'Controller',
+    no_hp: '',
+    email: '',
+    password: controllerUserId,
+    status_aktif: 'Aktif',
+    tipe_sales: '',
+    kode_sales: '',
+    channel_sales_default: '',
+    aktif_komisi: '',
+    catatan_user: 'Auto-seeded default controller user'
+  });
 }

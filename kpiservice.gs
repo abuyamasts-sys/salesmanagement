@@ -369,8 +369,10 @@ function getSalesKpiSummary_(bulan, salesId) {
     remaining_qty: remaining,
     achieved_percent: percent,
     orders: rows.map(function(row) {
+      var salesOrder = findSalesOrderByNoSo_(String(row.no_so || '').trim()) || {};
       return {
         no_so: String(row.no_so || '').trim(),
+        nama_customer: String(salesOrder.nama_customer_input || salesOrder.nama_customer || '').trim(),
         qty_total: Number(row.qty_total || 0),
         tanggal_siap_kirim: String(row.tanggal_siap_kirim || '').trim()
       };

@@ -7,6 +7,8 @@ var APP_CONFIG = {
     MASTER_USER: 'MASTER_USER',
     MASTER_KOMISI_SLF: 'MASTER_KOMISI_SLF',
     KOMISI_SLF_MUTASI: 'KOMISI_SLF_MUTASI',
+    KOMISI_PAYOUT: 'KOMISI_PAYOUT',
+    KOMISI_PAYOUT_DETAIL: 'KOMISI_PAYOUT_DETAIL',
     SALES_ORDER: 'SALES_ORDER',
     SALES_ORDER_DETAIL: 'SALES_ORDER_DETAIL',
     APPROVAL_ORDER: 'APPROVAL_ORDER',
@@ -24,7 +26,10 @@ var APP_CONFIG = {
     FOLDER_NAME: 'BACKUP_MVP_SALES_ORDER',
     FILE_PREFIX: 'BACKUP_MVP_SALES_ORDER'
   },
-  ROLES: ['Sales', 'CS/Admin', 'Approver'],
+  COMMISSION: {
+    SLF_MIN_PAYOUT: 10000
+  },
+  ROLES: ['Sales', 'CS/Admin', 'Approver', 'Controller'],
   CUSTOMER_STATUS: ['Baru', 'Aktif', 'Menunggak', 'Ditahan'],
   PAYMENT_STATUS: ['Lancar', 'Menunggak'],
   ORDER_STATUS: [
@@ -65,6 +70,8 @@ var APP_CONFIG = {
   OPTIONAL_SHEETS: [
     'MASTER_KOMISI_SLF',
     'KOMISI_SLF_MUTASI',
+    'KOMISI_PAYOUT',
+    'KOMISI_PAYOUT_DETAIL',
     'SALES_ORDER_DETAIL',
     'LOG_STATUS_ORDER',
     'LOG_REVISI_ORDER',
@@ -167,6 +174,35 @@ var APP_CONFIG = {
       'tanggal_bayar_komisi',
       'catatan_komisi'
     ],
+    KOMISI_PAYOUT: [
+      'payout_batch_id',
+      'tanggal_pengajuan',
+      'sales_id',
+      'sales_nama',
+      'jumlah_so',
+      'total_komisi',
+      'status_payout',
+      'catatan_sales',
+      'catatan_approver',
+      'dibuat_oleh',
+      'disetujui_oleh',
+      'dibayar_oleh',
+      'tanggal_dibayar',
+      'created_at',
+      'updated_at'
+    ],
+    KOMISI_PAYOUT_DETAIL: [
+      'payout_detail_id',
+      'payout_batch_id',
+      'no_so',
+      'sales_id',
+      'sales_nama',
+      'customer_id',
+      'nama_customer',
+      'nominal_komisi',
+      'status_detail',
+      'created_at'
+    ],
     SALES_ORDER: [
       'no_so',
       'tanggal_order',
@@ -231,7 +267,10 @@ var APP_CONFIG = {
       'tanggal_status_komisi',
       'tanggal_siap_cair',
       'tanggal_bayar_komisi',
-      'catatan_komisi'
+      'catatan_komisi',
+      'payout_batch_id',
+      'alasan_komisi',
+      'tanggal_masuk_batch'
     ],
     SALES_ORDER_DETAIL: [
       'detail_id',

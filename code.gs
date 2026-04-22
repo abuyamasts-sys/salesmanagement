@@ -52,6 +52,7 @@ function toClientValue_(value) {
 
 function getSalesOrderFormData(userId) {
   requireCurrentUserRole_(['Sales'], userId);
+  syncCompletedSlfCashOrdersToReadyCommission_();
   var currentUser = getCurrentUserProfile(userId);
   var customers = currentUser.is_freelance
     ? getCustomersOwnedBySales_(currentUser.user_id).filter(function(customer) {
@@ -66,6 +67,8 @@ function getSalesOrderFormData(userId) {
     users: [currentUser],
     products: getProductCatalog_(),
     salesHistoryOrders: getSalesOrderHistoryForSales_(currentUser.user_id, 30),
+    salesPayoutBatches: listSlfPayoutBatchesForSales_(currentUser.user_id),
+    slfMinPayout: getSlfMinPayoutAmount_(),
     deliveryPriority: APP_CONFIG.DELIVERY_PRIORITY,
     customerType: APP_CONFIG.CUSTOMER_TYPE
   });
@@ -143,17 +146,21 @@ function loginFromDashboard(formData) {
 function getApproverDashboardData(userId) {
   requireCurrentUserRole_(['Approver'], userId);
   maybeBackfillCompletedOrdersVerification_();
+  syncCompletedSlfCashOrdersToReadyCommission_();
   var currentUser = getCurrentUserProfile(userId);
   var backupData = getBackupDashboardData_();
   var approvals = getSheetData_(APP_CONFIG.SHEETS.APPROVAL_ORDER).filter(function(row) {
     return normalizeText_(row.status_approval) === 'menunggu';
   });
   var exportOrders = getReadyKledoExportOrders_();
+  var approverCommissionData = getApproverCommissionSlfData(userId);
 
   return toClientValue_({
     currentUser: currentUser,
     approvers: [currentUser],
     products: getProductCatalog_(),
+    approverCommissionMaster: approverCommissionData.master_komisi_slf || [],
+    approverCommissionReadyToPay: approverCommissionData.ready_to_pay || [],
     exportOrders: exportOrders,
     backupSummary: backupData.summary,
     backupHistory: backupData.history,
@@ -297,6 +304,7 @@ function maybeBackfillCompletedOrdersVerification_() {
 function getAdminDashboardData(userId) {
   requireCurrentUserRole_(['CS/Admin'], userId);
   maybeBackfillCompletedOrdersVerification_();
+  syncCompletedSlfCashOrdersToReadyCommission_();
   var currentUser = getCurrentUserProfile(userId);
   var salesOrders = getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER);
   var deliveryOrders = getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN);
@@ -721,6 +729,55 @@ function updateProductBasePriceFromApprover(userId, formData) {
   return toClientValue_(updateProductBasePrice_(kodeItem, hargaDasar, currentUser));
 }
 
+function getApproverCommissionSlfDataFromDashboard(userId) {
+  requireCurrentUserRole_(['Approver'], userId);
+  return toClientValue_(getApproverCommissionSlfData(userId));
+}
+
+function submitSlfPayoutRequestFromDashboard(userId, formData) {
+  requireCurrentUserRole_(['Sales'], userId);
+  return toClientValue_(createSlfPayoutBatch_(userId, formData || {}));
+}
+
+function getSalesSlfPayoutBatchesFromDashboard(userId) {
+  var currentUser = requireCurrentUserRole_(['Sales'], userId);
+  return toClientValue_({
+    min_payout: getSlfMinPayoutAmount_(),
+    batches: listSlfPayoutBatchesForSales_(currentUser.user_id),
+    ready_rows: getSlfReadyToPayoutOrdersBySales_(currentUser.user_id)
+  });
+}
+
+function getApproverSlfPayoutBatchesFromDashboard(userId) {
+  requireCurrentUserRole_(['Approver'], userId);
+  return toClientValue_({
+    min_payout: getSlfMinPayoutAmount_(),
+    batches: listSlfPayoutBatchesForApprover_()
+  });
+}
+
+function getSlfPayoutBatchDetailFromDashboard(userId, payoutBatchId) {
+  var currentUser = requireCurrentUserRole_(['Sales', 'Approver'], userId);
+  var detail = getSlfPayoutBatchDetail_(payoutBatchId);
+
+  if (normalizeRoleKey_(currentUser.role) === 'sales' &&
+      String(detail.batch.sales_id || '').trim() !== String(currentUser.user_id || '').trim()) {
+    throw new Error('Akses ditolak. Batch payout ini bukan milik Anda.');
+  }
+
+  return toClientValue_(detail);
+}
+
+function markSlfPayoutBatchPaidFromDashboard(userId, formData) {
+  requireCurrentUserRole_(['Approver'], userId);
+  return toClientValue_(markSlfPayoutBatchPaid_(userId, formData || {}));
+}
+
+function markSlfPayoutBatchInProcessFromDashboard(userId, formData) {
+  requireCurrentUserRole_(['Approver'], userId);
+  return toClientValue_(markSlfPayoutBatchInProcess_(userId, formData || {}));
+}
+
 function createSuratJalanFromDashboard(userId, formData) {
   requireCurrentUserRole_(['CS/Admin'], userId);
 
@@ -992,9 +1049,27 @@ function getSalesKpiSummaryFromDashboard(userId, formData) {
 }
 
 function testGetApproverDashboardData() {
-  console.log(JSON.stringify(getApproverDashboardData('U003')));
+  console.log(JSON.stringify(getApproverDashboardData('APV44')));
 }
 
 function testGetAdminDashboardData() {
-  console.log(JSON.stringify(getAdminDashboardData('U020')));
+  console.log(JSON.stringify(getAdminDashboardData('APV44')));
+}
+
+function testDebugSlfCommissionReadyByNoSo() {
+  console.log(JSON.stringify(debugSlfCommissionReadyByNoSo_('SO-20260420123930')));
+}
+
+function testGetApproverCommissionSlfDataFromDashboard() {
+  console.log(JSON.stringify(getApproverCommissionSlfDataFromDashboard('APV44')));
+}
+
+function testGetApproverCommissionReadySummary() {
+  var payload = getApproverCommissionSlfDataFromDashboard('APV44') || {};
+  var rows = Array.isArray(payload.ready_to_pay) ? payload.ready_to_pay : [];
+
+  console.log(JSON.stringify({
+    ready_to_pay_count: rows.length,
+    ready_to_pay_rows: rows
+  }));
 }

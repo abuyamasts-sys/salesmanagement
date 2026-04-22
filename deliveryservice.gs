@@ -264,6 +264,7 @@ function completeOrder(noSo, userId, catatanKirim) {
   var salesOrder = findSalesOrderByNoSo_(noSo);
   var result;
   var now = getNowParts_();
+  var isSlfCashOrder;
 
   if (!salesOrder) {
     throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSo);
@@ -279,6 +280,17 @@ function completeOrder(noSo, userId, catatanKirim) {
     status_export_kledo: 'Siap Export',
     tanggal_selesai: now.tanggal
   });
+
+  isSlfCashOrder = normalizeText_(salesOrder.channel_sales) === 'slf' &&
+    normalizeText_(salesOrder.term_pembayaran) === 'cash';
+
+  if (isSlfCashOrder) {
+    updateSalesOrderCommissionStatus_(noSo, 'Siap Cair', {
+      catatan: 'Order cash selesai dan sudah diverifikasi CS, komisi siap cair'
+    });
+    result.status_komisi = 'Siap Cair';
+    result.tanggal_siap_cair = now.tanggal;
+  }
 
   result.status_export_kledo = 'Siap Export';
   result.tanggal_selesai = now.tanggal;
