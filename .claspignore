@@ -1,0 +1,13 @@
+.git/**
+.github/**
+.vscode/**
+node_modules/**
+docs/**
+exports/**
+AGENTS.md
+package.json
+package-lock.json
+.gitignore
+.claspignore
+README.md
+*.md

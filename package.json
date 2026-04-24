@@ -1,0 +1,27 @@
+{
+  "name": "sales-management",
+  "version": "1.0.0",
+  "description": "MVP Sales Order distribusi air minum berbasis Google Apps Script",
+  "scripts": {
+    "clasp:login": "clasp login",
+    "clasp:status": "clasp status",
+    "clasp:push": "clasp push",
+    "clasp:pull": "clasp pull",
+    "clasp:open": "clasp open"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abuyamasts-sys/salesmanagement.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/abuyamasts-sys/salesmanagement/issues"
+  },
+  "homepage": "https://github.com/abuyamasts-sys/salesmanagement#readme",
+  "devDependencies": {
+    "@google/clasp": "^3.3.0"
+  }
+}

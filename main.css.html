@@ -1769,6 +1769,37 @@
     white-space: nowrap;
   }
 
+  .print-actions-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+  }
+
+  .print-action-btn-primary {
+    background: #0a6ed1;
+    color: #fff;
+    border: 1px solid #0a6ed1;
+    font-weight: 700;
+    min-width: 104px;
+    box-shadow: 0 4px 10px rgba(10, 110, 209, 0.16);
+  }
+
+  .print-action-btn-primary:hover {
+    background: #085caf;
+    border-color: #085caf;
+  }
+
+  .inline-actions .print-action-btn {
+    min-height: 34px;
+  }
+
+  .inline-actions .print-action-btn-primary {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
   .preview-btn {
     background: #edf8f1;
     color: var(--sap-success);
@@ -1816,6 +1847,16 @@
 
   #tab-sales .detail-order-action-row {
     justify-content: flex-start;
+  }
+
+  @media (max-width: 960px) {
+    .print-actions-group {
+      gap: 5px;
+    }
+
+    .print-action-btn-primary {
+      min-width: 100%;
+    }
   }
 
   @media (max-width: 720px) {
