@@ -15,6 +15,10 @@ function getCurrentUserProfile(userId) {
       tipe_sales: '',
       kode_sales: '',
       channel_sales_default: '',
+      bank_nama: '',
+      bank_no_rekening: '',
+      bank_nama_pemilik: '',
+      bank_account_complete: false,
       is_freelance: false,
       authorized: false
     };
@@ -34,6 +38,14 @@ function getCurrentUserProfile(userId) {
     tipe_sales: tipeSales,
     kode_sales: String(user.kode_sales || '').trim(),
     channel_sales_default: channelSalesDefault,
+    bank_nama: String(user.bank_nama || '').trim(),
+    bank_no_rekening: String(user.bank_no_rekening || '').trim(),
+    bank_nama_pemilik: String(user.bank_nama_pemilik || '').trim(),
+    bank_account_complete: !!(
+      String(user.bank_nama || '').trim() &&
+      String(user.bank_no_rekening || '').trim() &&
+      String(user.bank_nama_pemilik || '').trim()
+    ),
     is_freelance: isFreelance,
     authorized: true
   };
@@ -164,6 +176,9 @@ function ensureDefaultControllerUser_() {
     tipe_sales: '',
     kode_sales: '',
     channel_sales_default: '',
+    bank_nama: '',
+    bank_no_rekening: '',
+    bank_nama_pemilik: '',
     aktif_komisi: '',
     catatan_user: 'Auto-seeded default controller user'
   });

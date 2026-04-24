@@ -80,6 +80,7 @@
   var controllerTrendChartLoadState_ = 'idle';
   var controllerTrendChartReadyCallbacks_ = [];
   var controllerTrendChartResizeTimer_ = null;
+  var toastHideTimers_ = {};
 
   window.addEventListener('error', function(event) {
     try {
@@ -192,6 +193,15 @@
     safeBindById_('saveApproverCommissionBtn', 'click', handleSaveApproverCommission_);
     safeBindById_('cancelApproverCommissionEditBtn', 'click', resetApproverCommissionForm_);
     safeBindById_('submitSalesPayoutBtn', 'click', handleSubmitSalesPayout_);
+    safeBindById_('openSalesBankAccountBtn', 'click', openSalesBankAccountModal_);
+    safeBindById_('saveSalesBankAccountBtn', 'click', handleSaveSalesBankAccount_);
+    safeBindById_('closeSalesBankAccountBtn', 'click', closeSalesBankAccountModal_);
+    safeBindById_('cancelSalesBankAccountBtn', 'click', closeSalesBankAccountModal_);
+    safeBindById_('salesBankAccountBackdrop', 'click', function(event) {
+      if (event.target.id === 'salesBankAccountBackdrop') {
+        closeSalesBankAccountModal_();
+      }
+    });
     safeBindById_('approverPayoutStatusFilter', 'change', handleApproverPayoutStatusFilterChange_);
     safeBindById_('approverCommissionItem', 'change', handleApproverCommissionItemChange_);
     safeBindById_('refreshApproverKpiBtn', 'click', loadApproverKpiData_);
@@ -2114,6 +2124,11 @@
 
     if (!ensureAuthorizedSession_()) return;
 
+    if (!isSalesBankAccountComplete_()) {
+      renderResult_('Rekening payout belum lengkap. Isi dan simpan rekening pencairan komisi terlebih dahulu.', true);
+      return;
+    }
+
     if (readyAmount < Number(appState.slfMinPayout || 0)) {
       renderResult_('Saldo siap cair belum memenuhi minimum pencairan ' + formatCurrencyInput_(appState.slfMinPayout || 0) + '.', true);
       return;
@@ -2128,8 +2143,63 @@
       note_value: 'Mohon diproses ke rekening yang terdaftar',
       reference_text: String(appState.salesPayoutReadyRows.length || 0) + ' order siap cair',
       amount_text: formatCurrencyInput_(readyAmount),
+      account_text: getSalesBankAccountDisplay_(),
       save_label: 'Ajukan Pencairan'
     });
+  }
+
+  function handleSaveSalesBankAccount_() {
+    var payload;
+
+    if (!ensureAuthorizedSession_()) return;
+
+    payload = {
+      bank_nama: String(getFieldValue_('salesBankName') || '').trim(),
+      bank_no_rekening: String(getFieldValue_('salesBankAccountNumber') || '').trim(),
+      bank_nama_pemilik: String(getFieldValue_('salesBankAccountHolder') || '').trim()
+    };
+
+    if (!payload.bank_nama || !payload.bank_no_rekening || !payload.bank_nama_pemilik) {
+      renderResult_('Data rekening wajib lengkap: nama bank, nomor rekening, dan nama pemilik rekening.', true);
+      return;
+    }
+
+    setStatusText_('Menyimpan rekening payout sales...');
+    google.script.run
+      .withSuccessHandler(function(profile) {
+        syncCurrentUser_(profile || {});
+        renderSalesBankAccountFields_();
+        renderSalesBankAccountSummary_();
+        renderSalesPayoutSection_();
+        closeSalesBankAccountModal_();
+        setStatusText_('Rekening payout berhasil disimpan');
+        showToast_('Rekening berhasil disimpan.', 'success', 'Rekening Tersimpan');
+        renderResult_('Rekening payout berhasil disimpan dan siap dipakai untuk pengajuan pencairan.', false);
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal menyimpan rekening payout');
+        showToast_('Rekening belum berhasil disimpan.', 'warning', 'Simpan Gagal');
+        renderResult_('Gagal menyimpan rekening payout: ' + (error && error.message ? error.message : error), true);
+      })
+      .updateSalesBankAccountFromDashboard(appState.currentUser.user_id, payload);
+  }
+
+  function openSalesBankAccountModal_() {
+    var backdrop = document.getElementById('salesBankAccountBackdrop');
+
+    renderSalesBankAccountFields_();
+    if (backdrop) {
+      backdrop.classList.remove('hidden');
+    }
+  }
+
+  function closeSalesBankAccountModal_() {
+    var backdrop = document.getElementById('salesBankAccountBackdrop');
+
+    renderSalesBankAccountFields_();
+    if (backdrop) {
+      backdrop.classList.add('hidden');
+    }
   }
 
   function handleMarkSlfPayoutBatchPaid_(payoutBatchId) {
@@ -2155,6 +2225,11 @@
       note_value: 'Payout komisi dibayar',
       reference_text: batchId,
       amount_text: formatCurrencyInput_(batchRow ? Number(batchRow.total_komisi || 0) : 0),
+      account_text: batchRow ? [
+        batchRow.bank_nama || '-',
+        batchRow.bank_no_rekening || '-',
+        batchRow.bank_nama_pemilik || '-'
+      ].join(' | ') : '-',
       save_label: 'Tandai Sudah Dibayar'
     });
   }
@@ -2182,6 +2257,11 @@
       note_value: 'Batch payout sedang diproses',
       reference_text: batchId,
       amount_text: formatCurrencyInput_(batchRow ? Number(batchRow.total_komisi || 0) : 0),
+      account_text: batchRow ? [
+        batchRow.bank_nama || '-',
+        batchRow.bank_no_rekening || '-',
+        batchRow.bank_nama_pemilik || '-'
+      ].join(' | ') : '-',
       save_label: 'Tandai Diproses'
     });
   }
@@ -2226,6 +2306,9 @@
     setText_('payoutBatchDetailStatus', String(batch.status_payout || '-'));
     setText_('payoutBatchDetailCount', String(batch.jumlah_so || rows.length || 0));
     setText_('payoutBatchDetailTotal', formatCurrencyInput_(batch.total_komisi || 0));
+    setText_('payoutBatchDetailBankName', String(batch.bank_nama || '-'));
+    setText_('payoutBatchDetailBankAccount', String(batch.bank_no_rekening || '-'));
+    setText_('payoutBatchDetailBankHolder', String(batch.bank_nama_pemilik || '-'));
     setText_('payoutBatchDetailSalesNote', String(batch.catatan_sales || '-'));
     setText_('payoutBatchDetailApproverNote', String(batch.catatan_approver || '-'));
 
@@ -2288,6 +2371,7 @@
 
     copyTextToClipboard_(summaryText, function() {
       setStatusText_('Ringkasan batch payout berhasil disalin');
+      showToast_('Ringkasan batch payout berhasil disalin.', 'success', 'Ringkasan Disalin');
       if (copyBtn) {
         copyBtn.textContent = 'Tersalin';
         window.setTimeout(function() {
@@ -2300,6 +2384,7 @@
       }
     }, function() {
       setStatusText_('Gagal menyalin ringkasan batch otomatis');
+      showToast_('Ringkasan belum berhasil disalin.', 'warning', 'Salin Gagal');
       if (copyBtn) {
         copyBtn.disabled = false;
         copyBtn.textContent = 'Copy Ringkasan';
@@ -2334,6 +2419,9 @@
       'Status: ' + String(batch.status_payout || '-'),
       'Jumlah SO: ' + String(batch.jumlah_so || rows.length || 0),
       'Total Komisi: ' + formatCurrencyInput_(batch.total_komisi || 0),
+      'Bank Tujuan: ' + String(batch.bank_nama || '-'),
+      'No. Rekening: ' + String(batch.bank_no_rekening || '-'),
+      'Nama Rekening: ' + String(batch.bank_nama_pemilik || '-'),
       'Catatan Sales: ' + String(batch.catatan_sales || '-'),
       'Catatan Approver: ' + String(batch.catatan_approver || '-'),
       '',
@@ -2356,6 +2444,7 @@
     setText_('payoutActionSubtitle', String(draft.subtitle || 'Isi catatan proses payout komisi di bawah ini.'));
     setText_('payoutActionReference', String(draft.reference_text || '-'));
     setText_('payoutActionAmount', String(draft.amount_text || '-'));
+    setText_('payoutActionAccountInfo', String(draft.account_text || '-'));
     setText_('payoutActionNoteLabel', String(draft.note_label || 'Catatan'));
     setFieldValue_('payoutActionNote', String(draft.note_value || '').trim());
 
@@ -2425,10 +2514,16 @@
         .withSuccessHandler(function(result) {
           closePayoutActionModal_();
           setStatusText_('Pengajuan payout berhasil dibuat');
+          showToast_('Pengajuan pencairan berhasil dibuat.', 'success', 'Payout Diajukan');
           renderResult_(
             'Pengajuan pencairan berhasil dibuat.\nNo Batch: ' + String(result.payout_batch_id || '-') +
             '\nJumlah SO: ' + String(result.jumlah_so || 0) +
-            '\nTotal: ' + formatCurrencyInput_(result.total_komisi || 0),
+            '\nTotal: ' + formatCurrencyInput_(result.total_komisi || 0) +
+            '\nRekening: ' + String([
+              result.bank_nama || '-',
+              result.bank_no_rekening || '-',
+              result.bank_nama_pemilik || '-'
+            ].join(' | ')),
             false
           );
           loadSalesData_();
@@ -2442,6 +2537,7 @@
             noteEl.disabled = false;
           }
           setStatusText_('Gagal mengajukan payout komisi');
+          showToast_('Pengajuan pencairan gagal diproses.', 'warning', 'Payout Gagal');
           renderResult_('Gagal mengajukan payout komisi: ' + (error && error.message ? error.message : error), true);
         })
         .submitSlfPayoutRequestFromDashboard(appState.currentUser.user_id, {
@@ -2456,6 +2552,7 @@
         .withSuccessHandler(function(result) {
           closePayoutActionModal_();
           setStatusText_('Batch payout berhasil ditandai dibayar');
+          showToast_('Batch payout ditandai sudah dibayar.', 'success', 'Status Diperbarui');
           renderResult_(
             'Batch payout berhasil ditandai sudah dibayar.\nNo Batch: ' + String(result.payout_batch_id || draft.payout_batch_id || '-') +
             '\nJumlah SO: ' + String(result.updated_count || 0),
@@ -2472,6 +2569,7 @@
             noteEl.disabled = false;
           }
           setStatusText_('Gagal menyimpan pembayaran batch payout');
+          showToast_('Status batch belum berhasil diperbarui.', 'warning', 'Update Gagal');
           renderResult_('Gagal menyimpan pembayaran batch payout: ' + (error && error.message ? error.message : error), true);
         })
         .markSlfPayoutBatchPaidFromDashboard(appState.currentUser.user_id, {
@@ -2487,6 +2585,7 @@
         .withSuccessHandler(function(result) {
           closePayoutActionModal_();
           setStatusText_('Batch payout ditandai sedang diproses');
+          showToast_('Batch payout ditandai sedang diproses.', 'success', 'Status Diperbarui');
           renderResult_(
             'Batch payout ditandai sedang diproses.\nNo Batch: ' + String(result.payout_batch_id || draft.payout_batch_id || '-') +
             '\nJumlah SO: ' + String(result.updated_count || 0),
@@ -2503,6 +2602,7 @@
             noteEl.disabled = false;
           }
           setStatusText_('Gagal mengubah status batch payout');
+          showToast_('Status batch belum berhasil diperbarui.', 'warning', 'Update Gagal');
           renderResult_('Gagal mengubah status batch payout: ' + (error && error.message ? error.message : error), true);
         })
         .markSlfPayoutBatchInProcessFromDashboard(appState.currentUser.user_id, {
@@ -4099,21 +4199,26 @@
     var payoutBatches = appState.salesPayoutBatches || [];
     var readyAmount = getSalesReadyPayoutAmount_();
     var minPayout = Number(appState.slfMinPayout || 0);
-    var isEligible = readyAmount >= minPayout && readyRows.length > 0;
+    var hasBankAccount = isSalesBankAccountComplete_();
+    var isEligible = hasBankAccount && readyAmount >= minPayout && readyRows.length > 0;
 
     setText_('salesPayoutReadyAmount', formatCurrencyInput_(readyAmount));
     setText_('salesPayoutReadyCount', String(readyRows.length) + ' order siap masuk batch');
     setText_('salesPayoutMinAmount', formatCurrencyInput_(minPayout));
 
     if (infoText) {
-      infoText.textContent = isEligible
+      infoText.textContent = !hasBankAccount
+        ? 'Lengkapi rekening payout Anda terlebih dahulu agar pengajuan pencairan punya tujuan transfer yang jelas.'
+        : isEligible
         ? 'Saldo siap cair sudah memenuhi minimum. Anda bisa mengajukan payout batch.'
         : ('Minimum pencairan ' + formatCurrencyInput_(minPayout) + '. Saldo siap cair saat ini ' + formatCurrencyInput_(readyAmount) + '.');
     }
 
     if (submitBtn) {
       submitBtn.disabled = !isEligible;
-      submitBtn.title = isEligible
+      submitBtn.title = !hasBankAccount
+        ? 'Lengkapi rekening payout terlebih dahulu'
+        : isEligible
         ? 'Ajukan semua komisi siap cair ke batch payout'
         : ('Belum bisa diajukan. Minimum pencairan ' + formatCurrencyInput_(minPayout) + ', saldo siap cair saat ini ' + formatCurrencyInput_(readyAmount) + '.');
     }
@@ -5534,6 +5639,64 @@
     globalResultContent.className = className;
   }
 
+  function showToast_(message, type, title) {
+    var stack = document.getElementById('appToastStack');
+    var toastId = 'toast-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 10000));
+    var toast;
+    var tone = String(type || 'info').trim() || 'info';
+
+    if (!stack || !message) {
+      return;
+    }
+
+    toast = document.createElement('div');
+    toast.className = 'app-toast app-toast-' + tone;
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('data-toast-id', toastId);
+    toast.innerHTML =
+      '<div class="app-toast-title">' + escapeHtml_(String(title || getToastDefaultTitle_(tone))) + '</div>' +
+      '<div class="app-toast-message">' + escapeHtml_(String(message || '')) + '</div>';
+
+    stack.appendChild(toast);
+
+    toastHideTimers_[toastId] = window.setTimeout(function() {
+      removeToast_(toastId);
+    }, 2800);
+  }
+
+  function removeToast_(toastId) {
+    var stack = document.getElementById('appToastStack');
+    var toast;
+
+    if (!stack || !toastId) {
+      return;
+    }
+
+    if (toastHideTimers_[toastId]) {
+      clearTimeout(toastHideTimers_[toastId]);
+      delete toastHideTimers_[toastId];
+    }
+
+    toast = stack.querySelector('[data-toast-id="' + toastId + '"]');
+    if (toast && toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  }
+
+  function getToastDefaultTitle_(type) {
+    var tone = String(type || 'info').trim().toLowerCase();
+
+    if (tone === 'success') {
+      return 'Berhasil';
+    }
+
+    if (tone === 'warning') {
+      return 'Perlu Perhatian';
+    }
+
+    return 'Info';
+  }
+
   function handleLogout_() {
     clearSavedUserSession_();
     appState.currentUser = {};
@@ -5666,6 +5829,12 @@
       tipe_sales: incomingUser.tipe_sales || currentUser.tipe_sales || '',
       kode_sales: incomingUser.kode_sales || currentUser.kode_sales || '',
       channel_sales_default: incomingUser.channel_sales_default || currentUser.channel_sales_default || '',
+      bank_nama: incomingUser.bank_nama || currentUser.bank_nama || '',
+      bank_no_rekening: incomingUser.bank_no_rekening || currentUser.bank_no_rekening || '',
+      bank_nama_pemilik: incomingUser.bank_nama_pemilik || currentUser.bank_nama_pemilik || '',
+      bank_account_complete: typeof incomingUser.bank_account_complete === 'boolean'
+        ? incomingUser.bank_account_complete
+        : !!currentUser.bank_account_complete,
       is_freelance: typeof incomingUser.is_freelance === 'boolean' ? incomingUser.is_freelance : !!currentUser.is_freelance,
       authorized: typeof incomingUser.authorized === 'boolean' ? incomingUser.authorized : !!currentUser.authorized
     };
@@ -5735,6 +5904,64 @@
         ? 'Ketik customer milik Anda: nama, kode customer, PIC, atau no. HP'
         : 'Ketik nama, kode customer, PIC, atau no. HP';
     }
+
+    renderSalesBankAccountFields_();
+    renderSalesBankAccountSummary_();
+  }
+
+  function renderSalesBankAccountFields_() {
+    var currentUser = appState.currentUser || {};
+
+    setFieldValue_('salesBankName', currentUser.bank_nama || '');
+    setFieldValue_('salesBankAccountNumber', currentUser.bank_no_rekening || '');
+    setFieldValue_('salesBankAccountHolder', currentUser.bank_nama_pemilik || '');
+  }
+
+  function renderSalesBankAccountSummary_() {
+    var currentUser = appState.currentUser || {};
+    var title = document.getElementById('salesBankSummaryTitle');
+    var text = document.getElementById('salesBankSummaryText');
+
+    if (!title || !text) {
+      return;
+    }
+
+    if (!isSalesBankAccountComplete_()) {
+      title.textContent = 'Rekening payout belum diisi';
+      text.textContent = 'Lengkapi rekening agar pengajuan pencairan punya tujuan transfer yang jelas.';
+      return;
+    }
+
+    title.textContent = 'Rekening aktif';
+    text.textContent = [
+      currentUser.bank_nama || '-',
+      currentUser.bank_no_rekening || '-',
+      currentUser.bank_nama_pemilik || '-'
+    ].join(' | ');
+  }
+
+  function isSalesBankAccountComplete_() {
+    var currentUser = appState.currentUser || {};
+
+    return !!(
+      currentUser.bank_nama &&
+      currentUser.bank_no_rekening &&
+      currentUser.bank_nama_pemilik
+    );
+  }
+
+  function getSalesBankAccountDisplay_() {
+    var currentUser = appState.currentUser || {};
+
+    if (!isSalesBankAccountComplete_()) {
+      return '-';
+    }
+
+    return [
+      currentUser.bank_nama || '-',
+      currentUser.bank_no_rekening || '-',
+      currentUser.bank_nama_pemilik || '-'
+    ].join(' | ');
   }
 
   function resetForm_() {
@@ -5751,6 +5978,7 @@
     document.querySelector('input[name="jenis_customer"][value="Lama"]').checked = true;
     handleJenisCustomerChange_();
     handleSalesChange_();
+    renderSalesBankAccountFields_();
     setStatusText_('Form sudah direset');
   }
 
@@ -5765,6 +5993,7 @@
     renderSalesOrderItems_();
     handleJenisCustomerChange_();
     handleSalesChange_();
+    renderSalesBankAccountFields_();
   }
 
   function resetSalesSubmitResultState_() {
@@ -6881,6 +7110,7 @@
     var snapshot = appState.controllerSalesKpiSnapshot || {};
     var summary = snapshot.summary || {};
     var tbody = document.getElementById('controllerSalesKpiBody');
+    var mobileContainer = document.getElementById('controllerSalesKpiMobile');
     var rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
 
     setText_('controllerKpiSalesTotalTarget', summary.total_target_qty || '0');
@@ -6889,11 +7119,13 @@
     setText_('controllerKpiSalesTotalProgress', summary.total_progress_percent || '0%');
 
     if (!tbody) {
+      renderControllerSalesKpiSnapshotMobile_(mobileContainer, rows);
       return;
     }
 
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Belum ada data KPI.</td></tr>';
+      renderControllerSalesKpiSnapshotMobile_(mobileContainer, rows);
       return;
     }
 
@@ -6907,6 +7139,38 @@
           '<td class="cell-right">' + escapeHtml_(row.progress_percent || '0%') + '</td>' +
           '<td>' + buildStatusBadge_(row.status_kpi || 'Belum Ada Target') + '</td>' +
         '</tr>';
+    }).join('');
+
+    renderControllerSalesKpiSnapshotMobile_(mobileContainer, rows);
+  }
+
+  function renderControllerSalesKpiSnapshotMobile_(container, rows) {
+    if (!container) {
+      return;
+    }
+
+    if (!rows || !rows.length) {
+      container.innerHTML = '<article class="controller-mobile-card controller-mobile-empty">Belum ada data KPI.</article>';
+      return;
+    }
+
+    container.innerHTML = rows.map(function(row) {
+      return '' +
+        '<article class="controller-mobile-card controller-mobile-kpi-card">' +
+          '<div class="controller-mobile-card-head">' +
+            '<div class="controller-kpi-sales-cell">' +
+              '<strong>' + escapeHtml_(row.sales_name || '-') + '</strong>' +
+              '<small>' + escapeHtml_(row.sales_id || '-') + '</small>' +
+            '</div>' +
+            buildStatusBadge_(row.status_kpi || 'Belum Ada Target') +
+          '</div>' +
+          '<div class="controller-mobile-metric-grid">' +
+            buildControllerMobileMetric_('Target', row.target_qty || '0') +
+            buildControllerMobileMetric_('Realisasi', row.achieved_qty || '0') +
+            buildControllerMobileMetric_('Sisa', row.remaining_qty || '0') +
+            buildControllerMobileMetric_('Capaian', row.progress_percent || '0%') +
+          '</div>' +
+        '</article>';
     }).join('');
   }
 
@@ -7185,13 +7449,21 @@
 
   function renderControllerRankingTable_(targetId, rows, mode) {
     var body = document.getElementById(targetId);
+    var mobileContainerIdMap = {
+      controllerTopSalesBody: 'controllerTopSalesMobile',
+      controllerTopCustomersBody: 'controllerTopCustomersMobile',
+      controllerTopItemsBody: 'controllerTopItemsMobile'
+    };
+    var mobileContainer = document.getElementById(mobileContainerIdMap[targetId] || '');
 
     if (!body) {
+      renderControllerRankingMobile_(mobileContainer, rows, mode);
       return;
     }
 
     if (!rows || !rows.length) {
       body.innerHTML = '<tr><td colspan="4" class="empty-cell">Belum ada data.</td></tr>';
+      renderControllerRankingMobile_(mobileContainer, rows, mode);
       return;
     }
 
@@ -7200,12 +7472,52 @@
       var fourthValue = mode === 'items' ? row.order_count : row.omzet;
       return '' +
         '<tr>' +
-          '<td>' + escapeHtml_(row.rank || '-') + '</td>' +
-          '<td>' + escapeHtml_(row.name || '-') + '</td>' +
-          '<td>' + escapeHtml_(thirdValue || '-') + '</td>' +
-          '<td>' + escapeHtml_(fourthValue || '-') + '</td>' +
+          '<td class="rank-cell">' + escapeHtml_(row.rank || '-') + '</td>' +
+          '<td class="name-cell"><span class="controller-ranking-name">' + escapeHtml_(row.name || '-') + '</span></td>' +
+          '<td class="metric-cell">' + escapeHtml_(thirdValue || '-') + '</td>' +
+          '<td class="amount-cell">' + escapeHtml_(fourthValue || '-') + '</td>' +
         '</tr>';
     }).join('');
+
+    renderControllerRankingMobile_(mobileContainer, rows, mode);
+  }
+
+  function renderControllerRankingMobile_(container, rows, mode) {
+    if (!container) {
+      return;
+    }
+
+    if (!rows || !rows.length) {
+      container.innerHTML = '<article class="controller-mobile-card controller-mobile-empty">Belum ada data.</article>';
+      return;
+    }
+
+    container.innerHTML = rows.map(function(row) {
+      var thirdLabel = mode === 'items' ? 'Qty' : 'SO';
+      var thirdValue = mode === 'items' ? row.qty : row.so;
+      var fourthLabel = mode === 'items' ? 'Order SO' : 'Omzet';
+      var fourthValue = mode === 'items' ? row.order_count : row.omzet;
+
+      return '' +
+        '<article class="controller-mobile-card">' +
+          '<div class="controller-mobile-card-head">' +
+            '<strong class="controller-mobile-rank">#' + escapeHtml_(row.rank || '-') + '</strong>' +
+            '<div class="controller-mobile-title">' + escapeHtml_(row.name || '-') + '</div>' +
+          '</div>' +
+          '<div class="controller-mobile-metric-grid">' +
+            buildControllerMobileMetric_(thirdLabel, thirdValue || '-') +
+            buildControllerMobileMetric_(fourthLabel, fourthValue || '-') +
+          '</div>' +
+        '</article>';
+    }).join('');
+  }
+
+  function buildControllerMobileMetric_(label, value) {
+    return '' +
+      '<div class="controller-mobile-metric">' +
+        '<span class="controller-mobile-metric-label">' + escapeHtml_(label || '-') + '</span>' +
+        '<strong class="controller-mobile-metric-value">' + escapeHtml_(value || '-') + '</strong>' +
+      '</div>';
   }
 
   function padNumber_(value) {

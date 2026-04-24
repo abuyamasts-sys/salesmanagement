@@ -227,7 +227,10 @@ function buildDummyUsers_(currentEmail, currentRole) {
       no_hp: '081300000000',
       email: currentEmail,
       password: activeUser.user_id,
-      status_aktif: 'Aktif'
+      status_aktif: 'Aktif',
+      bank_nama: 'BCA',
+      bank_no_rekening: '1234567890',
+      bank_nama_pemilik: activeUser.nama_user
     },
     {
       user_id: 'U010',
@@ -236,7 +239,10 @@ function buildDummyUsers_(currentEmail, currentRole) {
       no_hp: '081300000010',
       email: 'sales.dummy@airtis.local',
       password: 'U010',
-      status_aktif: 'Aktif'
+      status_aktif: 'Aktif',
+      bank_nama: 'Mandiri',
+      bank_no_rekening: '9876543210',
+      bank_nama_pemilik: 'Andi Sales Dummy'
     },
     {
       user_id: 'U020',
@@ -245,7 +251,10 @@ function buildDummyUsers_(currentEmail, currentRole) {
       no_hp: '081300000020',
       email: 'admin.dummy@airtis.local',
       password: 'U020',
-      status_aktif: 'Aktif'
+      status_aktif: 'Aktif',
+      bank_nama: '',
+      bank_no_rekening: '',
+      bank_nama_pemilik: ''
     },
     {
       user_id: 'U030',
@@ -254,7 +263,10 @@ function buildDummyUsers_(currentEmail, currentRole) {
       no_hp: '081300000030',
       email: 'approver.dummy@airtis.local',
       password: 'U030',
-      status_aktif: 'Aktif'
+      status_aktif: 'Aktif',
+      bank_nama: '',
+      bank_no_rekening: '',
+      bank_nama_pemilik: ''
     },
     {
       user_id: 'CTR1',
@@ -263,7 +275,10 @@ function buildDummyUsers_(currentEmail, currentRole) {
       no_hp: '081300000031',
       email: 'controller.dummy@airtis.local',
       password: 'CTR1',
-      status_aktif: 'Aktif'
+      status_aktif: 'Aktif',
+      bank_nama: '',
+      bank_no_rekening: '',
+      bank_nama_pemilik: ''
     }
   ];
 }

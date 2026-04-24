@@ -739,6 +739,28 @@ function submitSlfPayoutRequestFromDashboard(userId, formData) {
   return toClientValue_(createSlfPayoutBatch_(userId, formData || {}));
 }
 
+function updateSalesBankAccountFromDashboard(userId, formData) {
+  var currentUser = requireCurrentUserRole_(['Sales'], userId);
+  var payload = formData || {};
+  var bankNama = String(payload.bank_nama || '').trim();
+  var bankNoRekening = String(payload.bank_no_rekening || '').trim();
+  var bankNamaPemilik = String(payload.bank_nama_pemilik || '').trim();
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_USER, APP_CONFIG.HEADERS.MASTER_USER);
+
+  if (!bankNama || !bankNoRekening || !bankNamaPemilik) {
+    throw new Error('Data rekening wajib lengkap: nama bank, nomor rekening, dan nama pemilik rekening.');
+  }
+
+  updateRowByKey_(APP_CONFIG.SHEETS.MASTER_USER, 'user_id', currentUser.user_id, {
+    bank_nama: bankNama,
+    bank_no_rekening: bankNoRekening,
+    bank_nama_pemilik: bankNamaPemilik
+  });
+
+  return toClientValue_(getCurrentUserProfile(currentUser.user_id));
+}
+
 function getSalesSlfPayoutBatchesFromDashboard(userId) {
   var currentUser = requireCurrentUserRole_(['Sales'], userId);
   return toClientValue_({

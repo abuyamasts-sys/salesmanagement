@@ -154,6 +154,9 @@ function buildSlfPayoutBatchSummary_(batchRow) {
     jumlah_so: Number(batchRow.jumlah_so || 0),
     total_komisi: Number(batchRow.total_komisi || 0),
     status_payout: statusPayout,
+    bank_nama: batchRow.bank_nama || '',
+    bank_no_rekening: batchRow.bank_no_rekening || '',
+    bank_nama_pemilik: batchRow.bank_nama_pemilik || '',
     catatan_sales: batchRow.catatan_sales || '',
     catatan_approver: batchRow.catatan_approver || '',
     dibuat_oleh: batchRow.dibuat_oleh || '',
@@ -240,6 +243,7 @@ function getSlfPayoutBatchDetail_(payoutBatchId) {
 
 function createSlfPayoutBatch_(userId, payload) {
   var currentUser = requireCurrentUserRole_(['Sales'], userId);
+  var currentUserProfile = getCurrentUserProfile(currentUser.user_id);
   var safePayload = payload || {};
   var now = getNowParts_();
   var readyRows;
@@ -265,6 +269,10 @@ function createSlfPayoutBatch_(userId, payload) {
     throw new Error('Total komisi siap cair belum memenuhi minimum pencairan Rp ' + String(getSlfMinPayoutAmount_()) + '.');
   }
 
+  if (!currentUserProfile.bank_account_complete) {
+    throw new Error('Rekening payout belum lengkap. Isi nama bank, nomor rekening, dan nama pemilik rekening terlebih dahulu.');
+  }
+
   payoutBatchId = generateDocNumber_('PBT');
   batchRow = {
     payout_batch_id: payoutBatchId,
@@ -274,6 +282,9 @@ function createSlfPayoutBatch_(userId, payload) {
     jumlah_so: readyRows.length,
     total_komisi: totalKomisi,
     status_payout: 'Diajukan',
+    bank_nama: currentUserProfile.bank_nama || '',
+    bank_no_rekening: currentUserProfile.bank_no_rekening || '',
+    bank_nama_pemilik: currentUserProfile.bank_nama_pemilik || '',
     catatan_sales: String(safePayload.catatan_sales || '').trim(),
     catatan_approver: '',
     dibuat_oleh: currentUser.user_id || '',
@@ -313,6 +324,9 @@ function createSlfPayoutBatch_(userId, payload) {
     payout_batch_id: payoutBatchId,
     jumlah_so: readyRows.length,
     total_komisi: totalKomisi,
+    bank_nama: batchRow.bank_nama,
+    bank_no_rekening: batchRow.bank_no_rekening,
+    bank_nama_pemilik: batchRow.bank_nama_pemilik,
     rows: readyRows
   };
 }

@@ -2,6 +2,7 @@
 <html>
   <head>
     <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <script
       src="https://www.gstatic.com/charts/loader.js"
       onerror="window.__googleChartsScriptFailed = true;"
@@ -67,19 +68,11 @@
 
         <section class="tab-panel hidden" id="tab-sales" data-role="sales">
           <form id="salesOrderForm" class="order-form" onsubmit="return false;">
-            <section class="form-card">
-              <h2>Info Sales</h2>
-              <div class="form-grid">
-                <label class="field">
-                  <span>Sales</span>
-                  <select id="sales_id" name="sales_id" required></select>
-                </label>
-                <label class="field">
-                  <span>Nama Sales</span>
-                  <input id="sales_nama" name="sales_nama" type="text" readonly />
-                </label>
-              </div>
-            </section>
+            <div class="sales-section-divider" id="salesTargetSection">
+              <span>Area A</span>
+              <h2>Ringkasan Target Bulan Ini</h2>
+              <p>Fokus pada target customer baru dan progress bulan berjalan.</p>
+            </div>
 
             <section class="form-card">
               <div class="panel-header">
@@ -119,6 +112,8 @@
                 </article>
               </div>
 
+              <p class="sales-info-note">KPI bertambah saat order sudah berstatus Siap Kirim.</p>
+
               <h3 class="section-title">Detail Order (Siap Kirim)</h3>
               <div class="table-wrap">
                 <table class="data-table">
@@ -138,6 +133,12 @@
               <div class="table-pagination" id="salesKpiOrdersPagination"></div>
             </section>
 
+            <div class="sales-section-divider" id="salesCommissionSection">
+              <span>Area B</span>
+              <h2>Komisi Saya</h2>
+              <p>Lihat posisi komisi saat ini dan status pengajuan pencairan.</p>
+            </div>
+
             <section class="form-card hidden" id="salesCommissionSummarySection">
               <div class="panel-header">
                 <div>
@@ -145,6 +146,15 @@
                   <p class="panel-subtitle">Ringkasan komisi dari riwayat order freelance pada sesi ini.</p>
                 </div>
               </div>
+
+              <div class="sales-flow-strip" aria-label="Alur status komisi">
+                <span>Potensial</span>
+                <span>Dalam Proses</span>
+                <span>Komisi Siap Cair</span>
+                <span>Dibayar</span>
+              </div>
+
+              <p class="sales-info-note">Komisi Siap Cair bisa diajukan jika saldo sudah mencapai minimum pencairan.</p>
 
               <div class="summary-grid sales-commission-summary-grid">
                 <article class="summary-card">
@@ -158,7 +168,7 @@
                   <span class="summary-note" id="salesCommissionWaitingCount">0 order</span>
                 </article>
                 <article class="summary-card">
-                  <span class="summary-label">Siap Cair</span>
+                  <span class="summary-label">Komisi Siap Cair</span>
                   <strong class="summary-value" id="salesCommissionReady">Rp 0</strong>
                   <span class="summary-note" id="salesCommissionReadyCount">0 order</span>
                 </article>
@@ -171,9 +181,9 @@
 
               <div class="summary-grid sales-payout-summary-grid">
                 <article class="summary-card">
-                  <span class="summary-label">Saldo Siap Cair</span>
+                  <span class="summary-label">Siap Diajukan</span>
                   <strong class="summary-value" id="salesPayoutReadyAmount">Rp 0</strong>
-                  <span class="summary-note" id="salesPayoutReadyCount">0 order siap masuk batch</span>
+                  <span class="summary-note" id="salesPayoutReadyCount">0 order siap diajukan ke batch</span>
                 </article>
                 <article class="summary-card">
                   <span class="summary-label">Minimum Pencairan</span>
@@ -204,6 +214,34 @@
                     <tr><td colspan="6" class="empty-cell">Belum ada pengajuan pencairan.</td></tr>
                   </tbody>
                 </table>
+              </div>
+            </section>
+
+            <div class="sales-section-divider" id="salesInputOrderSection">
+              <span>Area C</span>
+              <h2>Input Order Baru</h2>
+              <p>Lengkapi data sales, customer, item, lalu submit sales order.</p>
+            </div>
+
+            <section class="form-card">
+              <h2>Info Sales</h2>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Sales</span>
+                  <select id="sales_id" name="sales_id" required></select>
+                </label>
+                <label class="field">
+                  <span>Nama Sales</span>
+                  <input id="sales_nama" name="sales_nama" type="text" readonly />
+                </label>
+              </div>
+              <h3 class="section-title">Rekening Pencairan Komisi</h3>
+              <div class="sales-bank-summary" id="salesBankSummaryCard">
+                <strong id="salesBankSummaryTitle">Rekening payout belum diisi</strong>
+                <span id="salesBankSummaryText">Lengkapi rekening agar pengajuan pencairan punya tujuan transfer yang jelas.</span>
+              </div>
+              <div class="action-row detail-order-action-row">
+                <button type="button" class="ghost-btn" id="openSalesBankAccountBtn">Atur Rekening</button>
               </div>
             </section>
 
@@ -1040,6 +1078,10 @@
                 </tbody>
               </table>
             </div>
+
+            <div class="controller-mobile-list" id="controllerSalesKpiMobile">
+              <article class="controller-mobile-card controller-mobile-empty">Belum ada data KPI.</article>
+            </div>
           </section>
 
           <section class="controller-panel-grid">
@@ -1075,18 +1117,24 @@
           </section>
 
           <section class="controller-table-grid">
-            <section class="form-card controller-table-card">
+            <section class="form-card controller-table-card controller-ranking-card">
               <div class="panel-header">
                 <div>
-                  <h3 class="section-title compact">Top Sales</h3>
-                  <p class="panel-subtitle">Peringkat berdasarkan omzet dan jumlah order.</p>
+                  <h3 class="section-title compact">Peringkat Sales</h3>
+                  <p class="panel-subtitle">Urutan performa sales dari omzet dan jumlah order tertinggi sampai terendah.</p>
                 </div>
               </div>
               <div class="table-wrap">
-                <table class="data-table controller-data-table">
+                <table class="data-table controller-data-table controller-ranking-table">
+                  <colgroup>
+                    <col style="width: 38px;">
+                    <col>
+                    <col style="width: 48px;">
+                    <col style="width: 100px;">
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Peringkat</th>
+                      <th>Rank</th>
                       <th>Sales</th>
                       <th>SO</th>
                       <th>Omzet</th>
@@ -1097,9 +1145,12 @@
                   </tbody>
                 </table>
               </div>
+              <div class="controller-mobile-list" id="controllerTopSalesMobile">
+                <article class="controller-mobile-card controller-mobile-empty">Belum ada data ranking sales.</article>
+              </div>
             </section>
 
-            <section class="form-card controller-table-card">
+            <section class="form-card controller-table-card controller-ranking-card">
               <div class="panel-header">
                 <div>
                   <h3 class="section-title compact">Top Customer</h3>
@@ -1107,10 +1158,16 @@
                 </div>
               </div>
               <div class="table-wrap">
-                <table class="data-table controller-data-table">
+                <table class="data-table controller-data-table controller-ranking-table">
+                  <colgroup>
+                    <col style="width: 38px;">
+                    <col>
+                    <col style="width: 48px;">
+                    <col style="width: 100px;">
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Peringkat</th>
+                      <th>Rank</th>
                       <th>Customer</th>
                       <th>SO</th>
                       <th>Omzet</th>
@@ -1121,9 +1178,12 @@
                   </tbody>
                 </table>
               </div>
+              <div class="controller-mobile-list" id="controllerTopCustomersMobile">
+                <article class="controller-mobile-card controller-mobile-empty">Belum ada data ranking customer.</article>
+              </div>
             </section>
 
-            <section class="form-card controller-table-card">
+            <section class="form-card controller-table-card controller-ranking-card">
               <div class="panel-header">
                 <div>
                   <h3 class="section-title compact">Top Item</h3>
@@ -1131,19 +1191,28 @@
                 </div>
               </div>
               <div class="table-wrap">
-                <table class="data-table controller-data-table">
+                <table class="data-table controller-data-table controller-ranking-table controller-ranking-table-items">
+                  <colgroup>
+                    <col style="width: 38px;">
+                    <col>
+                    <col style="width: 64px;">
+                    <col style="width: 72px;">
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Peringkat</th>
+                      <th>Rank</th>
                       <th>Item</th>
                       <th>Qty</th>
-                      <th>Order SO</th>
+                      <th>SO</th>
                     </tr>
                   </thead>
                   <tbody id="controllerTopItemsBody">
                     <tr><td colspan="4" class="empty-cell">Belum ada data ranking item.</td></tr>
                   </tbody>
                 </table>
+              </div>
+              <div class="controller-mobile-list" id="controllerTopItemsMobile">
+                <article class="controller-mobile-card controller-mobile-empty">Belum ada data ranking item.</article>
               </div>
             </section>
           </section>
@@ -1444,6 +1513,9 @@
           <div><strong>Status:</strong> <span id="payoutBatchDetailStatus">-</span></div>
           <div><strong>Jumlah SO:</strong> <span id="payoutBatchDetailCount">0</span></div>
           <div><strong>Total Komisi:</strong> <span id="payoutBatchDetailTotal">Rp 0</span></div>
+          <div><strong>Bank Tujuan:</strong> <span id="payoutBatchDetailBankName">-</span></div>
+          <div><strong>No. Rekening:</strong> <span id="payoutBatchDetailBankAccount">-</span></div>
+          <div><strong>Nama Rekening:</strong> <span id="payoutBatchDetailBankHolder">-</span></div>
           <div><strong>Catatan Sales:</strong> <span id="payoutBatchDetailSalesNote">-</span></div>
           <div><strong>Catatan Approver:</strong> <span id="payoutBatchDetailApproverNote">-</span></div>
         </div>
@@ -1479,6 +1551,7 @@
         <div class="customer-info payout-action-summary">
           <div><strong>Referensi:</strong> <span id="payoutActionReference">-</span></div>
           <div><strong>Total:</strong> <span id="payoutActionAmount">-</span></div>
+          <div><strong>Rekening Tujuan:</strong> <span id="payoutActionAccountInfo">-</span></div>
         </div>
 
         <label class="field payout-action-field">
@@ -1489,6 +1562,38 @@
         <div class="action-row" style="margin-top:16px;">
           <button type="button" class="ghost-btn" id="cancelPayoutActionBtn">Batal</button>
           <button type="button" class="primary-btn" id="savePayoutActionBtn">Simpan</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="salesBankAccountBackdrop">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="salesBankAccountTitle" style="width:min(560px,100%);">
+        <div class="panel-header">
+          <div>
+            <h2 id="salesBankAccountTitle">Atur Rekening Pencairan</h2>
+            <p class="panel-subtitle">Rekening ini akan dipakai sebagai tujuan transfer saat Anda mengajukan payout komisi.</p>
+          </div>
+          <button type="button" class="ghost-btn" id="closeSalesBankAccountBtn">Tutup</button>
+        </div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Nama Bank</span>
+            <input id="salesBankName" type="text" placeholder="Contoh: BCA" />
+          </label>
+          <label class="field">
+            <span>Nomor Rekening</span>
+            <input id="salesBankAccountNumber" type="text" inputmode="numeric" placeholder="Contoh: 1234567890" />
+          </label>
+          <label class="field field-wide">
+            <span>Nama Pemilik Rekening</span>
+            <input id="salesBankAccountHolder" type="text" placeholder="Contoh: Yasser Pradana" />
+          </label>
+        </div>
+
+        <div class="action-row" style="margin-top:16px;">
+          <button type="button" class="ghost-btn" id="cancelSalesBankAccountBtn">Batal</button>
+          <button type="button" class="primary-btn" id="saveSalesBankAccountBtn">Simpan Rekening</button>
         </div>
       </section>
     </div>
@@ -1896,6 +2001,8 @@
         </div>
       </section>
     </div>
+
+    <div class="app-toast-stack" id="appToastStack" aria-live="polite" aria-atomic="true"></div>
 
     <?!= include('main.js'); ?>
   </body>

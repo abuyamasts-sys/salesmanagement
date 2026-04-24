@@ -337,28 +337,41 @@ function buildControllerTrend7Days_(salesOrders, todayKey) {
 }
 
 function buildControllerTopSales_(salesOrders) {
-  var grouped = {};
+  var salesUsers = getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).filter(function(user) {
+    return normalizeText_(user.role) === 'sales' &&
+      normalizeText_(user.status_aktif || 'aktif') === 'aktif';
+  }).map(function(user) {
+    var userId = String(user.user_id || '').trim();
+    var salesCode = String(user.kode_sales || '').trim();
+    var displayName = String(user.nama_user || salesCode || userId || 'Tanpa Sales').trim();
+
+    return {
+      sales_id: userId,
+      sales_kode: salesCode,
+      sales_nama: displayName,
+      so_count: 0,
+      omzet: 0
+    };
+  });
+  var grouped = salesUsers.reduce(function(result, user) {
+    if (!user.sales_id) {
+      return result;
+    }
+
+    result[user.sales_id] = user;
+    return result;
+  }, {});
 
   (salesOrders || []).forEach(function(order) {
     var salesId = String(order.sales_id || '').trim();
-    var salesName = String(order.sales_nama || '').trim() || salesId || 'Tanpa Sales';
-    var key = salesId || salesName;
+    var target = grouped[salesId];
 
-    if (!key) {
+    if (!target) {
       return;
     }
 
-    if (!grouped[key]) {
-      grouped[key] = {
-        sales_id: salesId,
-        sales_nama: salesName,
-        so_count: 0,
-        omzet: 0
-      };
-    }
-
-    grouped[key].so_count += 1;
-    grouped[key].omzet += getControllerOrderAmount_(order);
+    target.so_count += 1;
+    target.omzet += getControllerOrderAmount_(order);
   });
 
   return Object.keys(grouped).map(function(key) {
@@ -372,8 +385,8 @@ function buildControllerTopSales_(salesOrders) {
       return Number(right.so_count || 0) - Number(left.so_count || 0);
     }
 
-    return String(left.sales_nama || '').localeCompare(String(right.sales_nama || ''), 'id-ID');
-  }).slice(0, 5);
+    return String(left.sales_nama || left.sales_id || '').localeCompare(String(right.sales_nama || right.sales_id || ''), 'id-ID');
+  });
 }
 
 function buildControllerTopCustomers_(salesOrders) {
