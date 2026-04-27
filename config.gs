@@ -20,6 +20,9 @@ var APP_CONFIG = {
     TAGIHAN: 'TAGIHAN',
     KPI_TARGET_SALES: 'KPI_TARGET_SALES',
     KPI_LOG: 'KPI_LOG',
+    AKTIVITAS_LOKASI: 'AKTIVITAS_LOKASI',
+    PERANGKAT_USER: 'PERANGKAT_USER',
+    CATATAN_MONITORING: 'CATATAN_MONITORING',
     BACKUP_LOG: 'SYSTEM_BACKUP_LOG'
   },
   BACKUP: {
@@ -29,7 +32,7 @@ var APP_CONFIG = {
   COMMISSION: {
     SLF_MIN_PAYOUT: 10000
   },
-  ROLES: ['Sales', 'CS/Admin', 'Approver', 'Controller'],
+  ROLES: ['Sales', 'CS/Admin', 'Approver', 'MTR', 'Controller'],
   CUSTOMER_STATUS: ['Baru', 'Aktif', 'Menunggak', 'Ditahan'],
   PAYMENT_STATUS: ['Lancar', 'Menunggak'],
   ORDER_STATUS: [
@@ -80,6 +83,9 @@ var APP_CONFIG = {
     'TAGIHAN',
     'KPI_TARGET_SALES',
     'KPI_LOG',
+    'AKTIVITAS_LOKASI',
+    'PERANGKAT_USER',
+    'CATATAN_MONITORING',
     'BACKUP_LOG'
   ],
   HEADERS: {
@@ -128,6 +134,59 @@ var APP_CONFIG = {
       'bank_nama_pemilik',
       'aktif_komisi',
       'catatan_user'
+    ],
+    AKTIVITAS_LOKASI: [
+      'aktivitas_id',
+      'tanggal',
+      'user_id',
+      'nama_user',
+      'tipe_sales',
+      'tipe_aktivitas',
+      'jenis_kegiatan',
+      'customer_id',
+      'nama_customer',
+      'hasil_kegiatan',
+      'target_jam',
+      'jam_server',
+      'status_waktu',
+      'latitude',
+      'longitude',
+      'akurasi_gps',
+      'link_maps',
+      'jarak_km_dari_sebelumnya',
+      'menit_dari_sebelumnya',
+      'estimasi_kecepatan_kmh',
+      'status_lokasi',
+      'device_id',
+      'user_agent',
+      'status_perangkat',
+      'catatan',
+      'created_at'
+    ],
+    PERANGKAT_USER: [
+      'perangkat_key',
+      'device_id',
+      'user_id',
+      'nama_user',
+      'user_agent',
+      'pertama_dipakai',
+      'terakhir_dipakai',
+      'jumlah_pemakaian',
+      'status_perangkat',
+      'catatan'
+    ],
+    CATATAN_MONITORING: [
+      'catatan_id',
+      'tanggal',
+      'sales_id',
+      'nama_sales',
+      'status_monitoring',
+      'kategori_temuan',
+      'catatan_mtr',
+      'tindak_lanjut',
+      'dibuat_oleh',
+      'nama_mtr',
+      'created_at'
     ],
     MASTER_KOMISI_SLF: [
       'komisi_id',
@@ -318,7 +377,10 @@ var APP_CONFIG = {
       'driver',
       'armada',
       'status_kirim',
-      'catatan_kirim'
+      'catatan_kirim',
+      'dibatalkan_oleh',
+      'tanggal_batal_kirim',
+      'alasan_batal_kirim'
     ],
     LOG_STATUS_ORDER: [
       'log_id',

@@ -8,6 +8,7 @@
     products: [],
     salesOrderItems: [],
     salesHistoryOrders: [],
+    fieldActivity: null,
     salesCommissionSummary: null,
     salesPayoutBatches: [],
     salesPayoutReadyRows: [],
@@ -64,11 +65,17 @@
     controllerTopSales: [],
     controllerTopCustomers: [],
     controllerTopItems: [],
+    controllerFieldMonitoring: null,
+    fieldMonitoringDate: '',
+    mtrMapDate: '',
+    mtrMapSales: '',
+    mtrMapData: null,
     controllerLastUpdated: '',
     sessionUserId: '',
     currentDeliveryVerificationNoSo: '',
     csRevisionDraft: null,
-    cancelSalesOrderDraft: null
+    cancelSalesOrderDraft: null,
+    cancelDeliveryDraft: null
   };
   var APP_USER_STORAGE_KEY = 'airtis_sales_user_id';
   var LAST_ASYNC_STATUS_TIMER = null;
@@ -80,6 +87,9 @@
   var controllerTrendChartLoadState_ = 'idle';
   var controllerTrendChartReadyCallbacks_ = [];
   var controllerTrendChartResizeTimer_ = null;
+  var mtrSalesMapInstance_ = null;
+  var mtrSalesMapMarkers_ = [];
+  var mtrSalesMapRouteIds_ = [];
   var toastHideTimers_ = {};
 
   window.addEventListener('error', function(event) {
@@ -142,11 +152,16 @@
 
   function bindEvents() {
     try {
-      document.querySelectorAll('.tab-btn').forEach(function(button) {
-        button.addEventListener('click', function() {
-          activateTab_(button.dataset.tab);
-        });
+    document.querySelectorAll('.tab-btn').forEach(function(button) {
+      button.addEventListener('click', function() {
+        activateTab_(button.dataset.tab);
       });
+    });
+    document.querySelectorAll('.sales-subtab-btn').forEach(function(button) {
+      button.addEventListener('click', function() {
+        activateSalesView_(button.dataset.salesView);
+      });
+    });
     } catch (error) {}
     document.querySelectorAll('.admin-subtab-btn').forEach(function(button) {
       button.addEventListener('click', function() {
@@ -164,6 +179,8 @@
     safeBindById_('customer_search', 'input', handleCustomerSearchInput_);
     safeBindById_('salesHistorySearch', 'input', handleSalesHistorySearchInput_);
     safeBindById_('salesHistoryStatusFilter', 'change', handleSalesHistoryStatusChange_);
+    safeBindById_('salesHistoryInlineSearch', 'input', handleSalesHistorySearchInput_);
+    safeBindById_('salesHistoryInlineStatusFilter', 'change', handleSalesHistoryStatusChange_);
     safeBindById_('item', 'change', handleProductChange_);
     document.querySelectorAll('input[name="jenis_customer"]').forEach(function(input) {
       input.addEventListener('change', handleJenisCustomerChange_);
@@ -178,6 +195,7 @@
     safeBindById_('resetBtn', 'click', resetForm_);
     safeBindById_('openSalesHistoryBtn', 'click', openSalesHistoryModal_);
     safeBindById_('refreshSalesHistoryBtn', 'click', handleRefreshSalesHistory_);
+    safeBindById_('refreshSalesHistoryInlineBtn', 'click', handleRefreshSalesHistory_);
     safeBindById_('salesOrderForm', 'submit', submitForm_);
     safeBindById_('loginForm', 'submit', submitLoginForm_);
     safeBindById_('logoutBtn', 'click', handleLogout_);
@@ -195,6 +213,16 @@
     safeBindById_('submitSalesPayoutBtn', 'click', handleSubmitSalesPayout_);
     safeBindById_('openSalesBankAccountBtn', 'click', openSalesBankAccountModal_);
     safeBindById_('saveSalesBankAccountBtn', 'click', handleSaveSalesBankAccount_);
+    safeBindById_('fieldStartBtn', 'click', function() {
+      submitFieldActivity_('Mulai Kerja');
+    });
+    safeBindById_('fieldUpdateBtn', 'click', function() {
+      submitFieldActivity_('Update Lokasi');
+    });
+    safeBindById_('fieldEndBtn', 'click', function() {
+      submitFieldActivity_('Selesai Kerja');
+    });
+    safeBindById_('fieldWorkSaveBtn', 'click', submitFieldWorkLog_);
     safeBindById_('closeSalesBankAccountBtn', 'click', closeSalesBankAccountModal_);
     safeBindById_('cancelSalesBankAccountBtn', 'click', closeSalesBankAccountModal_);
     safeBindById_('salesBankAccountBackdrop', 'click', function(event) {
@@ -221,6 +249,13 @@
     safeBindById_('controllerStartDate', 'change', handleControllerDateFilterChange_);
     safeBindById_('controllerEndDate', 'change', handleControllerDateFilterChange_);
     safeBindById_('refreshControllerBtn', 'click', handleControllerRefresh_);
+    safeBindById_('fieldMonitoringDate', 'change', handleFieldMonitoringDateChange_);
+    safeBindById_('refreshFieldMonitoringBtn', 'click', handleFieldMonitoringRefresh_);
+    safeBindById_('mtrMapDate', 'change', handleMtrMapFilterChange_);
+    safeBindById_('mtrMapSales', 'change', handleMtrMapFilterChange_);
+    safeBindById_('refreshMtrMapBtn', 'click', function() {
+      loadMtrSalesMovementMapData_();
+    });
     safeBindById_('refreshAdminBtn', 'click', handleAdminRefresh_);
     safeBindById_('readyOrderSearch', 'input', handleReadyOrderSearchInput_);
     safeBindById_('deliverySearch', 'input', handleDeliverySearchInput_);
@@ -228,6 +263,7 @@
     safeBindById_('deliveryFilterTodayBtn', 'click', handleDeliveryFilterToday_);
     safeBindById_('deliveryFilterAllBtn', 'click', handleDeliveryFilterAll_);
     safeBindById_('admin_customer_id', 'change', handleAdminCustomerChange_);
+    safeBindById_('admin_customer_search', 'input', handleAdminCustomerSearchInput_);
     safeBindById_('admin_item', 'change', handleAdminProductChange_);
     document.querySelectorAll('input[name="admin_jenis_customer"]').forEach(function(input) {
       input.addEventListener('change', handleAdminJenisCustomerChange_);
@@ -246,6 +282,9 @@
     safeBindById_('closeDeliveryVerificationBtn', 'click', closeDeliveryVerificationModal_);
     safeBindById_('cancelDeliveryVerificationBtn', 'click', closeDeliveryVerificationModal_);
     safeBindById_('saveDeliveryVerificationBtn', 'click', saveDeliveryVerification_);
+    safeBindById_('closeCancelDeliveryBtn', 'click', closeCancelDeliveryModal_);
+    safeBindById_('cancelDeliveryAbortBtn', 'click', closeCancelDeliveryModal_);
+    safeBindById_('confirmCancelDeliveryBtn', 'click', submitCancelDelivery_);
     safeBindById_('closeCsRevisionBtn', 'click', closeCsRevisionModal_);
     safeBindById_('cancelCsRevisionBtn', 'click', closeCsRevisionModal_);
     safeBindById_('csRevisionForm', 'submit', saveCsRevision_);
@@ -289,6 +328,11 @@
     safeBindById_('deliveryVerificationBackdrop', 'click', function(event) {
       if (event.target.id === 'deliveryVerificationBackdrop') {
         closeDeliveryVerificationModal_();
+      }
+    });
+    safeBindById_('cancelDeliveryBackdrop', 'click', function(event) {
+      if (event.target.id === 'cancelDeliveryBackdrop') {
+        closeCancelDeliveryModal_();
       }
     });
     safeBindById_('csRevisionBackdrop', 'click', function(event) {
@@ -342,11 +386,13 @@
     window.removeSalesItem_ = removeSalesItem_;
     window.removeAdminItem_ = removeAdminItem_;
     window.selectCustomerFromSearch_ = selectCustomerFromSearch_;
+    window.selectAdminCustomerFromSearch_ = selectAdminCustomerFromSearch_;
     window.saveProductBasePrice_ = saveProductBasePrice_;
     window.handleApproveOrder = handleApproveOrder;
     window.handleRejectOrder = handleRejectOrder;
     window.handleCreateSuratJalan = handleCreateSuratJalan;
     window.handleMarkDelivered = handleMarkDelivered;
+    window.handleCancelDelivery = handleCancelDelivery;
     window.openDeliveryVerification = openDeliveryVerification;
     window.handleCompleteOrder = handleCompleteOrder;
     window.handlePrintSjNota = handlePrintSjNota;
@@ -365,6 +411,7 @@
     window.handleMarkSlfPayoutBatchInProcess_ = handleMarkSlfPayoutBatchInProcess_;
     window.handleViewSlfPayoutBatchDetail_ = handleViewSlfPayoutBatchDetail_;
     window.handleEditApproverCommission_ = handleEditApproverCommission_;
+    window.handleCreateMonitoringNote_ = handleCreateMonitoringNote_;
   }
 
   function openBillingPaymentModal_(tagihanId, mode) {
@@ -517,9 +564,9 @@
       return;
     }
 
-    if (currentUserHasRole_('controller')) {
+    if (currentUserHasRole_('controller') || currentUserHasRole_('mtr')) {
       loadControllerData_(function() {
-        setStatusText_('Dashboard controller siap');
+        setStatusText_(currentUserHasRole_('mtr') ? 'Dashboard monitoring siap' : 'Dashboard controller siap');
       });
       return;
     }
@@ -541,10 +588,13 @@
           appState.products = Array.isArray(payload.products) ? payload.products : [];
           appState.salesHistoryOrders = Array.isArray(payload.salesHistoryOrders) ? payload.salesHistoryOrders : [];
           appState.salesPayoutBatches = Array.isArray(payload.salesPayoutBatches) ? payload.salesPayoutBatches : [];
+          appState.fieldActivity = payload.fieldActivity || null;
           appState.slfMinPayout = Number(payload.slfMinPayout || 0);
           syncCurrentUser_(payload.currentUser);
 
+          renderSalesFieldActivity_();
           renderSalesOptions_();
+          renderFieldWorkCustomerOptions_();
           applySalesModeUi_();
           renderCustomerOptions_();
           renderProductOptions_();
@@ -572,12 +622,241 @@
       .getSalesOrderFormData(appState.currentUser.user_id);
   }
 
+  function submitFieldActivity_(activityType, extraPayload) {
+    if (!ensureAuthorizedSession_()) return;
+
+    var buttonMap = {
+      'Mulai Kerja': 'fieldStartBtn',
+      'Update Lokasi': 'fieldUpdateBtn',
+      'Selesai Kerja': 'fieldEndBtn',
+      'Catat Kegiatan': 'fieldWorkSaveBtn'
+    };
+    var button = document.getElementById(buttonMap[activityType] || '');
+    var extra = extraPayload || {};
+
+    if (!navigator.geolocation) {
+      renderResult_('GPS browser tidak tersedia di perangkat ini.', true);
+      return;
+    }
+
+    setFieldActivityButtonsDisabled_(true);
+    setStatusText_('Mengambil lokasi...');
+    setText_('salesActivityNote', 'Mengambil lokasi dari HP. Pastikan izin lokasi aktif.');
+
+    navigator.geolocation.getCurrentPosition(function(position) {
+      var coords = position.coords || {};
+      var payload = {
+        tipe_aktivitas: activityType,
+        location: {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy
+        },
+        device_id: getOrCreateFieldDeviceId_(),
+        user_agent: navigator.userAgent || '',
+        catatan: extra.hasil_kegiatan || ''
+      };
+      Object.keys(extra).forEach(function(key) {
+        payload[key] = extra[key];
+      });
+
+      setStatusText_('Menyimpan aktivitas...');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setFieldActivityButtonsDisabled_(false);
+          appState.fieldActivity = {
+            config: appState.fieldActivity && appState.fieldActivity.config ? appState.fieldActivity.config : null,
+            today: result && result.today ? result.today : null,
+            recentLogs: result && result.recentLogs ? result.recentLogs : []
+          };
+          renderSalesFieldActivity_();
+          setStatusText_('Aktivitas tersimpan');
+          renderResult_(result && result.message ? result.message : 'Aktivitas tersimpan.', false);
+          if (activityType === 'Catat Kegiatan') {
+            setFieldValue_('fieldWorkResult', '');
+          }
+        })
+        .withFailureHandler(function(error) {
+          setFieldActivityButtonsDisabled_(false);
+          setStatusText_('Gagal simpan aktivitas');
+          renderResult_('Gagal simpan aktivitas: ' + (error && error.message ? error.message : error), true);
+          setText_('salesActivityNote', 'Gagal menyimpan. Coba lagi saat sinyal lebih stabil.');
+        })
+        .recordFieldActivityFromDashboard(appState.currentUser.user_id, payload);
+    }, function(error) {
+      setFieldActivityButtonsDisabled_(false);
+      setStatusText_('Lokasi tidak terbaca');
+      renderResult_('Lokasi tidak terbaca: ' + getGeolocationErrorMessage_(error), true);
+      setText_('salesActivityNote', 'Aktifkan izin lokasi, lalu tekan tombol lagi.');
+      if (button) button.focus();
+    }, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    });
+  }
+
+  function submitFieldWorkLog_() {
+    var customerId = getFieldValue_('fieldWorkCustomer');
+    var customer = (appState.customers || []).find(function(row) {
+      return String(row.kode_customer || '').trim() === String(customerId || '').trim();
+    }) || {};
+    var resultText = getFieldValue_('fieldWorkResult');
+
+    if (!String(resultText || '').trim()) {
+      renderResult_('Hasil kegiatan wajib diisi singkat.', true);
+      return;
+    }
+
+    submitFieldActivity_('Catat Kegiatan', {
+      jenis_kegiatan: getFieldValue_('fieldWorkType'),
+      customer_id: customerId,
+      nama_customer: customer.nama_customer || '',
+      hasil_kegiatan: resultText
+    });
+  }
+
+  function renderFieldWorkCustomerOptions_() {
+    var select = document.getElementById('fieldWorkCustomer');
+    var options = ['<option value="">Tanpa Customer / Prospek Baru</option>'];
+
+    if (!select) {
+      return;
+    }
+
+    (appState.customers || []).forEach(function(customer) {
+      var code = String(customer.kode_customer || '').trim();
+      var name = String(customer.nama_customer || '').trim();
+      if (!code && !name) {
+        return;
+      }
+      options.push('<option value="' + escapeHtml_(code) + '">' + escapeHtml_((name || code) + (code ? ' (' + code + ')' : '')) + '</option>');
+    });
+
+    select.innerHTML = options.join('');
+  }
+
+  function setFieldActivityButtonsDisabled_(isDisabled) {
+    ['fieldStartBtn', 'fieldUpdateBtn', 'fieldEndBtn', 'fieldWorkSaveBtn'].forEach(function(id) {
+      var button = document.getElementById(id);
+      if (button) {
+        button.disabled = !!isDisabled;
+      }
+    });
+  }
+
+  function getGeolocationErrorMessage_(error) {
+    if (!error) return 'error tidak diketahui';
+    if (error.code === 1) return 'izin lokasi ditolak.';
+    if (error.code === 2) return 'posisi tidak tersedia.';
+    if (error.code === 3) return 'waktu mengambil lokasi habis.';
+    return error.message || 'error tidak diketahui.';
+  }
+
+  function getOrCreateFieldDeviceId_() {
+    var storageKey = 'airtis_field_device_id';
+    var value = '';
+
+    try {
+      value = String(localStorage.getItem(storageKey) || '').trim();
+      if (!value) {
+        value = 'dev-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000));
+        localStorage.setItem(storageKey, value);
+      }
+    } catch (error) {
+      value = 'dev-session-' + String(Date.now());
+    }
+
+    return value;
+  }
+
+  function renderSalesFieldActivity_() {
+    var data = appState.fieldActivity || {};
+    var config = data.config || {};
+    var today = data.today || {};
+    var slots = Array.isArray(today.slots) ? today.slots : [];
+    var nextAction = today.next_action || {};
+    var status = today.status_harian || 'Belum mulai';
+    var lastUpdate = today.jam_update_terakhir || '';
+    var statusBadge = document.getElementById('salesActivityStatusBadge');
+    var timeline = document.getElementById('salesActivityTimeline');
+    var hasStarted = slots.some(function(slot) {
+      return slot.target === '08:00' && slot.status !== 'Tidak Update';
+    });
+    var hasEnded = slots.some(function(slot) {
+      return slot.type === 'Selesai Kerja' && slot.status !== 'Tidak Update';
+    });
+    var fallbackLabels = slots.length
+      ? slots.map(function(slot) { return slot.label || slot.target || '-'; })
+      : (config.startTime ? [config.startTime].concat(config.updateTimes || []).concat([config.endTime]) : ['08:00', '10:00', '12:00', '14:00', '16:00']);
+
+    setText_('salesActivityNextAction', nextAction.label || 'Mulai Kerja 08:00');
+    setText_('salesActivityLastUpdate', 'Update terakhir: ' + (lastUpdate || '-'));
+    setText_('salesActivitySubtitle', today.jadwal_kerja || config.scheduleText || 'Jadwal kerja sales. Toleransi 30 menit.');
+    setText_('salesActivityNote', buildSalesActivityNote_(today));
+
+    if (statusBadge) {
+      statusBadge.textContent = status;
+      statusBadge.className = 'sales-activity-status status-' + String(status || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    }
+
+    if (timeline) {
+      timeline.innerHTML = slots.length ? slots.map(function(slot) {
+        return '' +
+          '<span class="' + getFieldSlotClass_(slot.status) + '">' +
+            '<strong>' + escapeHtml_(slot.label || slot.target || '-') + '</strong>' +
+            '<small>' + escapeHtml_(slot.status || '-') + '</small>' +
+          '</span>';
+      }).join('') : fallbackLabels.map(function(label) {
+        return '<span><strong>' + label + '</strong><small>Belum</small></span>';
+      }).join('');
+    }
+
+    setSingleActivityButtonState_('fieldStartBtn', hasStarted, 'Mulai kerja hari ini sudah tercatat.');
+    setSingleActivityButtonState_('fieldEndBtn', hasEnded, 'Selesai kerja hari ini sudah tercatat.');
+  }
+
+  function setSingleActivityButtonState_(id, isDone, title) {
+    var button = document.getElementById(id);
+
+    if (!button) {
+      return;
+    }
+
+    button.disabled = !!isDone;
+    button.title = isDone ? title : '';
+  }
+
+  function buildSalesActivityNote_(today) {
+    var source = today || {};
+
+    if (!source.total_update) {
+      return 'Tekan Mulai saat mulai kerja. Sistem menyimpan jam server dan lokasi GPS.';
+    }
+
+    if (source.anomali_lokasi || source.anomali_perangkat) {
+      return 'Ada catatan yang perlu dicek admin. Tetap lanjutkan update sesuai jadwal.';
+    }
+
+    if (source.status_harian === 'Hijau') {
+      return 'Aktivitas hari ini lengkap.';
+    }
+
+    return 'Update berikutnya akan mengikuti titik kontrol terdekat.';
+  }
+
+  function getFieldSlotClass_(status) {
+    var key = String(status || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return 'slot-' + (key || 'unknown');
+  }
+
   function loadControllerData_(callback) {
     if (!ensureAuthorizedSession_()) return;
 
     ensureControllerFilterDefaults_();
     syncControllerPlaceholderState_();
-    setStatusText_('Memuat dashboard controller...');
+    setStatusText_(currentUserHasRole_('mtr') ? 'Memuat dashboard monitoring...' : 'Memuat dashboard controller...');
 
     google.script.run
       .withSuccessHandler(function(data) {
@@ -593,24 +872,27 @@
           applyControllerTopSalesPayload_(payload.topSales || []);
           applyControllerTopCustomersPayload_(payload.topCustomers || []);
           applyControllerTopItemsPayload_(payload.topItems || []);
+          applyControllerFieldMonitoringPayload_(payload.fieldMonitoring || null);
           appState.controllerLastUpdated = String(payload.lastUpdated || '').trim() || appState.controllerLastUpdated;
           renderControllerDashboard_();
-          setStatusText_('Dashboard controller siap');
+          setStatusText_(currentUserHasRole_('mtr') ? 'Dashboard monitoring siap' : 'Dashboard controller siap');
+          loadMtrSalesMovementMapData_();
 
           if (callback) callback();
         } catch (error) {
-          setStatusText_('Gagal render dashboard controller');
-          renderResult_('Gagal render dashboard controller: ' + error.message, true);
+        setStatusText_(currentUserHasRole_('mtr') ? 'Gagal render dashboard monitoring' : 'Gagal render dashboard controller');
+        renderResult_('Gagal render dashboard: ' + error.message, true);
         }
       })
       .withFailureHandler(function(error) {
-        setStatusText_('Gagal memuat dashboard controller');
-        renderResult_('Gagal memuat dashboard controller: ' + (error && error.message ? error.message : error), true);
+        setStatusText_(currentUserHasRole_('mtr') ? 'Gagal memuat dashboard monitoring' : 'Gagal memuat dashboard controller');
+        renderResult_('Gagal memuat dashboard: ' + (error && error.message ? error.message : error), true);
       })
       .getControllerDashboardData(appState.currentUser.user_id, {
         preset: appState.controllerFilterPreset,
         startDate: appState.controllerStartDate,
-        endDate: appState.controllerEndDate
+        endDate: appState.controllerEndDate,
+        monitoringDate: appState.fieldMonitoringDate || ''
       });
   }
 
@@ -1028,6 +1310,8 @@
       option.textContent = customer.nama_customer + ' (' + customer.kode_customer + ')';
       customerSelect.appendChild(option);
     });
+
+    renderAdminCustomerSearchResults_(getFieldValue_('admin_customer_search'));
   }
 
   function renderProductOptions_() {
@@ -1940,6 +2224,10 @@
         if (statusVerifikasi === 'Sudah Dicek') {
           actions.push('<button type="button" class="ghost-btn" onclick="handleCompleteOrder(\'' + escapeJs_(noSo) + '\')">Selesai</button>');
         }
+      }
+
+      if ((String(row.status_kirim || '') === 'Siap Kirim' || String(row.status_kirim || '') === 'Terkirim') && statusVerifikasi !== 'Sudah Dicek') {
+        actions.push('<button type="button" class="danger-btn" onclick="handleCancelDelivery(\'' + escapeJs_(noSo) + '\')">Batal Kirim</button>');
       }
 
       actions.push(
@@ -4267,6 +4555,9 @@
         row.nama_customer,
         row.item_summary,
         row.qty_summary,
+        row.tanggal_order,
+        row.tanggal_kirim_rencana,
+        row.tanggal_kirim,
         row.catatan,
         row.alasan_hold,
         row.alasan_batal
@@ -4297,11 +4588,14 @@
   }
 
   function renderSalesHistoryStatusOptions_() {
-    var select = document.getElementById('salesHistoryStatusFilter');
+    var selects = [
+      document.getElementById('salesHistoryStatusFilter'),
+      document.getElementById('salesHistoryInlineStatusFilter')
+    ].filter(Boolean);
     var options = ['<option value="">Semua Status</option>'];
     var statuses = {};
 
-    if (!select) return;
+    if (!selects.length) return;
 
     (appState.salesHistoryOrders || []).forEach(function(row) {
       var status = String(row.status_order || '').trim();
@@ -4316,13 +4610,27 @@
       options.push('<option value="' + escapeHtml_(status) + '">' + escapeHtml_(status) + '</option>');
     });
 
-    select.innerHTML = options.join('');
-    setFieldValue_('salesHistoryStatusFilter', appState.salesHistoryStatus || '');
+    selects.forEach(function(select) {
+      select.innerHTML = options.join('');
+      select.value = appState.salesHistoryStatus || '';
+    });
   }
 
   function renderSalesHistoryTable_() {
-    var tbody = document.getElementById('salesHistoryTableBody');
-    var pagination = document.getElementById('salesHistoryPagination');
+    var targets = [
+      {
+        tbody: document.getElementById('salesHistoryTableBody'),
+        pagination: document.getElementById('salesHistoryPagination'),
+        compact: false
+      },
+      {
+        tbody: document.getElementById('salesHistoryInlineTableBody'),
+        pagination: document.getElementById('salesHistoryInlinePagination'),
+        compact: true
+      }
+    ].filter(function(target) {
+      return !!target.tbody;
+    });
     var orders = getFilteredSalesHistoryOrders_();
     var totalPages;
     var currentPage;
@@ -4331,13 +4639,15 @@
     var pageRows;
     var pageInfo;
 
-    if (!tbody) return;
+    if (!targets.length) return;
 
     if (!orders.length) {
-      tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">Belum ada order yang cocok dengan filter.</td></tr>';
-      if (pagination) {
-        pagination.innerHTML = '';
-      }
+      targets.forEach(function(target) {
+        target.tbody.innerHTML = '<tr><td colspan="' + (target.compact ? '6' : '12') + '" class="empty-cell">Belum ada order yang cocok dengan filter.</td></tr>';
+        if (target.pagination) {
+          target.pagination.innerHTML = '';
+        }
+      });
       return;
     }
 
@@ -4347,50 +4657,75 @@
     endIndex = Math.min(startIndex + SALES_HISTORY_PAGE_SIZE, orders.length);
     pageRows = orders.slice(startIndex, endIndex);
 
-    tbody.innerHTML = pageRows.map(function(row) {
-      var customerName = String(row.nama_customer_input || row.nama_customer || '-').trim() || '-';
-      var note = String(row.alasan_hold || row.alasan_batal || row.catatan || '-').trim() || '-';
-
-      return '' +
-        '<tr>' +
-          '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
-          '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</td>' +
-          '<td>' + escapeHtml_(customerName) + '</td>' +
-          '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
-          '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
-          '<td>' + formatNumber_(row.total_final || row.total_order || row.total || 0) + '</td>' +
-          '<td>' + escapeHtml_(String(row.jenis_komisi_order || '-').trim() || '-') + '</td>' +
-          '<td>' + formatCommissionDisplayValue_(row) + '</td>' +
-          '<td>' + buildStatusBadge_(row.status_komisi || '-') + '</td>' +
-          '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
-          '<td>' + escapeHtml_(note) + '</td>' +
-        '</tr>';
-    }).join('');
-
-    if (!pagination) {
-      return;
-    }
-
     pageInfo = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + orders.length + ' order';
 
-    pagination.innerHTML = '' +
-      '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
-      '<div class="table-pagination-actions">' +
-        '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
-        '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
-        '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
-      '</div>';
+    targets.forEach(function(target) {
+      target.tbody.innerHTML = pageRows.map(function(row) {
+        return target.compact ? buildSalesHistoryCompactRowHtml_(row) : buildSalesHistoryFullRowHtml_(row);
+      }).join('');
+
+      if (target.pagination) {
+        target.pagination.innerHTML = '' +
+          '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
+          '<div class="table-pagination-actions">' +
+            '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
+            '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
+            '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
+          '</div>';
+      }
+    });
   }
 
-  function handleSalesHistorySearchInput_() {
-    appState.salesHistorySearch = getFieldValue_('salesHistorySearch');
+  function buildSalesHistoryFullRowHtml_(row) {
+    var customerName = String(row.nama_customer_input || row.nama_customer || '-').trim() || '-';
+    var note = String(row.alasan_hold || row.alasan_batal || row.catatan || '-').trim() || '-';
+
+    return '' +
+      '<tr>' +
+        '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
+        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</td>' +
+        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_kirim_rencana || row.tanggal_kirim || '')) + '</td>' +
+        '<td>' + escapeHtml_(customerName) + '</td>' +
+        '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
+        '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
+        '<td>' + formatNumber_(row.total_final || row.total_order || row.total || 0) + '</td>' +
+        '<td>' + escapeHtml_(String(row.jenis_komisi_order || '-').trim() || '-') + '</td>' +
+        '<td>' + formatCommissionDisplayValue_(row) + '</td>' +
+        '<td>' + buildStatusBadge_(row.status_komisi || '-') + '</td>' +
+        '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
+        '<td>' + escapeHtml_(note) + '</td>' +
+      '</tr>';
+  }
+
+  function buildSalesHistoryCompactRowHtml_(row) {
+    var customerName = String(row.nama_customer_input || row.nama_customer || '-').trim() || '-';
+
+    return '' +
+      '<tr>' +
+        '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
+        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</td>' +
+        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_kirim_rencana || row.tanggal_kirim || '')) + '</td>' +
+        '<td>' + escapeHtml_(customerName) + '</td>' +
+        '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
+        '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
+      '</tr>';
+  }
+
+  function handleSalesHistorySearchInput_(event) {
+    var sourceId = event && event.target ? event.target.id : 'salesHistorySearch';
+    appState.salesHistorySearch = getFieldValue_(sourceId);
     appState.salesHistoryPage = 1;
+    setFieldValue_('salesHistorySearch', appState.salesHistorySearch || '');
+    setFieldValue_('salesHistoryInlineSearch', appState.salesHistorySearch || '');
     renderSalesHistoryTable_();
   }
 
-  function handleSalesHistoryStatusChange_() {
-    appState.salesHistoryStatus = getFieldValue_('salesHistoryStatusFilter');
+  function handleSalesHistoryStatusChange_(event) {
+    var sourceId = event && event.target ? event.target.id : 'salesHistoryStatusFilter';
+    appState.salesHistoryStatus = getFieldValue_(sourceId);
     appState.salesHistoryPage = 1;
+    setFieldValue_('salesHistoryStatusFilter', appState.salesHistoryStatus || '');
+    setFieldValue_('salesHistoryInlineStatusFilter', appState.salesHistoryStatus || '');
     renderSalesHistoryTable_();
   }
 
@@ -4546,6 +4881,7 @@
     } else {
       clearAdminCustomerInfo_();
       setFieldValue_('admin_customer_id', '');
+      setFieldValue_('admin_customer_search', '');
       setFieldValue_('admin_nama_customer_input', '');
       setFieldValue_('admin_pic_customer', '');
       setFieldValue_('admin_alamat_kirim', '');
@@ -4575,6 +4911,95 @@
     setFieldValue_('admin_pic_customer', customer.pic || '');
     setFieldValue_('admin_alamat_kirim', customer.alamat || '');
     setFieldValue_('admin_no_hp_customer', customer.no_hp || '');
+    setFieldValue_('admin_customer_search', buildCustomerSearchLabel_(customer));
+    renderAdminCustomerSearchResults_(getFieldValue_('admin_customer_search'));
+  }
+
+  function handleAdminCustomerSearchInput_() {
+    var query = getFieldValue_('admin_customer_search');
+    var selectedCustomer = getSelectedAdminCustomer_();
+
+    if (selectedCustomer && normalizeSearchText_(query) !== normalizeSearchText_(buildCustomerSearchLabel_(selectedCustomer))) {
+      setFieldValue_('admin_customer_id', '');
+      clearAdminCustomerInfo_();
+    } else if (normalizeSearchText_(query).length < 2) {
+      setFieldValue_('admin_customer_id', '');
+      clearAdminCustomerInfo_();
+    }
+
+    renderAdminCustomerSearchResults_(query);
+  }
+
+  function renderAdminCustomerSearchResults_(query) {
+    var container = document.getElementById('adminCustomerSearchResults');
+    var normalizedQuery = normalizeSearchText_(query);
+    var selectedCustomer = getSelectedAdminCustomer_();
+    var results;
+
+    if (!container) {
+      return;
+    }
+
+    if (selectedCustomer && normalizedQuery === normalizeSearchText_(buildCustomerSearchLabel_(selectedCustomer))) {
+      container.innerHTML = '';
+      return;
+    }
+
+    if (!normalizedQuery) {
+      container.innerHTML = '<div class="customer-search-empty">Ketik minimal 2 huruf untuk mencari customer.</div>';
+      return;
+    }
+
+    if (normalizedQuery.length < 2) {
+      container.innerHTML = '<div class="customer-search-empty">Minimal 2 huruf.</div>';
+      return;
+    }
+
+    results = getSortedCustomersByName_(appState.customers).filter(function(customer) {
+      var haystack = normalizeSearchText_([
+        customer.kode_customer,
+        customer.nama_customer,
+        customer.pic,
+        customer.no_hp,
+        customer.alamat
+      ].join(' '));
+
+      return haystack.indexOf(normalizedQuery) !== -1;
+    }).slice(0, 8);
+
+    if (!results.length) {
+      container.innerHTML = '<div class="customer-search-empty">Customer tidak ditemukan.</div>';
+      return;
+    }
+
+    container.innerHTML = results.map(function(customer) {
+      var code = String(customer.kode_customer || '').trim();
+      var subtitle = [
+        customer.pic || '',
+        customer.no_hp || '',
+        customer.alamat || ''
+      ].filter(Boolean).join(' | ');
+
+      return '' +
+        '<button type="button" class="customer-search-option" onclick="selectAdminCustomerFromSearch_(\'' + escapeJs_(code) + '\')">' +
+          '<strong>' + escapeHtml_(customer.nama_customer || '-') + '</strong>' +
+          '<span>' + escapeHtml_(code || '-') + (subtitle ? ' - ' + escapeHtml_(subtitle) : '') + '</span>' +
+        '</button>';
+    }).join('');
+  }
+
+  function selectAdminCustomerFromSearch_(customerId) {
+    var customer = (appState.customers || []).find(function(row) {
+      return String(row.kode_customer || '').trim() === String(customerId || '').trim();
+    });
+
+    if (!customer) {
+      return;
+    }
+
+    setFieldValue_('admin_customer_id', customer.kode_customer || '');
+    setFieldValue_('admin_customer_search', buildCustomerSearchLabel_(customer));
+    handleAdminCustomerChange_();
   }
 
   function handleProductChange_() {
@@ -4998,6 +5423,98 @@
       });
   }
 
+  function handleCancelDelivery(noSo) {
+    var row = getDeliveryOrderByNoSo_(noSo);
+    var backdrop = document.getElementById('cancelDeliveryBackdrop');
+    var reasonInput = document.getElementById('cancelDeliveryReason');
+    var messageEl = document.getElementById('cancelDeliveryMessage');
+
+    if (!row) {
+      renderResult_('Data surat jalan tidak ditemukan.', true);
+      return;
+    }
+
+    if (String(row.status_verifikasi_cs || '').trim() === 'Sudah Dicek') {
+      renderResult_('Batal kirim tidak bisa dilakukan karena verifikasi CS sudah tersimpan.', true);
+      return;
+    }
+
+    appState.cancelDeliveryDraft = {
+      no_so: noSo,
+      no_surat_jalan: row.no_surat_jalan || '',
+      nama_customer: row.nama_customer || '-'
+    };
+
+    setText_('cancelDeliveryNoSo', noSo || '-');
+    setText_('cancelDeliveryNoSj', row.no_surat_jalan || '-');
+    setText_('cancelDeliveryCustomer', row.nama_customer || '-');
+    if (reasonInput) {
+      reasonInput.value = '';
+    }
+    if (messageEl) {
+      messageEl.textContent = '';
+      messageEl.classList.add('hidden');
+    }
+    if (backdrop) {
+      backdrop.classList.remove('hidden');
+    }
+  }
+
+  function closeCancelDeliveryModal_() {
+    appState.cancelDeliveryDraft = null;
+    var backdrop = document.getElementById('cancelDeliveryBackdrop');
+    var messageEl = document.getElementById('cancelDeliveryMessage');
+
+    if (messageEl) {
+      messageEl.textContent = '';
+      messageEl.classList.add('hidden');
+    }
+    if (backdrop) {
+      backdrop.classList.add('hidden');
+    }
+  }
+
+  function submitCancelDelivery_() {
+    var draft = appState.cancelDeliveryDraft || {};
+    var reason = getFieldValue_('cancelDeliveryReason');
+    var messageEl = document.getElementById('cancelDeliveryMessage');
+
+    reason = String(reason || '').trim();
+    if (!draft.no_so) {
+      renderResult_('Pilih surat jalan yang ingin dibatalkan dulu.', true);
+      return;
+    }
+    if (!reason) {
+      if (messageEl) {
+        messageEl.textContent = 'Alasan batal kirim wajib diisi.';
+        messageEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    setStatusText_('Membatalkan pengiriman...');
+    google.script.run
+      .withSuccessHandler(function(result) {
+        setStatusText_('Pengiriman dibatalkan');
+        renderResult_(result && result.sales_order_found === false
+          ? 'SJ ' + (result.no_surat_jalan || '-') + ' dibatalkan dan dihapus dari daftar Surat Jalan. Data SO asal tidak ditemukan.'
+          : 'SJ ' + (result.no_surat_jalan || '-') + ' dibatalkan. Order ' + result.no_so + ' kembali ke Siap Kirim.', false);
+        closeCancelDeliveryModal_();
+        loadAdminOperationsData_();
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal batal kirim');
+        if (messageEl) {
+          messageEl.textContent = 'Gagal batal kirim: ' + (error && error.message ? error.message : error);
+          messageEl.classList.remove('hidden');
+        }
+      })
+      .cancelDeliveryFromDashboard(appState.currentUser.user_id, {
+        no_so: draft.no_so,
+        alasan_batal_kirim: reason
+      });
+  }
+
   function handleCompleteOrder(noSo) {
     setStatusText_('Menyelesaikan order...');
     google.script.run
@@ -5234,6 +5751,24 @@
     loadControllerData_(function() {
       setStatusText_('Dashboard controller diperbarui');
       renderResult_('Dashboard Controller masih memakai placeholder frontend. Backend summary akan disambungkan pada tahap berikutnya.', false);
+    });
+  }
+
+  function handleFieldMonitoringDateChange_() {
+    appState.fieldMonitoringDate = getFieldValue_('fieldMonitoringDate') || getTodayIsoDate_();
+    appState.mtrMapDate = appState.fieldMonitoringDate;
+    setFieldValue_('mtrMapDate', appState.fieldMonitoringDate);
+    loadControllerData_(function() {
+      setStatusText_('Monitoring sales diperbarui');
+    });
+  }
+
+  function handleFieldMonitoringRefresh_() {
+    appState.fieldMonitoringDate = getFieldValue_('fieldMonitoringDate') || appState.fieldMonitoringDate || getTodayIsoDate_();
+    appState.mtrMapDate = appState.fieldMonitoringDate;
+    setFieldValue_('mtrMapDate', appState.fieldMonitoringDate);
+    loadControllerData_(function() {
+      setStatusText_('Monitoring sales diperbarui');
     });
   }
 
@@ -5483,6 +6018,10 @@
       return 'Minimal satu item order customer wajib ditambahkan.';
     }
 
+    if (String(payload.jenis_customer || '') === 'Lama' && !String(payload.customer_id || '').trim()) {
+      return 'Pilih customer lama dari hasil pencarian.';
+    }
+
     if (!String(payload.tanggal_jatuh_tempo || '').trim()) {
       return 'Tanggal Jatuh Tempo wajib diisi.';
     }
@@ -5727,13 +6266,13 @@
     }
 
     document.querySelectorAll('.tab-btn').forEach(function(button) {
-      var allowed = button.dataset.role === roleKey;
+      var allowed = elementAllowsRole_(button, roleKey);
       button.classList.toggle('hidden', !allowed);
       button.disabled = !allowed;
     });
 
     document.querySelectorAll('.tab-panel').forEach(function(panel) {
-      panel.classList.toggle('hidden', panel.dataset.role !== roleKey);
+      panel.classList.toggle('hidden', !elementAllowsRole_(panel, roleKey));
       panel.classList.remove('active');
     });
 
@@ -5744,10 +6283,21 @@
       if (roleKey === 'approver') {
         activateApproverView_('approval');
       }
-      if (roleKey === 'sales' || roleKey === 'approver' || roleKey === 'cs_admin' || roleKey === 'controller') {
-        activateTab_(roleKey === 'cs_admin' ? 'admin' : roleKey);
+      if (roleKey === 'sales') {
+        activateSalesView_('activity');
+      }
+      if (roleKey === 'sales' || roleKey === 'approver' || roleKey === 'cs_admin' || roleKey === 'controller' || roleKey === 'mtr') {
+        activateTab_(roleKey === 'cs_admin' ? 'admin' : (roleKey === 'mtr' ? 'controller' : roleKey));
       }
     }
+  }
+
+  function elementAllowsRole_(element, roleKey) {
+    var roles = String(element && element.dataset ? element.dataset.role || '' : '')
+      .split(/\s+/)
+      .filter(Boolean);
+
+    return roles.indexOf(roleKey) !== -1;
   }
 
   function renderUnauthorizedState_() {
@@ -5890,13 +6440,53 @@
     return !!(appState.currentUser && appState.currentUser.is_freelance);
   }
 
+  function activateSalesView_(viewName) {
+    var targetView = 'activity';
+    var isFreelance = currentUserIsFreelance_();
+
+    if (viewName === 'order' || viewName === 'history' || viewName === 'kpi') {
+      targetView = viewName;
+    } else if (viewName === 'commission' && isFreelance) {
+      targetView = 'commission';
+    }
+
+    document.querySelectorAll('.sales-subtab-btn').forEach(function(button) {
+      var isCommissionButton = button.dataset.salesView === 'commission';
+      button.classList.toggle('hidden', isCommissionButton && !isFreelance);
+      button.classList.toggle('active', button.dataset.salesView === targetView);
+    });
+
+    document.querySelectorAll('.sales-view-panel').forEach(function(panel) {
+      panel.classList.toggle('active', panel.id === 'sales-view-' + targetView);
+    });
+
+    if (targetView === 'history') {
+      renderSalesHistoryStatusOptions_();
+      renderSalesHistoryTable_();
+    } else if (targetView === 'kpi') {
+      loadSalesKpiSummary_();
+    } else if (targetView === 'commission') {
+      renderSalesCommissionSummary_();
+      renderSalesPayoutSection_();
+    }
+  }
+
   function applySalesModeUi_() {
     var summarySection = document.getElementById('salesCommissionSummarySection');
     var customerSearch = document.getElementById('customer_search');
+    var commissionTab = document.getElementById('salesCommissionTabBtn');
     var isFreelance = currentUserIsFreelance_();
 
     if (summarySection) {
       summarySection.classList.toggle('hidden', !isFreelance);
+    }
+
+    if (commissionTab) {
+      commissionTab.classList.toggle('hidden', !isFreelance);
+    }
+
+    if (!isFreelance && document.getElementById('sales-view-commission') && document.getElementById('sales-view-commission').classList.contains('active')) {
+      activateSalesView_('activity');
     }
 
     if (customerSearch) {
@@ -6011,7 +6601,10 @@
     document.getElementById('agentOrderForm').reset();
     appState.adminOrderItems = [];
     document.querySelector('input[name="admin_jenis_customer"][value="Lama"]').checked = true;
+    setFieldValue_('admin_customer_id', '');
+    setFieldValue_('admin_customer_search', '');
     clearAdminCustomerInfo_();
+    renderAdminCustomerSearchResults_('');
     renderAdminOrderItems_();
     resetAdminItemDraft_();
     handleAdminJenisCustomerChange_();
@@ -6470,7 +7063,7 @@
   }
 
   function escapeHtml_(value) {
-    return String(value || '')
+    return String(value === null || typeof value === 'undefined' ? '' : value)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -6479,7 +7072,7 @@
   }
 
   function escapeJs_(value) {
-    return String(value || '')
+    return String(value === null || typeof value === 'undefined' ? '' : value)
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "\\'");
   }
@@ -6936,9 +7529,12 @@
     var tabRoleMap = {
       sales: 'sales',
       approver: 'approver',
-      controller: 'controller',
       admin: 'cs_admin'
     };
+
+    if (tabName === 'controller') {
+      return currentUserHasRole_('controller') || currentUserHasRole_('mtr');
+    }
 
     return currentUserHasRole_(tabRoleMap[tabName] || '');
   }
@@ -7069,20 +7665,39 @@
       { rank: 2, name: 'AIRTIS Cup 240ml', qty: '180', omzet: 'Rp 14.400.000' },
       { rank: 3, name: 'AIRTIS Botol 600ml', qty: '142', omzet: 'Rp 18.460.000' }
     ];
+    appState.controllerFieldMonitoring = {
+      summary: { total_sales: 0, hijau: 0, kuning: 0, merah: 0 },
+      rows: []
+    };
     appState.controllerLastUpdated = lastUpdated;
   }
 
   function renderControllerDashboard_() {
+    renderControllerHeader_();
     renderControllerPresetButtons_();
     renderControllerSummaryCards_();
     renderControllerSalesKpiSnapshot_();
     renderControllerTrend_();
+    renderControllerFieldMonitoring_();
+    renderMtrMapFilters_();
+    renderMtrSalesMovementMap_();
     renderControllerStatList_('controllerStatusSummary', appState.controllerStatusSummary || []);
     renderControllerStatList_('controllerOpsSummary', appState.controllerOpsSummary || []);
     renderControllerRankingTable_('controllerTopSalesBody', appState.controllerTopSales || [], 'sales');
     renderControllerRankingTable_('controllerTopCustomersBody', appState.controllerTopCustomers || [], 'customers');
     renderControllerRankingTable_('controllerTopItemsBody', appState.controllerTopItems || [], 'items');
     setText_('controllerLastUpdated', formatControllerLastUpdated_(appState.controllerLastUpdated || ''));
+  }
+
+  function renderControllerHeader_() {
+    var isMtr = currentUserHasRole_('mtr');
+
+    setText_('controllerKicker', isMtr ? 'Monitoring Sales' : 'Monitoring Read-Only');
+    setText_('controllerDashboardTitle', isMtr ? 'Dashboard MTR' : 'Dashboard Global');
+    setText_('controllerDashboardSubtitle', isMtr
+      ? 'Pengawasan aktivitas lapangan, anomali, dan catatan MTR'
+      : 'Ringkasan Sales Order dan Operasional');
+    setText_('controllerModeChip', isMtr ? 'Mode MTR' : 'Mode Controller');
   }
 
   function renderControllerPresetButtons_() {
@@ -7172,6 +7787,527 @@
           '</div>' +
         '</article>';
     }).join('');
+  }
+
+  function renderControllerFieldMonitoring_() {
+    var data = appState.controllerFieldMonitoring || {};
+    var summary = data.summary || {};
+    var rows = Array.isArray(data.rows) ? data.rows : [];
+    var weekly = Array.isArray(data.weekly) ? data.weekly : [];
+    var body = document.getElementById('fieldMonitoringBody');
+    var weeklyList = document.getElementById('fieldWeeklyAnomalyList');
+    var activeDate = data.tanggal || appState.fieldMonitoringDate || getTodayIsoDate_();
+
+    appState.fieldMonitoringDate = activeDate;
+    setFieldValue_('fieldMonitoringDate', activeDate);
+    setText_('fieldMonitorTotalSales', summary.total_sales || '0');
+    setText_('fieldMonitorGreen', summary.hijau || '0');
+    setText_('fieldMonitorYellow', summary.kuning || '0');
+    setText_('fieldMonitorRed', summary.merah || '0');
+
+    if (!body) {
+      return;
+    }
+
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="7" class="empty-cell">Belum ada data pengawasan.</td></tr>';
+    } else {
+      body.innerHTML = rows.map(function(row) {
+        var slots = Array.isArray(row.slots) ? row.slots : [];
+        var doneSlots = slots.filter(function(slot) {
+          return slot.status && slot.status !== 'Tidak Update';
+        }).length;
+        var lateSlots = slots.filter(function(slot) {
+          return slot.status === 'Terlambat' || slot.status === 'Lebih Awal';
+        }).length;
+        var missingSlots = Math.max(0, slots.length - doneSlots);
+        var detailSlots = slots.map(function(slot) {
+          var statusText = String(slot.status || 'Tidak Update');
+          var statusClass = statusText.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+          return '' +
+            '<span class="field-monitor-slot slot-' + escapeHtml_(statusClass) + '">' +
+              '<b>' + escapeHtml_(slot.label || slot.target || '-') + '</b>' +
+              '<em>' + escapeHtml_(statusText) + '</em>' +
+              '<small>' + escapeHtml_(slot.jam || '-') + '</small>' +
+            '</span>';
+        }).join('');
+        var detailMaps = slots.filter(function(slot) {
+          return !!String(slot.lokasi || '').trim();
+        }).map(function(slot) {
+          return '' +
+            '<a class="field-monitor-map-chip" href="' + escapeHtml_(slot.lokasi) + '" target="_blank" rel="noopener">' +
+              escapeHtml_(slot.label || slot.target || '-') +
+              '<small>' + escapeHtml_(slot.jam || '-') + '</small>' +
+            '</a>';
+        }).join('') || '<span class="field-monitor-empty">-</span>';
+        var updateInfo = '' +
+          '<div class="field-monitor-detail-grid">' +
+            detailSlots +
+          '</div>';
+        var progressInfo = '' +
+          '<div class="field-monitor-progress">' +
+            '<strong>' + escapeHtml_(doneSlots) + '/' + escapeHtml_(slots.length || 5) + ' checkpoint</strong>' +
+            '<small>' + escapeHtml_(lateSlots) + ' telat | ' + escapeHtml_(missingSlots) + ' belum update</small>' +
+          '</div>';
+        var mapsLink = row.lokasi_terakhir
+          ? '<a href="' + escapeHtml_(row.lokasi_terakhir) + '" target="_blank" rel="noopener">Maps</a><small class="field-monitor-time">' + escapeHtml_(row.lokasi_terakhir_jam || '-') + '</small>'
+          : '-';
+        var salesNotes = Array.isArray(row.catatan_kegiatan_sales) ? row.catatan_kegiatan_sales : [];
+        var salesNotesHtml = salesNotes.length
+          ? '<div class="field-monitor-sales-notes">' +
+              '<small class="field-monitor-time">Catatan kegiatan sales</small>' +
+              salesNotes.slice(-3).map(function(note) {
+                var noteTitle = [note.jenis_kegiatan, note.nama_customer].filter(Boolean).join(' - ') || 'Catatan';
+                var noteBody = note.hasil_kegiatan || '-';
+                return '' +
+                  '<div class="field-monitor-sales-note">' +
+                    '<strong>' + escapeHtml_(note.jam || '-') + ' ' + escapeHtml_(noteTitle) + '</strong>' +
+                    '<span>' + escapeHtml_(noteBody) + '</span>' +
+                    (note.lokasi ? '<a href="' + escapeHtml_(note.lokasi) + '" target="_blank" rel="noopener">Maps</a>' : '') +
+                  '</div>';
+              }).join('') +
+            '</div>'
+          : '<div class="field-monitor-sales-notes"><small class="field-monitor-time">Belum ada catatan kegiatan sales</small></div>';
+        var noteText = row.catatan_mtr_terakhir
+          ? '<small class="field-monitor-time">' + escapeHtml_(row.status_monitoring_mtr || 'Catatan') + '</small>' + escapeHtml_(row.catatan_mtr_terakhir)
+          : '<small class="field-monitor-time">Belum ada catatan</small>';
+        var noteAction = currentUserHasRole_('mtr') || currentUserHasRole_('controller')
+          ? '<button type="button" class="ghost-btn tiny-btn" onclick="handleCreateMonitoringNote_(\'' + escapeJs_(row.user_id || '') + '\')">Catat</button>'
+          : '';
+
+        return '' +
+          '<tr>' +
+            '<td><div class="controller-kpi-sales-cell"><strong>' + escapeHtml_(row.nama_user || '-') + '</strong><small>' + escapeHtml_(row.user_id || '-') + '</small></div></td>' +
+            '<td>' + buildStatusBadge_(row.status_harian || '-') + '</td>' +
+            '<td>' + updateInfo + '</td>' +
+            '<td><div class="field-monitor-map-grid">' + detailMaps + '</div></td>' +
+            '<td>' + progressInfo + '</td>' +
+            '<td>' + mapsLink + '</td>' +
+            '<td><div class="field-monitor-note-cell">' + noteText + salesNotesHtml + noteAction + '</div></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    if (!weeklyList) {
+      return;
+    }
+
+    if (!weekly.length) {
+      weeklyList.innerHTML = '' +
+        '<article class="controller-stat-item">' +
+          '<div class="controller-stat-copy">' +
+            '<strong>Belum ada anomali</strong>' +
+            '<small>Data akan muncul bila ada telat, perpindahan tidak wajar, atau ganti perangkat.</small>' +
+          '</div>' +
+        '</article>';
+      return;
+    }
+
+    weeklyList.innerHTML = weekly.slice(0, 6).map(function(row) {
+      return '' +
+        '<article class="controller-stat-item">' +
+          '<div class="controller-stat-copy">' +
+            '<strong>' + escapeHtml_(row.nama_user || row.user_id || '-') + '</strong>' +
+            '<small>Telat: ' + escapeHtml_(row.telat || 0) + ' | Lokasi: ' + escapeHtml_(row.anomali_lokasi || 0) + ' | Perangkat: ' + escapeHtml_(row.anomali_perangkat || 0) + '</small>' +
+          '</div>' +
+          '<span class="controller-stat-value">Cek</span>' +
+        '</article>';
+    }).join('');
+  }
+
+  function renderMtrMapFilters_() {
+    var dateInput = document.getElementById('mtrMapDate');
+    var salesSelect = document.getElementById('mtrMapSales');
+    var monitoringDate = appState.fieldMonitoringDate || (appState.controllerFieldMonitoring || {}).tanggal || appState.controllerEndDate || getTodayIsoDate_();
+    var rows = ((appState.controllerFieldMonitoring || {}).rows || []).slice();
+    var currentValue;
+
+    if (!appState.mtrMapDate) {
+      appState.mtrMapDate = monitoringDate;
+    }
+
+    if (dateInput) {
+      dateInput.value = appState.mtrMapDate || monitoringDate;
+    }
+
+    if (!salesSelect) {
+      return;
+    }
+
+    currentValue = appState.mtrMapSales || salesSelect.value || '';
+    rows.sort(function(left, right) {
+      return String(left.nama_user || left.user_id || '').localeCompare(String(right.nama_user || right.user_id || ''), 'id-ID');
+    });
+
+    salesSelect.innerHTML = '<option value="">Semua sales</option>' + rows.map(function(row) {
+      var id = String(row.user_id || '').trim();
+      var name = String(row.nama_user || id || '-').trim();
+      var channel = String(row.channel_sales_default || row.tipe_sales || '').trim();
+
+      return '<option value="' + escapeHtml_(id) + '">' + escapeHtml_(name + (id ? ' (' + id + ')' : '') + (channel ? ' - ' + channel : '')) + '</option>';
+    }).join('');
+    salesSelect.value = currentValue;
+    appState.mtrMapSales = salesSelect.value || '';
+  }
+
+  function handleMtrMapFilterChange_() {
+    appState.mtrMapDate = getFieldValue_('mtrMapDate') || getTodayIsoDate_();
+    appState.mtrMapSales = getFieldValue_('mtrMapSales') || '';
+    loadMtrSalesMovementMapData_();
+  }
+
+  function loadMtrSalesMovementMapData_() {
+    if (!ensureAuthorizedSession_()) return;
+
+    var dateKey = getFieldValue_('mtrMapDate') || appState.mtrMapDate || ((appState.controllerFieldMonitoring || {}).tanggal || getTodayIsoDate_());
+    var salesId = getFieldValue_('mtrMapSales') || appState.mtrMapSales || '';
+
+    appState.mtrMapDate = dateKey;
+    appState.mtrMapSales = salesId;
+    setText_('mtrMapPlaceholder', 'Memuat peta histori sales...');
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        appState.mtrMapData = data || null;
+        if (data && data.tanggal) {
+          appState.mtrMapDate = data.tanggal;
+          setFieldValue_('mtrMapDate', data.tanggal);
+        }
+        if (data && data.fallback_used) {
+          setStatusText_('Peta memakai histori terakhir: ' + formatShortDateId_(data.tanggal));
+        }
+        renderMtrMapFilters_();
+        renderMtrSalesMovementMap_();
+      })
+      .withFailureHandler(function(error) {
+        setText_('mtrMapPlaceholder', 'Gagal memuat data peta.');
+        renderResult_('Gagal memuat data peta MTR: ' + (error && error.message ? error.message : error), true);
+      })
+      .getMtrSalesMovementMapData(appState.currentUser.user_id, {
+        tanggal: dateKey,
+        sales_id: salesId,
+        fallback_latest: 'Ya'
+      });
+  }
+
+  function renderMtrSalesMovementMap_() {
+    var data = appState.mtrMapData || {};
+    var routes = Array.isArray(data.routes) ? data.routes : [];
+    var canvas = document.getElementById('mtrSalesMap');
+    var placeholder = document.getElementById('mtrMapPlaceholder');
+
+    renderMtrMapSummary_(routes);
+    renderMtrMapTimeline_(routes);
+
+    if (!canvas) {
+      return;
+    }
+
+    if (window.__mapLibreScriptFailed || typeof maplibregl === 'undefined') {
+      if (placeholder) {
+        placeholder.textContent = 'MapLibre gagal dimuat. Cek koneksi internet lalu refresh.';
+        placeholder.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (!mtrSalesMapInstance_) {
+      mtrSalesMapInstance_ = new maplibregl.Map({
+        container: 'mtrSalesMap',
+        style: 'https://tiles.openfreemap.org/styles/bright',
+        center: [106.816666, -6.2],
+        zoom: 10,
+        attributionControl: true
+      });
+      mtrSalesMapInstance_.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+      mtrSalesMapInstance_.addControl(new maplibregl.FullscreenControl(), 'top-right');
+      mtrSalesMapInstance_.on('load', function() {
+        drawMtrSalesMovementMap_(routes);
+      });
+      return;
+    }
+
+    if (!mtrSalesMapInstance_.loaded()) {
+      mtrSalesMapInstance_.once('load', function() {
+        drawMtrSalesMovementMap_(routes);
+      });
+      return;
+    }
+
+    drawMtrSalesMovementMap_(routes);
+  }
+
+  function drawMtrSalesMovementMap_(routes) {
+    var bounds = null;
+    var colors = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2'];
+    var pointCount = 0;
+
+    clearMtrSalesMovementMap_();
+
+    (routes || []).forEach(function(route, routeIndex) {
+      var points = Array.isArray(route.points) ? route.points : [];
+      var coordinates = [];
+      var routeColor = colors[routeIndex % colors.length];
+
+      points.forEach(function(point, pointIndex) {
+        var lng = Number(point.longitude);
+        var lat = Number(point.latitude);
+
+        if (isNaN(lng) || isNaN(lat)) {
+          return;
+        }
+
+        coordinates.push([lng, lat]);
+        pointCount += 1;
+        addMtrSalesMovementMarker_(route, point, pointIndex, routeColor);
+
+        if (!bounds) {
+          bounds = new maplibregl.LngLatBounds([lng, lat], [lng, lat]);
+        } else {
+          bounds.extend([lng, lat]);
+        }
+      });
+
+      if (coordinates.length >= 2) {
+        addMtrSalesMovementRoute_(route.sales_id || routeIndex, coordinates, routeColor);
+      }
+    });
+
+    setText_('mtrMapPlaceholder', pointCount ? '' : 'Belum ada titik GPS untuk filter ini.');
+    var placeholder = document.getElementById('mtrMapPlaceholder');
+    if (placeholder) {
+      placeholder.classList.toggle('hidden', !!pointCount);
+    }
+
+    if (bounds) {
+      mtrSalesMapInstance_.fitBounds(bounds, {
+        padding: { top: 42, right: 42, bottom: 42, left: 42 },
+        maxZoom: 15,
+        duration: 600
+      });
+    }
+  }
+
+  function clearMtrSalesMovementMap_() {
+    if (!mtrSalesMapInstance_) {
+      return;
+    }
+
+    mtrSalesMapMarkers_.forEach(function(marker) {
+      marker.remove();
+    });
+    mtrSalesMapMarkers_ = [];
+
+    mtrSalesMapRouteIds_.forEach(function(ids) {
+      try {
+        if (mtrSalesMapInstance_.getLayer(ids.layerId)) {
+          mtrSalesMapInstance_.removeLayer(ids.layerId);
+        }
+        if (mtrSalesMapInstance_.getSource(ids.sourceId)) {
+          mtrSalesMapInstance_.removeSource(ids.sourceId);
+        }
+      } catch (error) {
+        // Abaikan cleanup map yang sudah berubah state.
+      }
+    });
+    mtrSalesMapRouteIds_ = [];
+  }
+
+  function addMtrSalesMovementRoute_(salesId, coordinates, color) {
+    var safeId = String(salesId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '-');
+    var sourceId = 'mtr-route-source-' + safeId;
+    var layerId = 'mtr-route-layer-' + safeId;
+
+    mtrSalesMapInstance_.addSource(sourceId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: coordinates
+        }
+      }
+    });
+
+    mtrSalesMapInstance_.addLayer({
+      id: layerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': color,
+        'line-width': 4,
+        'line-opacity': 0.78
+      }
+    });
+
+    mtrSalesMapRouteIds_.push({ sourceId: sourceId, layerId: layerId });
+  }
+
+  function addMtrSalesMovementMarker_(route, point, pointIndex, routeColor) {
+    var el = document.createElement('button');
+    var markerClass = getMtrMapMarkerClass_(point, pointIndex, route.points || []);
+    var lng = Number(point.longitude);
+    var lat = Number(point.latitude);
+    var marker;
+    var popupHtml;
+
+    el.type = 'button';
+    el.className = 'mtr-map-marker ' + markerClass;
+    el.textContent = String(pointIndex + 1);
+    el.style.borderColor = routeColor;
+    el.title = (route.nama_sales || '-') + ' - ' + (point.jam || '-');
+
+    popupHtml = '' +
+      '<div class="mtr-map-popup">' +
+        '<strong>' + escapeHtml_(route.nama_sales || route.sales_id || '-') + '</strong>' +
+        '<small>' + escapeHtml_((point.jam || '-') + ' | ' + (point.tipe_aktivitas || '-')) + '</small>' +
+        (point.nama_customer ? '<p>Customer: ' + escapeHtml_(point.nama_customer) + '</p>' : '') +
+        (point.hasil_kegiatan ? '<p>Hasil: ' + escapeHtml_(point.hasil_kegiatan) + '</p>' : '') +
+        '<p>Status waktu: ' + escapeHtml_(point.status_waktu || '-') + '</p>' +
+        '<p>Status lokasi: ' + escapeHtml_(point.status_lokasi || '-') + '</p>' +
+        '<p>Perangkat: ' + escapeHtml_(point.status_perangkat || '-') + '</p>' +
+        (point.link_maps ? '<a href="' + escapeHtml_(point.link_maps) + '" target="_blank" rel="noopener">Buka Google Maps</a>' : '') +
+      '</div>';
+
+    marker = new maplibregl.Marker({ element: el })
+      .setLngLat([lng, lat])
+      .setPopup(new maplibregl.Popup({ offset: 18, closeButton: false }).setHTML(popupHtml))
+      .addTo(mtrSalesMapInstance_);
+
+    mtrSalesMapMarkers_.push(marker);
+  }
+
+  function getMtrMapMarkerClass_(point, pointIndex, points) {
+    var typeKey = String(point && point.tipe_aktivitas || '').toLowerCase();
+
+    if (point && point.severity === 'alert') {
+      return 'marker-alert';
+    }
+    if (point && point.severity === 'warning') {
+      return 'marker-warning';
+    }
+    if (typeKey.indexOf('selesai') !== -1 || pointIndex === points.length - 1) {
+      return 'marker-end';
+    }
+    if (typeKey.indexOf('mulai') !== -1 || pointIndex === 0) {
+      return 'marker-start';
+    }
+    if (typeKey.indexOf('catat') !== -1 || typeKey.indexOf('kegiatan') !== -1) {
+      return 'marker-work';
+    }
+    return 'marker-update';
+  }
+
+  function renderMtrMapSummary_(routes) {
+    var container = document.getElementById('mtrMapSummary');
+    var routeCount = (routes || []).length;
+    var pointCount = 0;
+    var distance = 0;
+    var anomalyCount = 0;
+    var selectedSales = getFieldValue_('mtrMapSales') || appState.mtrMapSales || '';
+
+    if (!container) {
+      return;
+    }
+
+    (routes || []).forEach(function(route) {
+      pointCount += Number(route.total_points || 0);
+      distance += Number(route.total_distance_km || 0);
+      anomalyCount += Number(route.total_anomali || 0);
+    });
+
+    container.innerHTML = '' +
+      '<span class="summary-label">Ringkasan Peta</span>' +
+      '<strong>' + escapeHtml_(pointCount) + ' titik GPS</strong>' +
+      '<small>' + escapeHtml_(routeCount) + ' sales ditampilkan' + (selectedSales ? ' | ' + escapeHtml_(selectedSales) : '') + '</small>' +
+      '<div class="mtr-map-summary-grid">' +
+        '<span><b>' + escapeHtml_(roundClientNumber_(distance, 2)) + ' km</b><small>estimasi jarak</small></span>' +
+        '<span><b>' + escapeHtml_(anomalyCount) + '</b><small>anomali</small></span>' +
+      '</div>';
+  }
+
+  function renderMtrMapTimeline_(routes) {
+    var container = document.getElementById('mtrMapTimeline');
+    var points = [];
+
+    if (!container) {
+      return;
+    }
+
+    (routes || []).forEach(function(route) {
+      (route.points || []).forEach(function(point) {
+        points.push({
+          route: route,
+          point: point
+        });
+      });
+    });
+
+    points.sort(function(left, right) {
+      return String(left.point.jam || '').localeCompare(String(right.point.jam || ''));
+    });
+
+    if (!points.length) {
+      container.innerHTML = '<article class="mtr-map-empty">Belum ada titik histori.</article>';
+      return;
+    }
+
+    container.innerHTML = points.slice(0, 60).map(function(item) {
+      var point = item.point;
+      var route = item.route;
+      var statusClass = point.severity === 'alert' ? 'is-alert' : (point.severity === 'warning' ? 'is-warning' : '');
+
+      return '' +
+        '<article class="mtr-map-timeline-item ' + statusClass + '">' +
+          '<strong>' + escapeHtml_(point.jam || '-') + ' - ' + escapeHtml_(point.tipe_aktivitas || '-') + '</strong>' +
+          '<small>' + escapeHtml_(route.nama_sales || route.sales_id || '-') + (point.nama_customer ? ' | ' + escapeHtml_(point.nama_customer) : '') + '</small>' +
+        '</article>';
+    }).join('');
+  }
+
+  function roundClientNumber_(value, precision) {
+    var power = Math.pow(10, precision || 0);
+    return Math.round(Number(value || 0) * power) / power;
+  }
+
+  function handleCreateMonitoringNote_(salesId) {
+    if (!ensureAuthorizedSession_()) return;
+
+    var row = ((appState.controllerFieldMonitoring || {}).rows || []).find(function(item) {
+      return String(item.user_id || '').trim() === String(salesId || '').trim();
+    }) || {};
+    var salesName = row.nama_user || salesId || '-';
+    var note = window.prompt('Catatan MTR untuk ' + salesName + ':', '');
+
+    if (!note || !String(note).trim()) {
+      return;
+    }
+
+    setStatusText_('Menyimpan catatan monitoring...');
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        renderResult_(result && result.message ? result.message : 'Catatan monitoring tersimpan.', false);
+        setStatusText_('Catatan monitoring tersimpan');
+        loadControllerData_();
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal simpan catatan monitoring');
+        renderResult_('Gagal simpan catatan monitoring: ' + (error && error.message ? error.message : error), true);
+      })
+      .createMonitoringNoteFromDashboard(appState.currentUser.user_id, {
+        tanggal: ((appState.controllerFieldMonitoring || {}).tanggal || appState.controllerEndDate || ''),
+        sales_id: salesId,
+        status_monitoring: row.status_harian === 'Hijau' ? 'Dipantau' : 'Perlu Follow Up',
+        kategori_temuan: row.status_harian || 'Catatan Manual',
+        catatan_mtr: String(note).trim()
+      });
   }
 
   function renderControllerTrend_() {
@@ -7668,6 +8804,16 @@
         order_count: formatNumber_(row.order_count || 0)
       };
     });
+  }
+
+  function applyControllerFieldMonitoringPayload_(fieldMonitoring) {
+    var source = fieldMonitoring || {};
+    appState.controllerFieldMonitoring = {
+      tanggal: source.tanggal || '',
+      summary: source.summary || { total_sales: 0, hijau: 0, kuning: 0, merah: 0 },
+      rows: Array.isArray(source.rows) ? source.rows : [],
+      weekly: Array.isArray(source.weekly) ? source.weekly : []
+    };
   }
 
   function formatControllerLastUpdated_(value) {

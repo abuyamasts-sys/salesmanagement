@@ -68,6 +68,7 @@ function getSalesOrderFormData(userId) {
     products: getProductCatalog_(),
     salesHistoryOrders: getSalesOrderHistoryForSales_(currentUser.user_id, 30),
     salesPayoutBatches: listSlfPayoutBatchesForSales_(currentUser.user_id),
+    fieldActivity: getFieldActivityTodayForSales(currentUser.user_id),
     slfMinPayout: getSlfMinPayoutAmount_(),
     deliveryPriority: APP_CONFIG.DELIVERY_PRIORITY,
     customerType: APP_CONFIG.CUSTOMER_TYPE
@@ -338,7 +339,9 @@ function getAdminDashboardData(userId) {
   });
 
   deliveryOrders.forEach(function(row) {
-    suratJalanByNoSo[String(row.no_so || '').trim()] = true;
+    if (normalizeText_(row.status_kirim) !== 'batal kirim') {
+      suratJalanByNoSo[String(row.no_so || '').trim()] = true;
+    }
   });
 
   var readyOrders = salesOrders.filter(function(row) {
@@ -366,7 +369,9 @@ function getAdminDashboardData(userId) {
     tomorrowPlanDate: tomorrowPlanDate,
     tomorrowOrders: tomorrowOrders,
     readyOrders: readyOrders,
-    deliveryOrders: deliveryOrders.map(function(row) {
+    deliveryOrders: deliveryOrders.filter(function(row) {
+      return normalizeText_(row.status_kirim) !== 'batal kirim';
+    }).map(function(row) {
       var noSoKey = String(row.no_so || '').trim();
       var sourceOrder = salesOrderByNoSo[noSoKey] || {};
       var order = buildSalesOrderClientRowFromDetails_(sourceOrder, salesOrderDetailsByNoSo[noSoKey] || null);
@@ -411,7 +416,9 @@ function getAdminOperationsData(userId, options) {
   });
 
   deliveryOrders.forEach(function(row) {
-    suratJalanByNoSo[String(row.no_so || '').trim()] = true;
+    if (normalizeText_(row.status_kirim) !== 'batal kirim') {
+      suratJalanByNoSo[String(row.no_so || '').trim()] = true;
+    }
   });
 
   deliverySummary = deliveryOrders.reduce(function(result, row) {
@@ -423,9 +430,12 @@ function getAdminOperationsData(userId, options) {
   }, { siap_kirim: 0, terkirim: 0, selesai: 0 });
 
   filterDate = normalizeSheetDateToYmd_(options && options.delivery_filter_date);
-  filteredDeliveryOrders = filterDate ? deliveryOrders.filter(function(row) {
+  filteredDeliveryOrders = deliveryOrders.filter(function(row) {
+    return normalizeText_(row.status_kirim) !== 'batal kirim';
+  });
+  filteredDeliveryOrders = filterDate ? filteredDeliveryOrders.filter(function(row) {
     return normalizeSheetDateToYmd_(row.tanggal_kirim || row.tanggal_cetak || '') === filterDate;
-  }) : deliveryOrders.slice();
+  }) : filteredDeliveryOrders;
 
   readyOrders = salesOrders.filter(function(row) {
     var statusOrder = normalizeText_(row.status_order);
@@ -832,6 +842,13 @@ function cancelSalesOrderFromDashboard(userId, formData) {
 function markOrderDeliveredFromDashboard(userId, formData) {
   var currentUser = requireCurrentUserRole_(['CS/Admin'], userId);
   return markOrderDelivered(formData.no_so, currentUser.user_id, formData.catatan_kirim || '');
+}
+
+function cancelDeliveryFromDashboard(userId, formData) {
+  var currentUser = requireCurrentUserRole_(['CS/Admin'], userId);
+  var payload = formData || {};
+
+  return toClientValue_(cancelDeliveryOrder_(payload.no_so, currentUser.user_id, payload.alasan_batal_kirim || ''));
 }
 
 function getDeliveryVerificationDataFromDashboard(userId, noSo) {

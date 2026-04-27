@@ -58,6 +58,7 @@ function getUserProfileByUserId(userId) {
 function ensureMasterUserPasswords_() {
   ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_USER, APP_CONFIG.HEADERS.MASTER_USER);
   ensureDefaultControllerUser_();
+  ensureDefaultMonitoringUser_();
 
   getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).forEach(function(user) {
     var userId = String(user.user_id || '').trim();
@@ -70,6 +71,35 @@ function ensureMasterUserPasswords_() {
     updateRowByKey_(APP_CONFIG.SHEETS.MASTER_USER, 'user_id', userId, {
       password: userId
     });
+  });
+}
+
+function ensureDefaultMonitoringUser_() {
+  var monitoringUserId = 'MTR1';
+  var existingMonitoring = getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).find(function(user) {
+    return normalizeText_(user.user_id) === normalizeText_(monitoringUserId);
+  });
+
+  if (existingMonitoring) {
+    return;
+  }
+
+  appendRowByHeaders_(APP_CONFIG.SHEETS.MASTER_USER, {
+    user_id: monitoringUserId,
+    nama_user: 'Monitoring',
+    role: 'MTR',
+    no_hp: '',
+    email: '',
+    password: monitoringUserId,
+    status_aktif: 'Aktif',
+    tipe_sales: '',
+    kode_sales: '',
+    channel_sales_default: '',
+    bank_nama: '',
+    bank_no_rekening: '',
+    bank_nama_pemilik: '',
+    aktif_komisi: '',
+    catatan_user: 'Auto-seeded default monitoring user'
   });
 }
 

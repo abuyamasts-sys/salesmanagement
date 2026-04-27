@@ -1,5 +1,5 @@
 function getControllerDashboardData(userId, filters) {
-  requireCurrentUserRole_(['Controller'], userId);
+  requireCurrentUserRole_(['Controller', 'MTR'], userId);
 
   var currentUser = getCurrentUserProfile(userId);
   var filter = buildControllerDashboardFilter_(filters);
@@ -15,6 +15,9 @@ function getControllerDashboardData(userId, filters) {
   var topSales = buildControllerTopSales_(salesOrders);
   var topCustomers = buildControllerTopCustomers_(salesOrders);
   var topItems = buildControllerTopItems_(salesOrderDetails);
+  var fieldMonitoring = getFieldMonitoringDashboardData(userId, {
+    tanggal: normalizeSheetDateToYmd_((filters || {}).monitoringDate || '') || filter.today
+  });
 
   return toClientValue_({
     currentUser: currentUser,
@@ -27,6 +30,7 @@ function getControllerDashboardData(userId, filters) {
     topSales: topSales,
     topCustomers: topCustomers,
     topItems: topItems,
+    fieldMonitoring: fieldMonitoring,
     lastUpdated: getControllerDashboardLastUpdated_()
   });
 }

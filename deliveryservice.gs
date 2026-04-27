@@ -1,43 +1,61 @@
 function createSuratJalan(noSo, options) {
-  var salesOrder = findSalesOrderByNoSo_(noSo);
-  var orderDisplay = buildSalesOrderClientRow_(salesOrder);
+  var noSoKey = String(noSo || '').trim();
+  var lock = LockService.getScriptLock();
+  var salesOrder;
+  var orderDisplay;
+  var now;
+  var payload;
+  var noSuratJalan;
+  var tanggalKirim;
 
-  if (!salesOrder) {
-    throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSo);
+  lock.waitLock(30000);
+
+  try {
+    salesOrder = findSalesOrderByNoSo_(noSoKey);
+
+    if (!salesOrder) {
+      throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSoKey);
+    }
+
+    if (normalizeText_(salesOrder.status_order) !== 'siap kirim') {
+      throw new Error('Surat jalan hanya bisa dibuat untuk order dengan status Siap Kirim');
+    }
+
+    if (findSuratJalanByNoSo_(noSoKey)) {
+      throw new Error('Surat jalan sudah pernah dibuat untuk no_so: ' + noSoKey);
+    }
+
+    orderDisplay = buildSalesOrderClientRow_(salesOrder);
+    now = getNowParts_();
+    payload = options || {};
+    noSuratJalan = generateDocNumber_(APP_CONFIG.DOC_PREFIX.SURAT_JALAN);
+    tanggalKirim = normalizeSheetDateToYmd_(payload.tanggal_kirim || salesOrder.tanggal_kirim_rencana || now.tanggal);
+
+    appendRowByHeaders_(APP_CONFIG.SHEETS.SURAT_JALAN, {
+      no_surat_jalan: noSuratJalan,
+      no_so: noSoKey,
+      tanggal_cetak: now.tanggal + ' ' + now.jam,
+      tanggal_kirim: tanggalKirim,
+      customer_id: salesOrder.customer_id,
+      nama_customer: salesOrder.nama_customer_input,
+      alamat_kirim: salesOrder.alamat_kirim,
+      item: orderDisplay.item_summary || salesOrder.item,
+      qty: orderDisplay.qty_summary || salesOrder.qty,
+      driver: payload.driver || '',
+      armada: payload.armada || '',
+      status_kirim: payload.status_kirim || 'Siap Kirim',
+      catatan_kirim: payload.catatan_kirim || '',
+      dibatalkan_oleh: '',
+      tanggal_batal_kirim: '',
+      alasan_batal_kirim: ''
+    });
+  } finally {
+    lock.releaseLock();
   }
-
-  if (normalizeText_(salesOrder.status_order) !== 'siap kirim') {
-    throw new Error('Surat jalan hanya bisa dibuat untuk order dengan status Siap Kirim');
-  }
-
-  if (findSuratJalanByNoSo_(noSo)) {
-    throw new Error('Surat jalan sudah pernah dibuat untuk no_so: ' + noSo);
-  }
-
-  var now = getNowParts_();
-  var payload = options || {};
-  var noSuratJalan = generateDocNumber_(APP_CONFIG.DOC_PREFIX.SURAT_JALAN);
-  var tanggalKirim = normalizeSheetDateToYmd_(payload.tanggal_kirim || salesOrder.tanggal_kirim_rencana || now.tanggal);
-
-  appendRowByHeaders_(APP_CONFIG.SHEETS.SURAT_JALAN, {
-    no_surat_jalan: noSuratJalan,
-    no_so: noSo,
-    tanggal_cetak: now.tanggal + ' ' + now.jam,
-    tanggal_kirim: tanggalKirim,
-    customer_id: salesOrder.customer_id,
-    nama_customer: salesOrder.nama_customer_input,
-    alamat_kirim: salesOrder.alamat_kirim,
-    item: orderDisplay.item_summary || salesOrder.item,
-    qty: orderDisplay.qty_summary || salesOrder.qty,
-    driver: payload.driver || '',
-    armada: payload.armada || '',
-    status_kirim: payload.status_kirim || 'Siap Kirim',
-    catatan_kirim: payload.catatan_kirim || ''
-  });
 
   return {
     success: true,
-    no_so: noSo,
+    no_so: noSoKey,
     no_surat_jalan: noSuratJalan,
     status_kirim: payload.status_kirim || 'Siap Kirim'
   };
@@ -141,6 +159,277 @@ function getSuratJalanPreviewData(noSo) {
 
 function markOrderDelivered(noSo, userId, catatanKirim) {
   return updateDeliveryOrderStatus_(noSo, userId, 'Terkirim', 'Terkirim', catatanKirim);
+}
+
+function cancelDeliveryOrder_(noSo, userId, alasanBatalKirim) {
+  var noSoKey = String(noSo || '').trim();
+  var suratJalan = findSuratJalanByNoSo_(noSoKey);
+  var salesOrder = findSalesOrderByNoSo_(noSoKey);
+  var statusKirim;
+  var now = getNowParts_();
+  var reason = String(alasanBatalKirim || '').trim();
+  var note;
+
+  if (!suratJalan) {
+    throw new Error('Surat jalan aktif tidak ditemukan untuk no_so: ' + noSoKey);
+  }
+
+  statusKirim = normalizeText_(suratJalan.status_kirim);
+  if (statusKirim !== 'siap kirim' && statusKirim !== 'terkirim') {
+    throw new Error('Batal kirim hanya bisa untuk surat jalan berstatus Siap Kirim atau Terkirim.');
+  }
+
+  if (salesOrder && String(salesOrder.status_verifikasi_cs || '').trim() === 'Sudah Dicek') {
+    throw new Error('Batal kirim tidak bisa dilakukan setelah verifikasi CS tersimpan.');
+  }
+
+  if (!reason) {
+    throw new Error('Alasan batal kirim wajib diisi.');
+  }
+
+  note = 'Batal kirim: ' + reason + ' | Barang kembali ke kantor | ' + now.tanggal + ' ' + now.jam;
+
+  cancelActiveSuratJalanRowsByNoSo_(noSoKey, {
+    status_kirim: 'Batal Kirim',
+    catatan_kirim: note,
+    dibatalkan_oleh: userId,
+    tanggal_batal_kirim: now.tanggal + ' ' + now.jam,
+    alasan_batal_kirim: reason
+  });
+
+  if (salesOrder) {
+    updateRowByKey_(APP_CONFIG.SHEETS.SALES_ORDER, 'no_so', noSoKey, {
+      status_order: 'Siap Kirim'
+    });
+
+    logStatusOrder_(noSoKey, salesOrder.status_order, 'Siap Kirim', userId, note);
+  }
+
+  return {
+    success: true,
+    no_so: noSoKey,
+    no_surat_jalan: suratJalan.no_surat_jalan || '',
+    status_kirim: 'Batal Kirim',
+    status_order: salesOrder ? 'Siap Kirim' : '',
+    sales_order_found: !!salesOrder,
+    catatan_kirim: note
+  };
+}
+
+function cancelActiveSuratJalanRowsByNoSo_(noSo, updates) {
+  var sheet = getSheetByName_(APP_CONFIG.SHEETS.SURAT_JALAN);
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  var headers;
+  var values;
+  var noSoIndex;
+  var statusIndex;
+  var updatedAny = false;
+  var updatesObj = updates || {};
+  var noSoKey = String(noSo || '').trim();
+
+  if (!lastRow || lastRow < 2 || !lastCol) {
+    return 0;
+  }
+
+  headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(header) {
+    return String(header || '').trim();
+  });
+  noSoIndex = headers.indexOf('no_so');
+  statusIndex = headers.indexOf('status_kirim');
+
+  if (noSoIndex === -1 || statusIndex === -1) {
+    throw new Error('Kolom no_so/status_kirim tidak ditemukan di sheet Surat Jalan.');
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  values.forEach(function(row) {
+    var isSameNoSo = String(row[noSoIndex] || '').trim() === noSoKey;
+    var isActive = normalizeText_(row[statusIndex]) !== 'batal kirim';
+
+    if (!isSameNoSo || !isActive) {
+      return;
+    }
+
+    headers.forEach(function(header, columnIndex) {
+      if (Object.prototype.hasOwnProperty.call(updatesObj, header)) {
+        row[columnIndex] = updatesObj[header];
+      }
+    });
+    updatedAny = true;
+  });
+
+  if (updatedAny) {
+    sheet.getRange(2, 1, values.length, lastCol).setValues(values);
+  }
+
+  return values.filter(function(row) {
+    return String(row[noSoIndex] || '').trim() === noSoKey &&
+      normalizeText_(row[statusIndex]) === 'batal kirim';
+  }).length;
+}
+
+function cancelDuplicateSuratJalanRowsByNoSo_(noSo, keepNoSuratJalan, userId, reason) {
+  var sheet = getSheetByName_(APP_CONFIG.SHEETS.SURAT_JALAN);
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  var headers;
+  var values;
+  var noSoIndex;
+  var noSjIndex;
+  var statusIndex;
+  var catatanIndex;
+  var dibatalkanIndex;
+  var tanggalBatalIndex;
+  var alasanIndex;
+  var noSoKey = String(noSo || '').trim();
+  var keepNoSjKey = String(keepNoSuratJalan || '').trim();
+  var cancelReason = String(reason || '').trim();
+  var now = getNowParts_();
+  var updated = [];
+
+  if (!noSoKey) {
+    throw new Error('Nomor SO wajib diisi.');
+  }
+
+  if (!keepNoSjKey) {
+    throw new Error('Nomor SJ yang dipertahankan wajib diisi.');
+  }
+
+  if (!cancelReason) {
+    throw new Error('Alasan koreksi duplicate SJ wajib diisi.');
+  }
+
+  if (!lastRow || lastRow < 2 || !lastCol) {
+    throw new Error('Sheet Surat Jalan belum memiliki data.');
+  }
+
+  headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(header) {
+    return String(header || '').trim();
+  });
+  noSoIndex = headers.indexOf('no_so');
+  noSjIndex = headers.indexOf('no_surat_jalan');
+  statusIndex = headers.indexOf('status_kirim');
+  catatanIndex = headers.indexOf('catatan_kirim');
+  dibatalkanIndex = headers.indexOf('dibatalkan_oleh');
+  tanggalBatalIndex = headers.indexOf('tanggal_batal_kirim');
+  alasanIndex = headers.indexOf('alasan_batal_kirim');
+
+  if (noSoIndex === -1 || noSjIndex === -1 || statusIndex === -1) {
+    throw new Error('Kolom no_so/no_surat_jalan/status_kirim tidak ditemukan di sheet Surat Jalan.');
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  values.forEach(function(row) {
+    var rowNoSo = String(row[noSoIndex] || '').trim();
+    var rowNoSj = String(row[noSjIndex] || '').trim();
+    var isActive = normalizeText_(row[statusIndex]) !== 'batal kirim';
+    var note;
+
+    if (rowNoSo !== noSoKey || rowNoSj === keepNoSjKey || !isActive) {
+      return;
+    }
+
+    note = 'Koreksi duplicate SJ: ' + cancelReason + ' | SJ valid: ' + keepNoSjKey + ' | ' + now.tanggal + ' ' + now.jam;
+    row[statusIndex] = 'Batal Kirim';
+    if (catatanIndex !== -1) row[catatanIndex] = note;
+    if (dibatalkanIndex !== -1) row[dibatalkanIndex] = userId || '';
+    if (tanggalBatalIndex !== -1) row[tanggalBatalIndex] = now.tanggal + ' ' + now.jam;
+    if (alasanIndex !== -1) row[alasanIndex] = cancelReason;
+    updated.push(rowNoSj);
+  });
+
+  if (!updated.length) {
+    return {
+      success: true,
+      no_so: noSoKey,
+      keep_no_surat_jalan: keepNoSjKey,
+      canceled_count: 0,
+      canceled_no_surat_jalan: [],
+      message: 'Tidak ada SJ duplicate aktif yang perlu dibatalkan.'
+    };
+  }
+
+  sheet.getRange(2, 1, values.length, lastCol).setValues(values);
+  logStatusOrder_(noSoKey, '', 'Koreksi Duplicate SJ', userId || '', 'SJ duplicate dibatalkan: ' + updated.join(', '));
+
+  return {
+    success: true,
+    no_so: noSoKey,
+    keep_no_surat_jalan: keepNoSjKey,
+    canceled_count: updated.length,
+    canceled_no_surat_jalan: updated,
+    message: 'SJ duplicate berhasil dibatalkan: ' + updated.join(', ')
+  };
+}
+
+function cancelDuplicateSuratJalanKeepFirstByNoSo_(noSo, userId, reason) {
+  var sheet = getSheetByName_(APP_CONFIG.SHEETS.SURAT_JALAN);
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  var headers;
+  var values;
+  var noSoIndex;
+  var noSjIndex;
+  var statusIndex;
+  var noSoKey = String(noSo || '').trim();
+  var activeRows = [];
+
+  if (!noSoKey) {
+    throw new Error('Nomor SO wajib diisi.');
+  }
+
+  if (!lastRow || lastRow < 2 || !lastCol) {
+    throw new Error('Sheet Surat Jalan belum memiliki data.');
+  }
+
+  headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(header) {
+    return String(header || '').trim();
+  });
+  noSoIndex = headers.indexOf('no_so');
+  noSjIndex = headers.indexOf('no_surat_jalan');
+  statusIndex = headers.indexOf('status_kirim');
+
+  if (noSoIndex === -1 || noSjIndex === -1 || statusIndex === -1) {
+    throw new Error('Kolom no_so/no_surat_jalan/status_kirim tidak ditemukan di sheet Surat Jalan.');
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  values.forEach(function(row) {
+    if (String(row[noSoIndex] || '').trim() === noSoKey &&
+        normalizeText_(row[statusIndex]) !== 'batal kirim') {
+      activeRows.push({
+        no_surat_jalan: String(row[noSjIndex] || '').trim(),
+        status_kirim: row[statusIndex] || ''
+      });
+    }
+  });
+
+  if (activeRows.length <= 1) {
+    return {
+      success: true,
+      no_so: noSoKey,
+      active_count: activeRows.length,
+      canceled_count: 0,
+      canceled_no_surat_jalan: [],
+      message: 'Tidak ada duplicate SJ aktif untuk SO ini.'
+    };
+  }
+
+  return cancelDuplicateSuratJalanRowsByNoSo_(
+    noSoKey,
+    activeRows[0].no_surat_jalan,
+    userId,
+    reason || 'Koreksi duplicate SJ, mempertahankan SJ aktif pertama'
+  );
+}
+
+function repairDuplicateSjSo20260426190035Cs05() {
+  return cancelDuplicateSuratJalanKeepFirstByNoSo_(
+    'SO-20260426190035',
+    'CS05',
+    'Koreksi laporan team: input double, nomor SO sama, nomor SJ berbeda'
+  );
 }
 
 function verifyDeliveredOrder(noSo, userId, payload) {
@@ -529,9 +818,12 @@ function testCompleteLatestOrder() {
 }
 
 function findSuratJalanByNoSo_(noSo) {
-  return getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN).find(function(row) {
-    return String(row.no_so).trim() === String(noSo).trim();
-  }) || null;
+  var rows = getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN).filter(function(row) {
+    return String(row.no_so).trim() === String(noSo).trim() &&
+      normalizeText_(row.status_kirim) !== 'batal kirim';
+  });
+
+  return rows.length ? rows[rows.length - 1] : null;
 }
 
 function resolveEffectiveSuratJalanTanggalKirim_(suratJalan, salesOrder) {
@@ -566,7 +858,7 @@ function syncSuratJalanDraftFromSalesOrder_(noSo) {
 
   orderDisplay = buildSalesOrderClientRow_(salesOrder);
 
-  return updateRowByKey_(APP_CONFIG.SHEETS.SURAT_JALAN, 'no_so', noSoKey, {
+  return updateRowByKey_(APP_CONFIG.SHEETS.SURAT_JALAN, 'no_surat_jalan', suratJalan.no_surat_jalan, {
     tanggal_kirim: normalizeSheetDateToYmd_(salesOrder.tanggal_kirim_rencana || suratJalan.tanggal_kirim || ''),
     customer_id: salesOrder.customer_id || suratJalan.customer_id || '',
     nama_customer: salesOrder.nama_customer_input || suratJalan.nama_customer || '',
@@ -613,7 +905,7 @@ function updateDeliveryOrderStatus_(noSo, userId, statusKirimBaru, statusOrderBa
     throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSo);
   }
 
-  updateRowByKey_(APP_CONFIG.SHEETS.SURAT_JALAN, 'no_so', noSo, {
+  updateRowByKey_(APP_CONFIG.SHEETS.SURAT_JALAN, 'no_surat_jalan', suratJalan.no_surat_jalan, {
     status_kirim: statusKirimBaru,
     catatan_kirim: catatanKirim || suratJalan.catatan_kirim || ''
   });
