@@ -20,10 +20,13 @@ function listSalesUsers_() {
   return getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).filter(function(row) {
     var roleKey = normalizeText_(row.role);
     var statusKey = normalizeText_(row.status_aktif);
+    var tipeSalesKey = normalizeText_(row.tipe_sales);
+    var userIdKey = normalizeText_(row.user_id);
     var isSales = roleKey === 'sales' || roleKey.indexOf('sales') !== -1;
     var isActive = statusKey === 'aktif' || statusKey === '';
+    var isSlfMurni = tipeSalesKey.indexOf('slfm') === 0 || userIdKey.indexOf('slfm') === 0;
 
-    return isSales && isActive;
+    return isSales && isActive && !isSlfMurni;
   }).map(function(row) {
     return {
       user_id: String(row.user_id || '').trim(),
@@ -307,6 +310,10 @@ function recordKpiLogForOrderIfEligible_(noSo, actorId, tanggalSiapKirim) {
     return { recorded: false, reason: 'bukan customer baru' };
   }
 
+  if (!isActiveSalesUserForKpi_(salesOrder.sales_id)) {
+    return { recorded: false, reason: 'sales_id bukan user Sales aktif' };
+  }
+
   var sheetName = APP_CONFIG.SHEETS.KPI_LOG;
   ensureSheetWithHeaders_(sheetName, APP_CONFIG.HEADERS.KPI_LOG);
 
@@ -337,6 +344,17 @@ function recordKpiLogForOrderIfEligible_(noSo, actorId, tanggalSiapKirim) {
 
   appendRowByHeaders_(sheetName, payload);
   return { recorded: true, payload: payload };
+}
+
+function isActiveSalesUserForKpi_(salesId) {
+  var profile = getCurrentUserProfile(salesId);
+
+  return !!(
+    profile &&
+    profile.authorized &&
+    normalizeRoleKey_(profile.role) === 'sales' &&
+    !profile.is_slfm
+  );
 }
 
 function getSalesKpiSummary_(bulan, salesId) {

@@ -1,6 +1,8 @@
 function getApproverBackupDataFromDashboard(userId) {
   requireCurrentUserRole_(['Approver'], userId);
-  return toClientValue_(getBackupDashboardData_());
+  return toClientValue_(getBackupDashboardData_({
+    includeAllHistory: true
+  }));
 }
 
 function createDatabaseBackupFromDashboard(userId) {
@@ -8,9 +10,10 @@ function createDatabaseBackupFromDashboard(userId) {
   return toClientValue_(createSpreadsheetBackup_(currentUser));
 }
 
-function getBackupDashboardData_() {
+function getBackupDashboardData_(options) {
   ensureSheetHeadersContain_(APP_CONFIG.SHEETS.BACKUP_LOG, APP_CONFIG.HEADERS.BACKUP_LOG);
 
+  var safeOptions = options || {};
   var history = getSheetData_(APP_CONFIG.SHEETS.BACKUP_LOG)
     .slice()
     .sort(function(left, right) {
@@ -29,7 +32,7 @@ function getBackupDashboardData_() {
       folder_url: latest && latest.folder_id ? ('https://drive.google.com/drive/folders/' + latest.folder_id) : '',
       jumlah_sheet_operasional: getOperationalSheetNames_().length
     },
-    history: history.slice(0, 20)
+    history: safeOptions.includeAllHistory ? history : history.slice(0, 10)
   };
 }
 

@@ -411,12 +411,19 @@ function validateSalesOrderPayload_(payload) {
     'sales_nama',
     'jenis_customer',
     'alamat_kirim',
-    'pic_customer',
-    'no_hp_customer',
     'term_pembayaran',
     'tanggal_jatuh_tempo',
     'tanggal_kirim_rencana'
   ];
+  var isNewCustomer = normalizeText_(payload.jenis_customer) === 'baru';
+
+  if (isNewCustomer) {
+    requiredFields = requiredFields.concat([
+      'nama_customer_input',
+      'pic_customer',
+      'no_hp_customer'
+    ]);
+  }
 
   requiredFields.forEach(function(field) {
     if (payload[field] === undefined || payload[field] === null || payload[field] === '') {
@@ -1409,6 +1416,10 @@ function resolvePrioritasKirim_(tanggalKirimRencana, currentDate) {
   tanggalKirim.setHours(0, 0, 0, 0);
 
   var diffDays = Math.round((tanggalKirim.getTime() - today.getTime()) / 86400000);
+
+  if (diffDays < 0) {
+    return 'Backdate/Input Susulan';
+  }
 
   if (diffDays === 0) {
     return 'Same Day Opsional';

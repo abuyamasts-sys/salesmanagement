@@ -1,0 +1,297 @@
+﻿diff --git a/main.js.html b/main.js.html
+index a686aac..cf717ae 100644
+--- a/main.js.html
++++ b/main.js.html
+@@ -340,7 +340,7 @@
+     window.openDeliveryVerification = openDeliveryVerification;
+     window.handleCompleteOrder = handleCompleteOrder;
+     window.handlePrintSuratJalan = handlePrintSuratJalan;
+-    window.handlePrintSuratJalanOnly = handlePrintSuratJalanOnly;
++    window.handlePrintNota = handlePrintNota;
+     window.handlePreviewSuratJalan = handlePreviewSuratJalan;
+     window.openCsRevisionModal = openCsRevisionModal_;
+     window.openCancelSalesOrderModal = openCancelSalesOrderModal_;
+@@ -1931,8 +1931,8 @@
+         }
+       }
+ 
+-      actions.push('<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintSuratJalan(\'' + escapeJs_(noSo) + '\')">Print (SJ+Nota)</button>');
+-      actions.push('<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintSuratJalanOnly(\'' + escapeJs_(noSo) + '\')">Print (SJ)</button>');
++      actions.push('<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintSuratJalan(\'' + escapeJs_(noSo) + '\')">Print SJ</button>');
++      actions.push('<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintNota(\'' + escapeJs_(noSo) + '\')">Print Nota</button>');
+ 
+       return '' +
+         '<tr>' +
+@@ -4919,7 +4919,7 @@
+     google.script.run
+       .withSuccessHandler(function(data) {
+         setStatusText_('Halaman print siap');
+-        openPrintWindow_(data || {}, { mode: 'combined' });
++        openPrintWindow_(data || {}, { mode: 'sj_only' });
+       })
+       .withFailureHandler(function(error) {
+         setStatusText_('Gagal menyiapkan print');
+@@ -4933,7 +4933,7 @@
+     google.script.run
+       .withSuccessHandler(function(data) {
+         setStatusText_('Preview surat jalan siap');
+-        openPrintWindow_(data || {}, { mode: 'preview_combined' });
++        openPrintWindow_(data || {}, { mode: 'preview_sj' });
+       })
+       .withFailureHandler(function(error) {
+         setStatusText_('Gagal menyiapkan preview');
+@@ -4942,16 +4942,16 @@
+       .getSuratJalanPreviewDataFromDashboard(appState.currentUser.user_id, noSo);
+   }
+ 
+-  function handlePrintSuratJalanOnly(noSo) {
++  function handlePrintNota(noSo) {
+     setStatusText_('Menyiapkan halaman print...');
+     google.script.run
+       .withSuccessHandler(function(data) {
+         setStatusText_('Halaman print siap');
+-        openPrintWindow_(data || {}, { mode: 'sj_only' });
++        openPrintWindow_(data || {}, { mode: 'nota_only' });
+       })
+       .withFailureHandler(function(error) {
+         setStatusText_('Gagal menyiapkan print');
+-        renderResult_('Gagal menyiapkan print surat jalan: ' + error.message, true);
++        renderResult_('Gagal menyiapkan print nota: ' + error.message, true);
+       })
+       .getSuratJalanPrintDataFromDashboard(appState.currentUser.user_id, noSo);
+   }
+@@ -7359,92 +7359,134 @@
+       return;
+     }
+ 
+-    var printHtml = buildPrintDocument_(data, options);
+-    printWindow.document.open();
+-    printWindow.document.write(printHtml);
+-    printWindow.document.close();
++    try {
++      var printHtml = buildPrintDocument_(data, options);
++      printWindow.document.open();
++      printWindow.document.write(printHtml);
++      printWindow.document.close();
++    } catch (error) {
++      printWindow.document.open();
++      printWindow.document.write(
++        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gagal Print</title></head>' +
++        '<body style="font-family:Arial,sans-serif;padding:24px">' +
++        '<h3>Gagal menyiapkan halaman print</h3>' +
++        '<p>' + escapeHtml_(error && error.message ? error.message : String(error || 'Error tidak diketahui')) + '</p>' +
++        '</body></html>'
++      );
++      printWindow.document.close();
++      renderResult_('Gagal menyiapkan halaman print: ' + (error && error.message ? error.message : String(error || 'Error tidak diketahui')), true);
++    }
+   }
+ 
+   function buildPrintDocument_(data, options) {
+     var safeOptions = options || {};
+     var mode = String(safeOptions.mode || '').trim().toLowerCase();
+-    var isPreview = mode === 'preview_sj' || mode === 'preview_combined';
+-    var titlePrefix = isPreview ? 'Preview Surat Jalan' : (mode === 'sj_only' ? 'Surat Jalan (SJ)' : 'Surat Jalan');
+-    var title = titlePrefix + ' ' + escapeHtml_(isPreview ? (data.no_so || '') : (data.no_surat_jalan || ''));
+-    var printBodyHtml = buildCombinedPrintSheet_(data, safeOptions);
++    var isPreview = mode === 'preview_sj';
++    var isNotaOnly = mode === 'nota_only';
++    var pageTitle = isPreview ? 'Preview Surat Jalan' : (isNotaOnly ? 'Nota' : 'Surat Jalan');
++    var pageNumber = isNotaOnly ? buildPrintNotaNumber_(data) : (data.no_surat_jalan || data.no_so || '');
++    var printBodyHtml = buildPrintSheet_(data, safeOptions);
+ 
+     return '' +
+       '<!DOCTYPE html>' +
+       '<html>' +
+       '<head>' +
+         '<meta charset="utf-8" />' +
+-        '<title>' + title + '</title>' +
++        '<title>' + escapeHtml_(pageTitle + ' ' + (pageNumber || '')) + '</title>' +
+         '<style>' +
+-          '@page{size:9.5in 11in;margin:0;}' +
++          '@page{size:215mm 140mm;margin:0;}' +
+           '*{box-sizing:border-box;}' +
+-          'body{margin:0;font-family:"Courier New",Courier,monospace;background:#fff;color:#111;}' +
+-          '.sheet{width:9.5in;height:11in;margin:0 auto;position:relative;background:#fff;overflow:hidden;}' +
+-          '.print-area{position:absolute;left:0.35in;right:0.35in;top:0.35in;bottom:0.35in;border:2px solid #222;padding:0.08in 0.12in;}' +
+-          '.section-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #222;padding:0.06in 0 0.08in;}' +
+-          '.company-block{display:flex;align-items:flex-start;gap:0.1in;}' +
+-          '.company-logo{width:0.78in;height:auto;object-fit:contain;flex:0 0 auto;}' +
++          'html,body{margin:0;padding:0;background:#fff;color:#000;}' +
++          'body{font-family:"Courier New","Lucida Console",Courier,monospace;font-size:10pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
++          '.sheet{width:215mm;height:140mm;margin:0 auto;background:#fff;overflow:hidden;page-break-inside:avoid;break-inside:avoid;page-break-after:auto;break-after:auto;}' +
++          '.print-area{width:215mm;height:140mm;margin:0 auto;padding:0;overflow:hidden;}' +
++          '.print-section{width:215mm;height:140mm;margin:0;padding:4.2mm 5.8mm 3.2mm;background:#fff;overflow:hidden;break-inside:avoid;page-break-inside:avoid;page-break-before:auto;page-break-after:auto;break-before:auto;break-after:auto;}' +
++          '.section-header{display:grid;grid-template-columns:minmax(0,1fr) 59mm;gap:3.2mm;align-items:start;border-bottom:1.5px solid #000;padding:0 0 1.5mm;margin-bottom:1.8mm;}' +
++          '.company-block{min-width:0;}' +
+           '.company-text{min-width:0;}' +
+-          '.company{font-weight:700;font-size:0.22in;line-height:1.1;}' +
+-          '.meta-line{font-size:0.12in;line-height:1.15;margin-top:0.03in;}' +
+-          '.doc-title{text-align:right;font-weight:700;}' +
+-          '.doc-title .title{font-size:0.26in;line-height:1;}' +
+-          '.doc-title .number{font-size:0.22in;margin-top:0.04in;}' +
+-          '.fields{margin-top:0.11in;display:grid;grid-template-columns:1fr 1fr;gap:0.06in 0.26in;}' +
+-          '.field{display:grid;grid-template-columns:1.05in 0.14in 1fr;font-size:0.12in;align-items:baseline;}' +
+-          '.field .label{font-weight:700;}' +
+-          '.full-row{margin-top:0.08in;font-size:0.12in;}' +
+-          '.full-row .label{font-weight:700;display:inline-block;width:1.05in;}' +
+-          '.box-line{border:1px solid #222;min-height:0.3in;padding:0.05in 0.07in;white-space:pre-line;font-size:0.12in;line-height:1.2;}' +
+-          '.section-title{font-weight:700;font-size:0.14in;margin:0.12in 0 0.07in;}' +
+-          'table{width:100%;border-collapse:collapse;font-size:0.12in;table-layout:fixed;}' +
+-          'th,td{border:1px solid #222;padding:0.05in 0.06in;vertical-align:top;}' +
+-          'th{font-weight:700;text-align:center;}' +
++          '.company{font-weight:900;font-size:13pt;line-height:1;letter-spacing:-0.2px;}' +
++          '.meta-line{font-size:7.9pt;font-weight:800;line-height:1.08;margin-top:0.5mm;}' +
++          '.doc-title{text-align:right;font-weight:900;min-width:0;}' +
++          '.doc-title .title{font-size:15.5pt;line-height:1;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}' +
++          '.doc-title .number{font-size:10pt;line-height:1.05;margin-top:1mm;letter-spacing:-0.25px;white-space:nowrap;}' +
++          '.fields{display:grid;grid-template-columns:1fr 1fr;gap:0.9mm 4mm;margin-top:1.4mm;}' +
++          '.field{display:grid;grid-template-columns:20mm 2mm 1fr;font-size:8.9pt;font-weight:800;line-height:1.1;align-items:baseline;}' +
++          '.field .label{font-weight:900;}' +
++          '.full-row{margin-top:1.2mm;font-size:8.9pt;font-weight:900;line-height:1.05;}' +
++          '.full-row .label{font-weight:900;display:inline-block;width:20mm;}' +
++          '.box-line{border:1.2px solid #000;min-height:7mm;max-height:10mm;padding:0.8mm 1.2mm;white-space:pre-line;font-size:8.7pt;font-weight:800;line-height:1.08;overflow:hidden;}' +
++          '.section-title{font-weight:900;font-size:9.2pt;margin:1.8mm 0 0.8mm;letter-spacing:0.2px;line-height:1;}' +
++          'table{width:100%;border-collapse:collapse;font-size:8.6pt;font-weight:800;line-height:1.08;table-layout:fixed;}' +
++          'th,td{border:1.2px solid #000;padding:0.7mm 1mm;vertical-align:top;}' +
++          'th{font-weight:900;text-align:center;}' +
+           '.center{text-align:center;}' +
+           '.right{text-align:right;}' +
+-          '.notes-box{border:1px solid #222;padding:0.05in 0.07in;min-height:0.29in;font-size:0.12in;line-height:1.2;}' +
+-          '.signatures{display:grid;grid-template-columns:repeat(4,1fr);gap:0.16in;margin-top:0.14in;}' +
+-          '.sig{text-align:center;font-size:0.12in;font-weight:700;}' +
+-          '.sig .top{margin-bottom:0.04in;}' +
+-          '.sig .line{border-top:0;margin-bottom:0.06in;height:0.48in;}' +
++          '.notes-box{border:1.2px solid #000;padding:0.8mm 1.2mm;min-height:6.5mm;max-height:13mm;font-size:8.5pt;font-weight:800;line-height:1.08;overflow:hidden;}' +
++          '.signatures{display:grid;grid-template-columns:repeat(4,1fr);gap:2.4mm;margin-top:2.8mm;}' +
++          '.sig{text-align:center;font-size:8.4pt;font-weight:900;line-height:1.05;}' +
++          '.sig .top{margin-bottom:0.8mm;}' +
++          '.sig .line{border-top:0;margin-bottom:0.9mm;height:10.5mm;}' +
+           '.sig .bottom{display:block;}' +
+-          '.nota-footer{display:grid;grid-template-columns:32% 68%;gap:0.12in;margin-top:0.18in;align-items:end;}' +
+-          '.nota-note{font-size:0.11in;line-height:1.2;}' +
+-          '.perforation{position:relative;text-align:center;font-size:0.12in;font-weight:700;margin:0.09in 0 0.08in;border-top:3px dashed #222;}' +
+-          '.perforation span{position:relative;top:-0.09in;background:transparent;padding:0 0.08in;}' +
+-          '.preview-banner{border:2px dashed #107e3e;background:#edf8f1;color:#0b5d2d;padding:0.08in 0.12in;margin-bottom:0.08in;font-weight:700;font-size:0.12in;display:flex;justify-content:space-between;gap:0.12in;}' +
+-          '.split-grid{display:grid;grid-template-columns:62% 38%;gap:0.12in;}' +
+-          '.summary table td:first-child{font-weight:700;}' +
+-          '.summary .grand td{font-weight:700;}' +
+-          '.tight td{height:0.26in;}' +
+-          '.note-title{font-weight:700;margin-bottom:0.04in;}' +
+-          '@media print{body{background:#fff}.sheet{margin:0 auto;page-break-inside:avoid;}}' +
++          '.nota-footer{display:grid;grid-template-columns:30% 70%;gap:2.8mm;margin-top:2.8mm;align-items:end;}' +
++          '.nota-note{font-size:8.2pt;font-weight:900;line-height:1.1;}' +
++          '.preview-banner{border:1.2px dashed #000;background:#fff;color:#000;padding:1mm 1.4mm;margin:1mm 5.8mm 0;font-weight:900;font-size:8.8pt;display:flex;justify-content:space-between;gap:1.5mm;}' +
++          '.split-grid{display:grid;grid-template-columns:62% 38%;gap:2.8mm;}' +
++          '.summary table td:first-child{font-weight:900;}' +
++          '.summary .grand td{font-weight:900;font-size:9pt;}' +
++          '.tight td{height:5.3mm;}' +
++          '.note-title{font-weight:900;margin-bottom:0.8mm;}' +
++          '.surat-jalan-section{padding:2.8mm 4.5mm 2mm 4.5mm;}' +
++          '.surat-jalan-section .section-header{grid-template-columns:minmax(0,1fr) 48mm;gap:2.4mm;}' +
++          '.surat-jalan-section .company{font-size:13.2pt;letter-spacing:-0.45px;white-space:nowrap;}' +
++          '.surat-jalan-section .meta-line{font-size:8.1pt;}' +
++          '.surat-jalan-section .doc-title .title{font-size:15.3pt;letter-spacing:-0.35px;}' +
++          '.surat-jalan-section .doc-title .number{font-size:10.2pt;letter-spacing:-0.45px;}' +
++          '.surat-jalan-section .field,.surat-jalan-section .full-row{font-size:9.4pt;}' +
++          '.surat-jalan-section table{font-size:9pt;}' +
++          '.surat-jalan-section th,.surat-jalan-section td{padding:0.75mm 1mm;}' +
++          '.surat-jalan-section .notes-box{min-height:6.5mm;max-height:10.5mm;font-size:8.8pt;}' +
++          '.nota-section{padding:2.8mm 4.5mm 2mm 4.5mm;}' +
++          '.nota-section .section-header{grid-template-columns:minmax(0,1fr) 48mm;gap:2.4mm;}' +
++          '.nota-section .company{font-size:13.2pt;letter-spacing:-0.45px;white-space:nowrap;}' +
++          '.nota-section .meta-line{font-size:8.1pt;}' +
++          '.nota-section .doc-title .title{font-size:15.3pt;letter-spacing:-0.35px;}' +
++          '.nota-section .doc-title .number{font-size:10.2pt;letter-spacing:-0.45px;}' +
++          '.nota-section .field,.nota-section .full-row{font-size:9.3pt;}' +
++          '.nota-section .field{grid-template-columns:22mm 2mm 1fr;}' +
++          '.nota-section table{font-size:8.8pt;}' +
++          '.nota-section th,.nota-section td{padding:0.7mm 0.9mm;}' +
++          '.nota-section .box-line{min-height:6.5mm;max-height:8.5mm;}' +
++          '.nota-section .right{white-space:nowrap;}' +
++          '.nota-section .notes-box{min-height:17mm;max-height:22mm;font-size:8.6pt;}' +
++          '.nota-section .split-grid{grid-template-columns:58% 42%;gap:2.4mm;}' +
++          '.nota-section .summary td:last-child{width:30mm;white-space:nowrap;}' +
++          '.nota-section .summary .grand td{font-size:9.2pt;}' +
++          '.nota-section .nota-footer{grid-template-columns:28% 72%;gap:2.4mm;margin-top:2.4mm;}' +
++          '.nota-section .sig{font-size:8.2pt;}' +
++          '.nota-section .sig .line{height:8.5mm;}' +
++          '@media screen{body{background:#eee;padding:4mm 0}.sheet{box-shadow:0 0 0 1px #bbb}.preview-banner + .surat-jalan-section{height:132mm;padding-top:2.4mm}}' +
++          '@media print{html,body{width:215mm;height:140mm;margin:0;padding:0;overflow:hidden;background:#fff}.sheet{width:196mm;height:128mm;margin:6mm 0 0 9.5mm;box-shadow:none;overflow:hidden;page-break-after:avoid;break-after:avoid}.preview-banner{display:none}.print-area{width:196mm;height:128mm;margin:0;overflow:hidden}.print-section{width:196mm;height:128mm;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid;break-before:avoid;break-after:avoid}.print-sj-only .sheet,.print-nota-only .sheet,.print-sj-only .print-area,.print-nota-only .print-area,.print-sj-only .print-section,.print-nota-only .print-section{width:196mm;height:128mm}}' +
+         '</style>' +
+       '</head>' +
+-      '<body' + (isPreview ? '' : ' onload="window.print()"') + '>' +
++      '<body class="' + (isNotaOnly ? 'print-nota-only' : 'print-sj-only') + '"' + (isPreview ? '' : ' onload="window.print()"') + '>' +
+         printBodyHtml +
+       '</body>' +
+       '</html>';
+   }
+ 
+-  function buildCombinedPrintSheet_(data, options) {
++  function buildPrintSheet_(data, options) {
+     var safeOptions = options || {};
+     var mode = String(safeOptions.mode || '').trim().toLowerCase();
+-    var isPreview = mode === 'preview_sj' || mode === 'preview_combined';
+-    var isSjOnly = mode === 'sj_only' || mode === 'preview_sj';
++    var isPreview = mode === 'preview_sj';
++    var isNotaOnly = mode === 'nota_only';
+ 
+     return '' +
+       '<div class="sheet">' +
+         '<div class="print-area">' +
+           (isPreview
+-            ? '<div class="preview-banner"><span>PREVIEW SJ</span><span>Dokumen belum dibuat</span></div>'
++            ? '<div class="preview-banner"><span>PREVIEW DOKUMEN</span><span>Belum dicetak</span></div>'
+             : '') +
+-          buildSuratJalanSection_(data) +
+-          (isSjOnly ? '' : '<div class="perforation"><span> </span></div>' + buildNotaSection_(data)) +
++          (isNotaOnly ? buildNotaSection_(data) : buildSuratJalanSection_(data)) +
+         '</div>' +
+       '</div>';
+   }
+@@ -7456,7 +7498,7 @@
+     var headerNumber = String(data.no_surat_jalan || '').trim() || 'Belum Dibuat';
+ 
+     return '' +
+-      '<section>' +
++      '<section class="print-section surat-jalan-section">' +
+         buildPrintHeader_(headerTitle, headerNumber) +
+         '<div class="fields">' +
+           buildPrintField_('TANGGAL', formatPrintDate_(data.tanggal_kirim || data.tanggal_cetak || '')) +
+@@ -7493,7 +7535,7 @@
+     var total = Number(data.total || 0);
+ 
+     return '' +
+-      '<section>' +
++      '<section class="print-section nota-section">' +
+         buildPrintHeader_('NOTA', buildPrintNotaNumber_(data), true) +
+         '<div class="fields">' +
+           buildPrintField_('TANGGAL', formatPrintDate_(data.tanggal_kirim || data.tanggal_cetak || '')) +
+@@ -7505,15 +7547,15 @@
+         '</div>' +
+         '<div class="full-row"><span class="label">ALAMAT</span>: </div>' +
+         '<div class="box-line">' + escapeHtml_(data.alamat_kirim || '-') + '</div>' +
+-        '<table class="tight" style="margin-top:0.12in;">' +
++        '<table class="tight" style="margin-top:2mm;">' +
+           '<thead>' +
+-            '<tr><th style="width:5%">NO</th><th>BARANG</th><th style="width:10%">QTY</th><th style="width:9%">SAT</th><th style="width:13%">HARGA</th><th style="width:10%">DISC</th><th style="width:13%">JUMLAH</th></tr>' +
++            '<tr><th style="width:5%">NO</th><th style="width:34%">BARANG</th><th style="width:8%">QTY</th><th style="width:8%">SAT</th><th style="width:15%">HARGA</th><th style="width:12%">DISC</th><th style="width:18%">JUMLAH</th></tr>' +
+           '</thead>' +
+           '<tbody>' + detailRows + '</tbody>' +
+         '</table>' +
+-        '<div class="split-grid" style="margin-top:0.12in;">' +
++        '<div class="split-grid" style="margin-top:2mm;">' +
+           '<div>' +
+-            '<div class="notes-box" style="min-height:0.48in;">' +
++            '<div class="notes-box">' +
+               '<div class="note-title">CATATAN / TERBILANG</div>' +
+               buildPrintNotaNotesHtml_(data, total) +
+             '</div>' +
+@@ -7583,7 +7625,6 @@
+     return '' +
+       '<div class="section-header"' + (compactTop ? ' style="padding-top:0;"' : '') + '>' +
+         '<div class="company-block">' +
+-          '<img class="company-logo" alt="Logo PT Abuyamas Tirta Sejahtera" src="' + escapeHtml_(window.APP_BOOTSTRAP.brandLogoDataUrl || '') + '" />' +
+           '<div class="company-text">' +
+             '<div class="company">PT ABUYAMAS TIRTA SEJAHTERA</div>' +
+             '<div class="meta-line">JL. KAPLING BLOK EO NO.31 RT.01 RW.09, CIJUJUNG, SUKARAJA, BOGOR</div>' +

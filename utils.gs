@@ -19,7 +19,9 @@ function nowIso_() {
 }
 
 function generateDocNumber_(prefix) {
-  var stamp = Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, 'yyyyMMddHHmmss');
+  var normalizedPrefix = String(prefix || '').trim().toUpperCase();
+  var stampFormat = normalizedPrefix === APP_CONFIG.DOC_PREFIX.SALES_ORDER ? 'HHmmssddMMyyyy' : 'yyyyMMddHHmmss';
+  var stamp = Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, stampFormat);
   return prefix + '-' + stamp;
 }
 

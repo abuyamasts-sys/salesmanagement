@@ -1719,6 +1719,24 @@
     font-size: 12px;
   }
 
+  .item-action-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .item-action-cell .ghost-btn,
+  .item-action-cell .danger-btn,
+  #tab-sales .item-action-cell .ghost-btn,
+  #tab-sales .item-action-cell .danger-btn {
+    min-height: 36px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
   .order-item-summary {
     display: grid;
     gap: 6px;
@@ -2331,7 +2349,7 @@
     align-items: center;
     justify-content: flex-end;
     margin-left: auto;
-    width: min(100%, 620px);
+    width: min(100%, 980px);
     flex-wrap: nowrap;
   }
 
@@ -2346,6 +2364,13 @@
   .delivery-filter-actions input[type="date"] {
     flex: 0 0 170px;
     min-width: 170px;
+    min-height: 42px;
+    padding: 10px 12px;
+  }
+
+  .delivery-filter-actions select {
+    flex: 0 0 160px;
+    min-width: 160px;
     min-height: 42px;
     padding: 10px 12px;
   }
@@ -2851,6 +2876,12 @@
 
     .delivery-filter-actions input[type="search"] {
       max-width: 100%;
+    }
+
+    .delivery-filter-actions select,
+    .delivery-filter-actions input[type="date"] {
+      flex: 1 1 160px;
+      min-width: 150px;
     }
 
     .approver-summary-grid {

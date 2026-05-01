@@ -586,8 +586,8 @@ function completeOrder(noSo, userId, catatanKirim) {
   return result;
 }
 
-function generateKledoExportBatchFile(currentUser) {
-  var readyOrders = getReadyKledoExportOrders_();
+function generateKledoExportBatchFile(currentUser, options) {
+  var readyOrders = getReadyKledoExportOrders_(options || {});
   var exportRows = [];
   var workbookXml;
   var fileName;
@@ -624,8 +624,8 @@ function generateKledoExportBatchFile(currentUser) {
   };
 }
 
-function markKledoBatchExported(currentUser, catatanExport) {
-  var readyOrders = getReadyKledoExportOrders_();
+function markKledoBatchExported(currentUser, catatanExport, options) {
+  var readyOrders = getReadyKledoExportOrders_(options || {});
   var now = getNowParts_();
   var noSoList;
 
@@ -692,7 +692,7 @@ function buildKledoExportRows_(salesOrder, suratJalan) {
       detail.kode_item || '',
       '',
       qty > 0 ? String(qty) : '0',
-      detail.satuan || '',
+      resolveKledoUnitName_(detail),
       String(diskon || 0),
       '',
       String(harga || 0),
@@ -706,6 +706,16 @@ function buildKledoExportRows_(salesOrder, suratJalan) {
       'Webapp ATS'
     ];
   });
+}
+
+function resolveKledoUnitName_(detail) {
+  var configuredUnit = String(APP_CONFIG.KLEDO_EXPORT.UNIT_NAME || '').trim();
+
+  if (configuredUnit) {
+    return configuredUnit;
+  }
+
+  return '';
 }
 
 function buildKledoOrderNote_(salesOrder) {

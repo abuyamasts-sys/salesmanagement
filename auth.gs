@@ -2,6 +2,7 @@ function getCurrentUserProfile(userId) {
   var user = getCurrentUserRecord_(userId);
   var tipeSales;
   var isFreelance;
+  var isSlfMurni;
   var channelSalesDefault;
 
   if (!user) {
@@ -20,13 +21,18 @@ function getCurrentUserProfile(userId) {
       bank_nama_pemilik: '',
       bank_account_complete: false,
       is_freelance: false,
+      is_slfm: false,
       authorized: false
     };
   }
 
   tipeSales = String(user.tipe_sales || '').trim() || 'Internal';
-  isFreelance = normalizeText_(tipeSales) === 'freelance';
-  channelSalesDefault = String(user.channel_sales_default || '').trim() || (isFreelance ? 'SLF' : 'SLS');
+  isSlfMurni = normalizeText_(tipeSales).indexOf('slfm') === 0 ||
+    normalizeText_(user.user_id).indexOf('slfm') === 0;
+  isFreelance = normalizeText_(tipeSales) === 'freelance' || isSlfMurni;
+  channelSalesDefault = isSlfMurni
+    ? 'SLF'
+    : (String(user.channel_sales_default || '').trim() || (isFreelance ? 'SLF' : 'SLS'));
 
   return {
     email: user.email || '',
@@ -47,6 +53,7 @@ function getCurrentUserProfile(userId) {
       String(user.bank_nama_pemilik || '').trim()
     ),
     is_freelance: isFreelance,
+    is_slfm: isSlfMurni,
     authorized: true
   };
 }

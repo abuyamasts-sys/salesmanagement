@@ -48,7 +48,7 @@ var APP_CONFIG = {
   APPROVAL_STATUS: ['Menunggu', 'Disetujui', 'Ditolak'],
   DELIVERY_STATUS: ['Siap Kirim', 'Terkirim', 'Selesai'],
   KLEDO_EXPORT_STATUS: ['Belum Siap', 'Siap Export', 'Sudah Export'],
-  DELIVERY_PRIORITY: ['H-1 Wajib', 'Same Day Opsional', 'Jadwal Biasa'],
+  DELIVERY_PRIORITY: ['Backdate/Input Susulan', 'H-1 Wajib', 'Same Day Opsional', 'Jadwal Biasa'],
   CUSTOMER_TYPE: ['Lama', 'Baru'],
   PRINT: {
     MODE: 'DOT_MATRIX',
@@ -478,7 +478,8 @@ var APP_CONFIG = {
     ]
   },
   KLEDO_EXPORT: {
-    WAREHOUSE_NAME: 'Gudang Utama',
+    WAREHOUSE_NAME: 'Utama',
+    UNIT_NAME: '',
     INCLUDE_TAX: 'Tidak',
     FILE_PREFIX: 'kledo-sales-order',
     HEADERS: [

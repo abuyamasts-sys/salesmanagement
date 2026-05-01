@@ -8,7 +8,6 @@
     products: [],
     salesOrderItems: [],
     salesHistoryOrders: [],
-    fieldActivity: null,
     salesCommissionSummary: null,
     salesPayoutBatches: [],
     salesPayoutReadyRows: [],
@@ -16,10 +15,7 @@
     salesHistorySearch: '',
     salesHistoryStatus: '',
     salesHistoryPage: 1,
-    salesEditingItemIndex: -1,
     adminOrderItems: [],
-    adminEditingItemIndex: -1,
-    salesUsers: [],
     approvals: [],
     approvers: [],
     exportOrders: [],
@@ -34,14 +30,10 @@
     payoutActionDraft: null,
     approverFilterDate: '',
     approverExportFilterDate: '',
-    approverExportStartDate: '',
-    approverExportEndDate: '',
     readyOrders: [],
     readyOrderSearch: '',
     deliveryOrders: [],
     deliveryFilterDate: '',
-    deliveryStatusFilter: '',
-    deliveryVerificationFilter: '',
     deliverySearch: '',
     readyOrderPage: 1,
     deliveryPage: 1,
@@ -61,7 +53,6 @@
     approverKpiRows: [],
     backupSummary: null,
     backupHistory: [],
-    backupHistoryPage: 1,
     controllerFilterPreset: 'today',
     controllerStartDate: '',
     controllerEndDate: '',
@@ -73,17 +64,11 @@
     controllerTopSales: [],
     controllerTopCustomers: [],
     controllerTopItems: [],
-    controllerFieldMonitoring: null,
-    fieldMonitoringDate: '',
-    mtrMapDate: '',
-    mtrMapSales: '',
-    mtrMapData: null,
     controllerLastUpdated: '',
     sessionUserId: '',
     currentDeliveryVerificationNoSo: '',
     csRevisionDraft: null,
-    cancelSalesOrderDraft: null,
-    cancelDeliveryDraft: null
+    cancelSalesOrderDraft: null
   };
   var APP_USER_STORAGE_KEY = 'airtis_sales_user_id';
   var LAST_ASYNC_STATUS_TIMER = null;
@@ -92,14 +77,9 @@
   var READY_ORDER_PAGE_SIZE = 10;
   var DELIVERY_PAGE_SIZE = 10;
   var SALES_HISTORY_PAGE_SIZE = 10;
-  var BACKUP_HISTORY_PAGE_SIZE = 10;
   var controllerTrendChartLoadState_ = 'idle';
   var controllerTrendChartReadyCallbacks_ = [];
   var controllerTrendChartResizeTimer_ = null;
-  var mtrSalesMapInstance_ = null;
-  var mtrSalesMapMarkers_ = [];
-  var mtrSalesMapRouteIds_ = [];
-  var toastHideTimers_ = {};
 
   window.addEventListener('error', function(event) {
     try {
@@ -161,16 +141,11 @@
 
   function bindEvents() {
     try {
-    document.querySelectorAll('.tab-btn').forEach(function(button) {
-      button.addEventListener('click', function() {
-        activateTab_(button.dataset.tab);
+      document.querySelectorAll('.tab-btn').forEach(function(button) {
+        button.addEventListener('click', function() {
+          activateTab_(button.dataset.tab);
+        });
       });
-    });
-    document.querySelectorAll('.sales-subtab-btn').forEach(function(button) {
-      button.addEventListener('click', function() {
-        activateSalesView_(button.dataset.salesView);
-      });
-    });
     } catch (error) {}
     document.querySelectorAll('.admin-subtab-btn').forEach(function(button) {
       button.addEventListener('click', function() {
@@ -188,8 +163,6 @@
     safeBindById_('customer_search', 'input', handleCustomerSearchInput_);
     safeBindById_('salesHistorySearch', 'input', handleSalesHistorySearchInput_);
     safeBindById_('salesHistoryStatusFilter', 'change', handleSalesHistoryStatusChange_);
-    safeBindById_('salesHistoryInlineSearch', 'input', handleSalesHistorySearchInput_);
-    safeBindById_('salesHistoryInlineStatusFilter', 'change', handleSalesHistoryStatusChange_);
     safeBindById_('item', 'change', handleProductChange_);
     document.querySelectorAll('input[name="jenis_customer"]').forEach(function(input) {
       input.addEventListener('change', handleJenisCustomerChange_);
@@ -197,21 +170,18 @@
     safeBindById_('qty', 'input', calculateTotals_);
     safeBindById_('harga', 'input', calculateTotals_);
     safeBindById_('harga', 'input', handleSalesPriceInput_);
-    safeBindById_('diskon_tipe', 'change', handleSalesDiscountTypeChange_);
     safeBindById_('diskon', 'input', calculateTotals_);
-    safeBindById_('diskon', 'input', handleSalesDiscountInput_);
     safeSetOnClickById_('addSalesItemBtn', addSalesItem_);
     safeBindById_('tanggal_kirim_rencana', 'change', syncSalesPaymentDueDate_);
     safeBindById_('term_pembayaran', 'change', syncSalesPaymentDueDate_);
     safeBindById_('resetBtn', 'click', resetForm_);
     safeBindById_('openSalesHistoryBtn', 'click', openSalesHistoryModal_);
     safeBindById_('refreshSalesHistoryBtn', 'click', handleRefreshSalesHistory_);
-    safeBindById_('refreshSalesHistoryInlineBtn', 'click', handleRefreshSalesHistory_);
     safeBindById_('salesOrderForm', 'submit', submitForm_);
     safeBindById_('loginForm', 'submit', submitLoginForm_);
     safeBindById_('logoutBtn', 'click', handleLogout_);
     safeBindById_('refreshApproverBtn', 'click', loadApproverData_);
-    safeBindById_('refreshApproverExportBtn', 'click', loadApproverExportData_);
+    safeBindById_('refreshApproverExportBtn', 'click', loadApproverData_);
     safeBindById_('downloadKledoBatchBtn', 'click', handleDownloadKledoExportBatch_);
     safeBindById_('approver_search', 'input', handleApproverSearchInput_);
     safeBindById_('approverFilterDate', 'change', handleApproverFilterDateChange_);
@@ -222,25 +192,6 @@
     safeBindById_('saveApproverCommissionBtn', 'click', handleSaveApproverCommission_);
     safeBindById_('cancelApproverCommissionEditBtn', 'click', resetApproverCommissionForm_);
     safeBindById_('submitSalesPayoutBtn', 'click', handleSubmitSalesPayout_);
-    safeBindById_('openSalesBankAccountBtn', 'click', openSalesBankAccountModal_);
-    safeBindById_('saveSalesBankAccountBtn', 'click', handleSaveSalesBankAccount_);
-    safeBindById_('fieldStartBtn', 'click', function() {
-      submitFieldActivity_('Mulai Kerja');
-    });
-    safeBindById_('fieldUpdateBtn', 'click', function() {
-      submitFieldActivity_('Update Lokasi');
-    });
-    safeBindById_('fieldEndBtn', 'click', function() {
-      submitFieldActivity_('Selesai Kerja');
-    });
-    safeBindById_('fieldWorkSaveBtn', 'click', submitFieldWorkLog_);
-    safeBindById_('closeSalesBankAccountBtn', 'click', closeSalesBankAccountModal_);
-    safeBindById_('cancelSalesBankAccountBtn', 'click', closeSalesBankAccountModal_);
-    safeBindById_('salesBankAccountBackdrop', 'click', function(event) {
-      if (event.target.id === 'salesBankAccountBackdrop') {
-        closeSalesBankAccountModal_();
-      }
-    });
     safeBindById_('approverPayoutStatusFilter', 'change', handleApproverPayoutStatusFilterChange_);
     safeBindById_('approverCommissionItem', 'change', handleApproverCommissionItemChange_);
     safeBindById_('refreshApproverKpiBtn', 'click', loadApproverKpiData_);
@@ -248,9 +199,8 @@
     safeBindById_('approverKpiSales', 'change', handleApproverKpiSalesChange_);
     safeBindById_('saveApproverKpiBtn', 'click', handleSaveApproverKpiTarget_);
     safeBindById_('createBackupBtn', 'click', handleCreateDatabaseBackup_);
-    safeBindById_('refreshApproverBackupBtn', 'click', loadApproverBackupData_);
-    safeBindById_('approverExportStartDate', 'change', handleApproverExportFilterDateChange_);
-    safeBindById_('approverExportEndDate', 'change', handleApproverExportFilterDateChange_);
+    safeBindById_('refreshApproverBackupBtn', 'click', loadApproverData_);
+    safeBindById_('approverExportFilterDate', 'change', handleApproverExportFilterDateChange_);
     safeBindById_('approverExportFilterTodayBtn', 'click', handleApproverExportFilterToday_);
     safeBindById_('approverExportFilterAllBtn', 'click', handleApproverExportFilterAll_);
     document.querySelectorAll('.controller-preset-btn').forEach(function(button) {
@@ -261,23 +211,13 @@
     safeBindById_('controllerStartDate', 'change', handleControllerDateFilterChange_);
     safeBindById_('controllerEndDate', 'change', handleControllerDateFilterChange_);
     safeBindById_('refreshControllerBtn', 'click', handleControllerRefresh_);
-    safeBindById_('fieldMonitoringDate', 'change', handleFieldMonitoringDateChange_);
-    safeBindById_('refreshFieldMonitoringBtn', 'click', handleFieldMonitoringRefresh_);
-    safeBindById_('mtrMapDate', 'change', handleMtrMapFilterChange_);
-    safeBindById_('mtrMapSales', 'change', handleMtrMapFilterChange_);
-    safeBindById_('refreshMtrMapBtn', 'click', function() {
-      loadMtrSalesMovementMapData_();
-    });
     safeBindById_('refreshAdminBtn', 'click', handleAdminRefresh_);
     safeBindById_('readyOrderSearch', 'input', handleReadyOrderSearchInput_);
     safeBindById_('deliverySearch', 'input', handleDeliverySearchInput_);
-    safeBindById_('deliveryStatusFilter', 'change', handleDeliveryStatusFilterChange_);
-    safeBindById_('deliveryVerificationFilter', 'change', handleDeliveryVerificationFilterChange_);
     safeBindById_('deliveryFilterDate', 'change', handleDeliveryFilterChange_);
     safeBindById_('deliveryFilterTodayBtn', 'click', handleDeliveryFilterToday_);
     safeBindById_('deliveryFilterAllBtn', 'click', handleDeliveryFilterAll_);
     safeBindById_('admin_customer_id', 'change', handleAdminCustomerChange_);
-    safeBindById_('admin_customer_search', 'input', handleAdminCustomerSearchInput_);
     safeBindById_('admin_item', 'change', handleAdminProductChange_);
     document.querySelectorAll('input[name="admin_jenis_customer"]').forEach(function(input) {
       input.addEventListener('change', handleAdminJenisCustomerChange_);
@@ -285,23 +225,17 @@
     safeBindById_('admin_qty', 'input', calculateAdminTotals_);
     safeBindById_('admin_harga', 'input', calculateAdminTotals_);
     safeBindById_('admin_harga', 'input', handleAdminPriceInput_);
-    safeBindById_('admin_diskon_tipe', 'change', handleAdminDiscountTypeChange_);
     safeBindById_('admin_diskon', 'input', calculateAdminTotals_);
-    safeBindById_('admin_diskon', 'input', handleAdminDiscountInput_);
     safeSetOnClickById_('addAdminItemBtn', addAdminItem_);
     safeBindById_('admin_tanggal_kirim_rencana', 'change', syncAdminPaymentDueDate_);
     safeBindById_('admin_term_pembayaran', 'change', syncAdminPaymentDueDate_);
     safeBindById_('resetAgentBtn', 'click', resetAgentForm_);
     safeBindById_('agentOrderForm', 'submit', submitAgentOrderForm_);
-    safeBindById_('submitAgentBtn', 'click', submitAgentOrderForm_);
     safeBindById_('openAgentModalBtn', 'click', openAgentModal_);
     safeBindById_('closeAgentModalBtn', 'click', closeAgentModal_);
     safeBindById_('closeDeliveryVerificationBtn', 'click', closeDeliveryVerificationModal_);
     safeBindById_('cancelDeliveryVerificationBtn', 'click', closeDeliveryVerificationModal_);
     safeBindById_('saveDeliveryVerificationBtn', 'click', saveDeliveryVerification_);
-    safeBindById_('closeCancelDeliveryBtn', 'click', closeCancelDeliveryModal_);
-    safeBindById_('cancelDeliveryAbortBtn', 'click', closeCancelDeliveryModal_);
-    safeBindById_('confirmCancelDeliveryBtn', 'click', submitCancelDelivery_);
     safeBindById_('closeCsRevisionBtn', 'click', closeCsRevisionModal_);
     safeBindById_('cancelCsRevisionBtn', 'click', closeCsRevisionModal_);
     safeBindById_('csRevisionForm', 'submit', saveCsRevision_);
@@ -345,11 +279,6 @@
     safeBindById_('deliveryVerificationBackdrop', 'click', function(event) {
       if (event.target.id === 'deliveryVerificationBackdrop') {
         closeDeliveryVerificationModal_();
-      }
-    });
-    safeBindById_('cancelDeliveryBackdrop', 'click', function(event) {
-      if (event.target.id === 'cancelDeliveryBackdrop') {
-        closeCancelDeliveryModal_();
       }
     });
     safeBindById_('csRevisionBackdrop', 'click', function(event) {
@@ -400,21 +329,16 @@
   function exposeGlobalActionHandlers_() {
     window.addSalesItem_ = addSalesItem_;
     window.addAdminItem_ = addAdminItem_;
-    window.editSalesItem_ = editSalesItem_;
-    window.editAdminItem_ = editAdminItem_;
     window.removeSalesItem_ = removeSalesItem_;
     window.removeAdminItem_ = removeAdminItem_;
     window.selectCustomerFromSearch_ = selectCustomerFromSearch_;
-    window.selectAdminCustomerFromSearch_ = selectAdminCustomerFromSearch_;
     window.saveProductBasePrice_ = saveProductBasePrice_;
     window.handleApproveOrder = handleApproveOrder;
     window.handleRejectOrder = handleRejectOrder;
     window.handleCreateSuratJalan = handleCreateSuratJalan;
     window.handleMarkDelivered = handleMarkDelivered;
-    window.handleCancelDelivery = handleCancelDelivery;
     window.openDeliveryVerification = openDeliveryVerification;
     window.handleCompleteOrder = handleCompleteOrder;
-    window.handlePrintSjNota = handlePrintSjNota;
     window.handlePrintSuratJalan = handlePrintSuratJalan;
     window.handlePrintNota = handlePrintNota;
     window.handlePreviewSuratJalan = handlePreviewSuratJalan;
@@ -422,7 +346,6 @@
     window.openCancelSalesOrderModal = openCancelSalesOrderModal_;
     window.handleReadyOrderPageChange_ = handleReadyOrderPageChange_;
     window.handleSalesHistoryPageChange_ = handleSalesHistoryPageChange_;
-    window.handleBackupHistoryPageChange_ = handleBackupHistoryPageChange_;
     window.handleRemoveCsRevisionItem_ = handleRemoveCsRevisionItem_;
     window.handleCsRevisionLineInput_ = handleCsRevisionLineInput_;
     window.handleBillingPartialPay_ = handleBillingPartialPay_;
@@ -431,7 +354,6 @@
     window.handleMarkSlfPayoutBatchInProcess_ = handleMarkSlfPayoutBatchInProcess_;
     window.handleViewSlfPayoutBatchDetail_ = handleViewSlfPayoutBatchDetail_;
     window.handleEditApproverCommission_ = handleEditApproverCommission_;
-    window.handleCreateMonitoringNote_ = handleCreateMonitoringNote_;
   }
 
   function openBillingPaymentModal_(tagihanId, mode) {
@@ -584,9 +506,9 @@
       return;
     }
 
-    if (currentUserHasRole_('controller') || currentUserHasRole_('mtr')) {
+    if (currentUserHasRole_('controller')) {
       loadControllerData_(function() {
-        setStatusText_(currentUserHasRole_('mtr') ? 'Dashboard monitoring siap' : 'Dashboard controller siap');
+        setStatusText_('Dashboard controller siap');
       });
       return;
     }
@@ -608,15 +530,10 @@
           appState.products = Array.isArray(payload.products) ? payload.products : [];
           appState.salesHistoryOrders = Array.isArray(payload.salesHistoryOrders) ? payload.salesHistoryOrders : [];
           appState.salesPayoutBatches = Array.isArray(payload.salesPayoutBatches) ? payload.salesPayoutBatches : [];
-          appState.fieldActivity = payload.fieldActivity || null;
           appState.slfMinPayout = Number(payload.slfMinPayout || 0);
           syncCurrentUser_(payload.currentUser);
 
-          if (!currentUserIsSlfMurni_()) {
-            renderSalesFieldActivity_();
-          }
           renderSalesOptions_();
-          renderFieldWorkCustomerOptions_();
           applySalesModeUi_();
           renderCustomerOptions_();
           renderProductOptions_();
@@ -629,9 +546,7 @@
           handleCustomerChange_();
           handleProductChange_();
           loadSalesPayoutBatches_();
-          if (!currentUserIsSlfMurni_()) {
-            loadSalesKpiSummary_();
-          }
+          loadSalesKpiSummary_();
 
           if (callback) callback();
         } catch (error) {
@@ -646,241 +561,12 @@
       .getSalesOrderFormData(appState.currentUser.user_id);
   }
 
-  function submitFieldActivity_(activityType, extraPayload) {
-    if (!ensureAuthorizedSession_()) return;
-
-    var buttonMap = {
-      'Mulai Kerja': 'fieldStartBtn',
-      'Update Lokasi': 'fieldUpdateBtn',
-      'Selesai Kerja': 'fieldEndBtn',
-      'Catat Kegiatan': 'fieldWorkSaveBtn'
-    };
-    var button = document.getElementById(buttonMap[activityType] || '');
-    var extra = extraPayload || {};
-
-    if (!navigator.geolocation) {
-      renderResult_('GPS browser tidak tersedia di perangkat ini.', true);
-      return;
-    }
-
-    setFieldActivityButtonsDisabled_(true);
-    setStatusText_('Mengambil lokasi...');
-    setText_('salesActivityNote', 'Mengambil lokasi dari HP. Pastikan izin lokasi aktif.');
-
-    navigator.geolocation.getCurrentPosition(function(position) {
-      var coords = position.coords || {};
-      var payload = {
-        tipe_aktivitas: activityType,
-        location: {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy
-        },
-        device_id: getOrCreateFieldDeviceId_(),
-        user_agent: navigator.userAgent || '',
-        catatan: extra.hasil_kegiatan || ''
-      };
-      Object.keys(extra).forEach(function(key) {
-        payload[key] = extra[key];
-      });
-
-      setStatusText_('Menyimpan aktivitas...');
-
-      google.script.run
-        .withSuccessHandler(function(result) {
-          setFieldActivityButtonsDisabled_(false);
-          appState.fieldActivity = {
-            config: appState.fieldActivity && appState.fieldActivity.config ? appState.fieldActivity.config : null,
-            today: result && result.today ? result.today : null,
-            recentLogs: result && result.recentLogs ? result.recentLogs : []
-          };
-          renderSalesFieldActivity_();
-          setStatusText_('Aktivitas tersimpan');
-          renderResult_(result && result.message ? result.message : 'Aktivitas tersimpan.', false);
-          if (activityType === 'Catat Kegiatan') {
-            setFieldValue_('fieldWorkResult', '');
-          }
-        })
-        .withFailureHandler(function(error) {
-          setFieldActivityButtonsDisabled_(false);
-          setStatusText_('Gagal simpan aktivitas');
-          renderResult_('Gagal simpan aktivitas: ' + (error && error.message ? error.message : error), true);
-          setText_('salesActivityNote', 'Gagal menyimpan. Coba lagi saat sinyal lebih stabil.');
-        })
-        .recordFieldActivityFromDashboard(appState.currentUser.user_id, payload);
-    }, function(error) {
-      setFieldActivityButtonsDisabled_(false);
-      setStatusText_('Lokasi tidak terbaca');
-      renderResult_('Lokasi tidak terbaca: ' + getGeolocationErrorMessage_(error), true);
-      setText_('salesActivityNote', 'Aktifkan izin lokasi, lalu tekan tombol lagi.');
-      if (button) button.focus();
-    }, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0
-    });
-  }
-
-  function submitFieldWorkLog_() {
-    var customerId = getFieldValue_('fieldWorkCustomer');
-    var customer = (appState.customers || []).find(function(row) {
-      return String(row.kode_customer || '').trim() === String(customerId || '').trim();
-    }) || {};
-    var resultText = getFieldValue_('fieldWorkResult');
-
-    if (!String(resultText || '').trim()) {
-      renderResult_('Hasil kegiatan wajib diisi singkat.', true);
-      return;
-    }
-
-    submitFieldActivity_('Catat Kegiatan', {
-      jenis_kegiatan: getFieldValue_('fieldWorkType'),
-      customer_id: customerId,
-      nama_customer: customer.nama_customer || '',
-      hasil_kegiatan: resultText
-    });
-  }
-
-  function renderFieldWorkCustomerOptions_() {
-    var select = document.getElementById('fieldWorkCustomer');
-    var options = ['<option value="">Tanpa Customer / Prospek Baru</option>'];
-
-    if (!select) {
-      return;
-    }
-
-    (appState.customers || []).forEach(function(customer) {
-      var code = String(customer.kode_customer || '').trim();
-      var name = String(customer.nama_customer || '').trim();
-      if (!code && !name) {
-        return;
-      }
-      options.push('<option value="' + escapeHtml_(code) + '">' + escapeHtml_((name || code) + (code ? ' (' + code + ')' : '')) + '</option>');
-    });
-
-    select.innerHTML = options.join('');
-  }
-
-  function setFieldActivityButtonsDisabled_(isDisabled) {
-    ['fieldStartBtn', 'fieldUpdateBtn', 'fieldEndBtn', 'fieldWorkSaveBtn'].forEach(function(id) {
-      var button = document.getElementById(id);
-      if (button) {
-        button.disabled = !!isDisabled;
-      }
-    });
-  }
-
-  function getGeolocationErrorMessage_(error) {
-    if (!error) return 'error tidak diketahui';
-    if (error.code === 1) return 'izin lokasi ditolak.';
-    if (error.code === 2) return 'posisi tidak tersedia.';
-    if (error.code === 3) return 'waktu mengambil lokasi habis.';
-    return error.message || 'error tidak diketahui.';
-  }
-
-  function getOrCreateFieldDeviceId_() {
-    var storageKey = 'airtis_field_device_id';
-    var value = '';
-
-    try {
-      value = String(localStorage.getItem(storageKey) || '').trim();
-      if (!value) {
-        value = 'dev-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000));
-        localStorage.setItem(storageKey, value);
-      }
-    } catch (error) {
-      value = 'dev-session-' + String(Date.now());
-    }
-
-    return value;
-  }
-
-  function renderSalesFieldActivity_() {
-    var data = appState.fieldActivity || {};
-    var config = data.config || {};
-    var today = data.today || {};
-    var slots = Array.isArray(today.slots) ? today.slots : [];
-    var nextAction = today.next_action || {};
-    var status = today.status_harian || 'Belum mulai';
-    var lastUpdate = today.jam_update_terakhir || '';
-    var statusBadge = document.getElementById('salesActivityStatusBadge');
-    var timeline = document.getElementById('salesActivityTimeline');
-    var hasStarted = slots.some(function(slot) {
-      return slot.target === '08:00' && slot.status !== 'Tidak Update';
-    });
-    var hasEnded = slots.some(function(slot) {
-      return slot.type === 'Selesai Kerja' && slot.status !== 'Tidak Update';
-    });
-    var fallbackLabels = slots.length
-      ? slots.map(function(slot) { return slot.label || slot.target || '-'; })
-      : (config.startTime ? [config.startTime].concat(config.updateTimes || []).concat([config.endTime]) : ['08:00', '10:00', '12:00', '14:00', '16:00']);
-
-    setText_('salesActivityNextAction', nextAction.label || 'Mulai Kerja 08:00');
-    setText_('salesActivityLastUpdate', 'Update terakhir: ' + (lastUpdate || '-'));
-    setText_('salesActivitySubtitle', today.jadwal_kerja || config.scheduleText || 'Jadwal kerja sales. Toleransi 30 menit.');
-    setText_('salesActivityNote', buildSalesActivityNote_(today));
-
-    if (statusBadge) {
-      statusBadge.textContent = status;
-      statusBadge.className = 'sales-activity-status status-' + String(status || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    }
-
-    if (timeline) {
-      timeline.innerHTML = slots.length ? slots.map(function(slot) {
-        return '' +
-          '<span class="' + getFieldSlotClass_(slot.status) + '">' +
-            '<strong>' + escapeHtml_(slot.label || slot.target || '-') + '</strong>' +
-            '<small>' + escapeHtml_(slot.status || '-') + '</small>' +
-          '</span>';
-      }).join('') : fallbackLabels.map(function(label) {
-        return '<span><strong>' + label + '</strong><small>Belum</small></span>';
-      }).join('');
-    }
-
-    setSingleActivityButtonState_('fieldStartBtn', hasStarted, 'Mulai kerja hari ini sudah tercatat.');
-    setSingleActivityButtonState_('fieldEndBtn', hasEnded, 'Selesai kerja hari ini sudah tercatat.');
-  }
-
-  function setSingleActivityButtonState_(id, isDone, title) {
-    var button = document.getElementById(id);
-
-    if (!button) {
-      return;
-    }
-
-    button.disabled = !!isDone;
-    button.title = isDone ? title : '';
-  }
-
-  function buildSalesActivityNote_(today) {
-    var source = today || {};
-
-    if (!source.total_update) {
-      return 'Tekan Mulai saat mulai kerja. Sistem menyimpan jam server dan lokasi GPS.';
-    }
-
-    if (source.anomali_lokasi || source.anomali_perangkat) {
-      return 'Ada catatan yang perlu dicek admin. Tetap lanjutkan update sesuai jadwal.';
-    }
-
-    if (source.status_harian === 'Hijau') {
-      return 'Aktivitas hari ini lengkap.';
-    }
-
-    return 'Update berikutnya akan mengikuti titik kontrol terdekat.';
-  }
-
-  function getFieldSlotClass_(status) {
-    var key = String(status || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    return 'slot-' + (key || 'unknown');
-  }
-
   function loadControllerData_(callback) {
     if (!ensureAuthorizedSession_()) return;
 
     ensureControllerFilterDefaults_();
     syncControllerPlaceholderState_();
-    setStatusText_(currentUserHasRole_('mtr') ? 'Memuat dashboard monitoring...' : 'Memuat dashboard controller...');
+    setStatusText_('Memuat dashboard controller...');
 
     google.script.run
       .withSuccessHandler(function(data) {
@@ -896,27 +582,24 @@
           applyControllerTopSalesPayload_(payload.topSales || []);
           applyControllerTopCustomersPayload_(payload.topCustomers || []);
           applyControllerTopItemsPayload_(payload.topItems || []);
-          applyControllerFieldMonitoringPayload_(payload.fieldMonitoring || null);
           appState.controllerLastUpdated = String(payload.lastUpdated || '').trim() || appState.controllerLastUpdated;
           renderControllerDashboard_();
-          setStatusText_(currentUserHasRole_('mtr') ? 'Dashboard monitoring siap' : 'Dashboard controller siap');
-          loadMtrSalesMovementMapData_();
+          setStatusText_('Dashboard controller siap');
 
           if (callback) callback();
         } catch (error) {
-        setStatusText_(currentUserHasRole_('mtr') ? 'Gagal render dashboard monitoring' : 'Gagal render dashboard controller');
-        renderResult_('Gagal render dashboard: ' + error.message, true);
+          setStatusText_('Gagal render dashboard controller');
+          renderResult_('Gagal render dashboard controller: ' + error.message, true);
         }
       })
       .withFailureHandler(function(error) {
-        setStatusText_(currentUserHasRole_('mtr') ? 'Gagal memuat dashboard monitoring' : 'Gagal memuat dashboard controller');
-        renderResult_('Gagal memuat dashboard: ' + (error && error.message ? error.message : error), true);
+        setStatusText_('Gagal memuat dashboard controller');
+        renderResult_('Gagal memuat dashboard controller: ' + (error && error.message ? error.message : error), true);
       })
       .getControllerDashboardData(appState.currentUser.user_id, {
         preset: appState.controllerFilterPreset,
         startDate: appState.controllerStartDate,
-        endDate: appState.controllerEndDate,
-        monitoringDate: appState.fieldMonitoringDate || ''
+        endDate: appState.controllerEndDate
       });
   }
 
@@ -972,7 +655,6 @@
           appState.approverCommissionReadyToPay = Array.isArray(payload.approverCommissionReadyToPay) ? payload.approverCommissionReadyToPay : appState.approverCommissionReadyToPay;
           appState.backupSummary = payload.backupSummary || null;
           appState.backupHistory = Array.isArray(payload.backupHistory) ? payload.backupHistory : [];
-          appState.backupHistoryPage = 1;
           appState.approverSearch = '';
           appState.approverPriceSearch = '';
           syncCurrentUser_(payload.currentUser);
@@ -993,8 +675,7 @@
           setFieldValue_('approver_search', '');
           setFieldValue_('approver_price_search', '');
           setFieldValue_('approverFilterDate', appState.approverFilterDate);
-          setFieldValue_('approverExportStartDate', appState.approverExportStartDate);
-          setFieldValue_('approverExportEndDate', appState.approverExportEndDate);
+          setFieldValue_('approverExportFilterDate', appState.approverExportFilterDate);
           renderApproverTable_();
 
           if (callback) callback();
@@ -1008,72 +689,6 @@
         renderResult_('Gagal memuat data approval: ' + error.message, true);
       })
       .getApproverDashboardData(appState.currentUser.user_id);
-  }
-
-  function loadApproverBackupData_(callback) {
-    if (!ensureAuthorizedSession_()) return;
-
-    setStatusText_('Memuat riwayat backup...');
-
-    google.script.run
-      .withSuccessHandler(function(data) {
-        try {
-          var payload = data || {};
-
-          appState.backupSummary = payload.summary || null;
-          appState.backupHistory = Array.isArray(payload.history) ? payload.history : [];
-          appState.backupHistoryPage = 1;
-          renderApproverBackupSummary_();
-          renderApproverBackupTable_();
-          setStatusText_('Riwayat backup siap');
-
-          if (callback) callback();
-        } catch (error) {
-          setStatusText_('Gagal render riwayat backup');
-          renderResult_('Gagal render riwayat backup: ' + error.message, true);
-        }
-      })
-      .withFailureHandler(function(error) {
-        setStatusText_('Gagal memuat riwayat backup');
-        renderResult_('Gagal memuat riwayat backup: ' + (error && error.message ? error.message : error), true);
-      })
-      .getApproverBackupDataFromDashboard(appState.currentUser.user_id);
-  }
-
-  function getApproverExportFilterPayload_() {
-    return {
-      tanggal_mulai: appState.approverExportStartDate || '',
-      tanggal_sampai: appState.approverExportEndDate || ''
-    };
-  }
-
-  function loadApproverExportData_(callback) {
-    if (!ensureAuthorizedSession_()) return;
-
-    setStatusText_('Memuat antrean export Kledo...');
-
-    google.script.run
-      .withSuccessHandler(function(data) {
-        try {
-          var payload = data || {};
-
-          appState.exportOrders = Array.isArray(payload.exportOrders) ? payload.exportOrders : [];
-          syncCurrentUser_(payload.currentUser);
-          renderApproverExportSummary_();
-          renderApproverExportTable_();
-          setStatusText_('Antrean export Kledo siap');
-
-          if (callback) callback();
-        } catch (error) {
-          setStatusText_('Gagal render export Kledo');
-          renderResult_('Gagal render export Kledo: ' + error.message, true);
-        }
-      })
-      .withFailureHandler(function(error) {
-        setStatusText_('Gagal memuat export Kledo');
-        renderResult_('Gagal memuat export Kledo: ' + error.message, true);
-      })
-      .getApproverExportDataFromDashboard(appState.currentUser.user_id, getApproverExportFilterPayload_());
   }
 
   function loadApproverKpiData_(callback) {
@@ -1136,12 +751,10 @@
           appState.tomorrowPlanDate = String(payload.tomorrowPlanDate || '');
           appState.customers = Array.isArray(payload.customers) ? payload.customers : appState.customers;
           appState.products = Array.isArray(payload.products) ? payload.products : appState.products;
-          appState.salesUsers = Array.isArray(payload.salesUsers) ? payload.salesUsers : appState.salesUsers;
           syncCurrentUser_(payload.currentUser);
           ensureDeliveryFilterDate_();
 
           renderAdminCustomerOptions_();
-          renderAdminSalesSourceOptions_();
           renderAdminProductOptions_();
           renderAdminOrderItems_();
           handleAdminCustomerChange_();
@@ -1242,11 +855,9 @@
 
           appState.customers = Array.isArray(payload.customers) ? payload.customers : appState.customers;
           appState.products = Array.isArray(payload.products) ? payload.products : appState.products;
-          appState.salesUsers = Array.isArray(payload.salesUsers) ? payload.salesUsers : appState.salesUsers;
           syncCurrentUser_(payload.currentUser);
 
           renderAdminCustomerOptions_();
-          renderAdminSalesSourceOptions_();
           renderAdminProductOptions_();
 
           if (callback) callback();
@@ -1406,8 +1017,6 @@
       option.textContent = customer.nama_customer + ' (' + customer.kode_customer + ')';
       customerSelect.appendChild(option);
     });
-
-    renderAdminCustomerSearchResults_(getFieldValue_('admin_customer_search'));
   }
 
   function renderProductOptions_() {
@@ -1436,28 +1045,6 @@
       option.dataset.basePrice = product.harga_dasar || product.harga_default || 0;
       productSelect.appendChild(option);
     });
-  }
-
-  function renderAdminSalesSourceOptions_() {
-    var salesSelect = document.getElementById('admin_sales_source');
-
-    if (!salesSelect) {
-      return;
-    }
-
-    salesSelect.innerHTML = '<option value="OFFICE">Office</option>';
-
-    (appState.salesUsers || []).forEach(function(user) {
-      var option = document.createElement('option');
-      option.value = user.user_id;
-      option.textContent = user.nama_user + ' (' + user.user_id + ')';
-      option.dataset.nama = user.nama_user;
-      salesSelect.appendChild(option);
-    });
-
-    if (!salesSelect.value) {
-      salesSelect.value = 'OFFICE';
-    }
   }
 
   function renderApproverOptions_() {
@@ -1818,32 +1405,16 @@
 
   function renderApproverBackupTable_() {
     var tbody = document.getElementById('approverBackupTableBody');
-    var pagination = document.getElementById('approverBackupPagination');
     var rows = appState.backupHistory || [];
-    var totalPages;
-    var currentPage;
-    var startIndex;
-    var endIndex;
-    var visibleRows;
-    var pageInfo;
 
     if (!tbody) return;
 
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Belum ada riwayat backup.</td></tr>';
-      if (pagination) {
-        pagination.innerHTML = '';
-      }
       return;
     }
 
-    totalPages = getBackupHistoryPageTotal_();
-    currentPage = normalizeBackupHistoryPage_();
-    startIndex = (currentPage - 1) * BACKUP_HISTORY_PAGE_SIZE;
-    endIndex = Math.min(startIndex + BACKUP_HISTORY_PAGE_SIZE, rows.length);
-    visibleRows = rows.slice(startIndex, endIndex);
-
-    tbody.innerHTML = visibleRows.map(function(row) {
+    tbody.innerHTML = rows.map(function(row) {
       var fileUrl = String(row.file_url || '').trim();
       var fileLabel = String(row.nama_file || '-').trim() || '-';
       var status = String(row.status_backup || '-').trim() || '-';
@@ -1863,64 +1434,6 @@
           '<td>' + escapeHtml_(note) + '</td>' +
         '</tr>';
     }).join('');
-
-    if (!pagination) {
-      return;
-    }
-
-    if (rows.length <= BACKUP_HISTORY_PAGE_SIZE) {
-      pagination.innerHTML = '';
-      return;
-    }
-
-    pageInfo = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + rows.length + ' riwayat backup';
-    pagination.innerHTML = '' +
-      '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
-      '<div class="table-pagination-actions">' +
-        '<button type="button" class="ghost-btn pagination-btn" onclick="handleBackupHistoryPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
-        '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
-        '<button type="button" class="ghost-btn pagination-btn" onclick="handleBackupHistoryPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
-      '</div>';
-  }
-
-  function getBackupHistoryPageTotal_() {
-    return Math.max(1, Math.ceil(((appState.backupHistory || []).length || 0) / BACKUP_HISTORY_PAGE_SIZE));
-  }
-
-  function normalizeBackupHistoryPage_() {
-    var totalPages = getBackupHistoryPageTotal_();
-    var currentPage = Number(appState.backupHistoryPage || 1);
-
-    if (!isFinite(currentPage) || currentPage < 1) {
-      currentPage = 1;
-    }
-
-    if (currentPage > totalPages) {
-      currentPage = totalPages;
-    }
-
-    appState.backupHistoryPage = currentPage;
-    return currentPage;
-  }
-
-  function handleBackupHistoryPageChange_(direction) {
-    var nextPage = normalizeBackupHistoryPage_() + Number(direction || 0);
-    var totalPages = getBackupHistoryPageTotal_();
-
-    if (nextPage < 1) {
-      nextPage = 1;
-    }
-
-    if (nextPage > totalPages) {
-      nextPage = totalPages;
-    }
-
-    if (nextPage === appState.backupHistoryPage) {
-      return;
-    }
-
-    appState.backupHistoryPage = nextPage;
-    renderApproverBackupTable_();
   }
 
   function renderApproverPriceTable_() {
@@ -1995,28 +1508,16 @@
   }
 
   function getFilteredExportOrders_() {
-    var startDate = normalizeDateKey_(appState.approverExportStartDate || appState.approverExportFilterDate);
-    var endDate = normalizeDateKey_(appState.approverExportEndDate || appState.approverExportFilterDate);
-    var swapDate;
-
-    if (startDate && endDate && startDate > endDate) {
-      swapDate = startDate;
-      startDate = endDate;
-      endDate = swapDate;
-    }
+    var filterDate = normalizeDateKey_(appState.approverExportFilterDate);
 
     return (appState.exportOrders || []).slice().filter(function(row) {
       var rowDate = normalizeDateKey_(row.tanggal_selesai || row.tanggal_verifikasi_cs || row.tanggal_order);
 
-      if (startDate && (!rowDate || rowDate < startDate)) {
-        return false;
+      if (!filterDate) {
+        return true;
       }
 
-      if (endDate && (!rowDate || rowDate > endDate)) {
-        return false;
-      }
-
-      return true;
+      return rowDate === filterDate;
     });
   }
 
@@ -2430,17 +1931,8 @@
         }
       }
 
-      if ((String(row.status_kirim || '') === 'Siap Kirim' || String(row.status_kirim || '') === 'Terkirim') && statusVerifikasi !== 'Sudah Dicek') {
-        actions.push('<button type="button" class="danger-btn" onclick="handleCancelDelivery(\'' + escapeJs_(noSo) + '\')">Batal Kirim</button>');
-      }
-
-      actions.push(
-        '<div class="print-actions-group">' +
-          '<button type="button" class="print-action-btn print-action-btn-primary" onclick="handlePrintSjNota(\'' + escapeJs_(noSo) + '\')">Print SJ+Nota</button>' +
-          '<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintSuratJalan(\'' + escapeJs_(noSo) + '\')">Print SJ</button>' +
-          '<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintNota(\'' + escapeJs_(noSo) + '\')">Print Nota</button>' +
-        '</div>'
-      );
+      actions.push('<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintSuratJalan(\'' + escapeJs_(noSo) + '\')">Print SJ</button>');
+      actions.push('<button type="button" class="ghost-btn print-action-btn" onclick="handlePrintNota(\'' + escapeJs_(noSo) + '\')">Print Nota</button>');
 
       return '' +
         '<tr>' +
@@ -2483,20 +1975,6 @@
     appState.deliverySearch = getFieldValue_('deliverySearch');
     appState.deliveryPage = 1;
     renderDeliveryTable_();
-  }
-
-  function handleDeliveryStatusFilterChange_() {
-    appState.deliveryStatusFilter = getFieldValue_('deliveryStatusFilter');
-    appState.deliveryPage = 1;
-    renderDeliveryTable_();
-    setStatusText_(appState.deliveryStatusFilter ? ('Filter surat jalan: ' + appState.deliveryStatusFilter) : 'Menampilkan semua status surat jalan');
-  }
-
-  function handleDeliveryVerificationFilterChange_() {
-    appState.deliveryVerificationFilter = getFieldValue_('deliveryVerificationFilter');
-    appState.deliveryPage = 1;
-    renderDeliveryTable_();
-    setStatusText_(appState.deliveryVerificationFilter ? ('Filter verifikasi CS: ' + appState.deliveryVerificationFilter) : 'Menampilkan semua status verifikasi CS');
   }
 
   function handleSalesKpiMonthChange_() {
@@ -2630,11 +2108,6 @@
 
     if (!ensureAuthorizedSession_()) return;
 
-    if (!isSalesBankAccountComplete_()) {
-      renderResult_('Rekening payout belum lengkap. Isi dan simpan rekening pencairan komisi terlebih dahulu.', true);
-      return;
-    }
-
     if (readyAmount < Number(appState.slfMinPayout || 0)) {
       renderResult_('Saldo siap cair belum memenuhi minimum pencairan ' + formatCurrencyInput_(appState.slfMinPayout || 0) + '.', true);
       return;
@@ -2649,63 +2122,8 @@
       note_value: 'Mohon diproses ke rekening yang terdaftar',
       reference_text: String(appState.salesPayoutReadyRows.length || 0) + ' order siap cair',
       amount_text: formatCurrencyInput_(readyAmount),
-      account_text: getSalesBankAccountDisplay_(),
       save_label: 'Ajukan Pencairan'
     });
-  }
-
-  function handleSaveSalesBankAccount_() {
-    var payload;
-
-    if (!ensureAuthorizedSession_()) return;
-
-    payload = {
-      bank_nama: String(getFieldValue_('salesBankName') || '').trim(),
-      bank_no_rekening: String(getFieldValue_('salesBankAccountNumber') || '').trim(),
-      bank_nama_pemilik: String(getFieldValue_('salesBankAccountHolder') || '').trim()
-    };
-
-    if (!payload.bank_nama || !payload.bank_no_rekening || !payload.bank_nama_pemilik) {
-      renderResult_('Data rekening wajib lengkap: nama bank, nomor rekening, dan nama pemilik rekening.', true);
-      return;
-    }
-
-    setStatusText_('Menyimpan rekening payout sales...');
-    google.script.run
-      .withSuccessHandler(function(profile) {
-        syncCurrentUser_(profile || {});
-        renderSalesBankAccountFields_();
-        renderSalesBankAccountSummary_();
-        renderSalesPayoutSection_();
-        closeSalesBankAccountModal_();
-        setStatusText_('Rekening payout berhasil disimpan');
-        showToast_('Rekening berhasil disimpan.', 'success', 'Rekening Tersimpan');
-        renderResult_('Rekening payout berhasil disimpan dan siap dipakai untuk pengajuan pencairan.', false);
-      })
-      .withFailureHandler(function(error) {
-        setStatusText_('Gagal menyimpan rekening payout');
-        showToast_('Rekening belum berhasil disimpan.', 'warning', 'Simpan Gagal');
-        renderResult_('Gagal menyimpan rekening payout: ' + (error && error.message ? error.message : error), true);
-      })
-      .updateSalesBankAccountFromDashboard(appState.currentUser.user_id, payload);
-  }
-
-  function openSalesBankAccountModal_() {
-    var backdrop = document.getElementById('salesBankAccountBackdrop');
-
-    renderSalesBankAccountFields_();
-    if (backdrop) {
-      backdrop.classList.remove('hidden');
-    }
-  }
-
-  function closeSalesBankAccountModal_() {
-    var backdrop = document.getElementById('salesBankAccountBackdrop');
-
-    renderSalesBankAccountFields_();
-    if (backdrop) {
-      backdrop.classList.add('hidden');
-    }
   }
 
   function handleMarkSlfPayoutBatchPaid_(payoutBatchId) {
@@ -2731,11 +2149,6 @@
       note_value: 'Payout komisi dibayar',
       reference_text: batchId,
       amount_text: formatCurrencyInput_(batchRow ? Number(batchRow.total_komisi || 0) : 0),
-      account_text: batchRow ? [
-        batchRow.bank_nama || '-',
-        batchRow.bank_no_rekening || '-',
-        batchRow.bank_nama_pemilik || '-'
-      ].join(' | ') : '-',
       save_label: 'Tandai Sudah Dibayar'
     });
   }
@@ -2763,11 +2176,6 @@
       note_value: 'Batch payout sedang diproses',
       reference_text: batchId,
       amount_text: formatCurrencyInput_(batchRow ? Number(batchRow.total_komisi || 0) : 0),
-      account_text: batchRow ? [
-        batchRow.bank_nama || '-',
-        batchRow.bank_no_rekening || '-',
-        batchRow.bank_nama_pemilik || '-'
-      ].join(' | ') : '-',
       save_label: 'Tandai Diproses'
     });
   }
@@ -2812,9 +2220,6 @@
     setText_('payoutBatchDetailStatus', String(batch.status_payout || '-'));
     setText_('payoutBatchDetailCount', String(batch.jumlah_so || rows.length || 0));
     setText_('payoutBatchDetailTotal', formatCurrencyInput_(batch.total_komisi || 0));
-    setText_('payoutBatchDetailBankName', String(batch.bank_nama || '-'));
-    setText_('payoutBatchDetailBankAccount', String(batch.bank_no_rekening || '-'));
-    setText_('payoutBatchDetailBankHolder', String(batch.bank_nama_pemilik || '-'));
     setText_('payoutBatchDetailSalesNote', String(batch.catatan_sales || '-'));
     setText_('payoutBatchDetailApproverNote', String(batch.catatan_approver || '-'));
 
@@ -2877,7 +2282,6 @@
 
     copyTextToClipboard_(summaryText, function() {
       setStatusText_('Ringkasan batch payout berhasil disalin');
-      showToast_('Ringkasan batch payout berhasil disalin.', 'success', 'Ringkasan Disalin');
       if (copyBtn) {
         copyBtn.textContent = 'Tersalin';
         window.setTimeout(function() {
@@ -2890,7 +2294,6 @@
       }
     }, function() {
       setStatusText_('Gagal menyalin ringkasan batch otomatis');
-      showToast_('Ringkasan belum berhasil disalin.', 'warning', 'Salin Gagal');
       if (copyBtn) {
         copyBtn.disabled = false;
         copyBtn.textContent = 'Copy Ringkasan';
@@ -2925,9 +2328,6 @@
       'Status: ' + String(batch.status_payout || '-'),
       'Jumlah SO: ' + String(batch.jumlah_so || rows.length || 0),
       'Total Komisi: ' + formatCurrencyInput_(batch.total_komisi || 0),
-      'Bank Tujuan: ' + String(batch.bank_nama || '-'),
-      'No. Rekening: ' + String(batch.bank_no_rekening || '-'),
-      'Nama Rekening: ' + String(batch.bank_nama_pemilik || '-'),
       'Catatan Sales: ' + String(batch.catatan_sales || '-'),
       'Catatan Approver: ' + String(batch.catatan_approver || '-'),
       '',
@@ -2950,7 +2350,6 @@
     setText_('payoutActionSubtitle', String(draft.subtitle || 'Isi catatan proses payout komisi di bawah ini.'));
     setText_('payoutActionReference', String(draft.reference_text || '-'));
     setText_('payoutActionAmount', String(draft.amount_text || '-'));
-    setText_('payoutActionAccountInfo', String(draft.account_text || '-'));
     setText_('payoutActionNoteLabel', String(draft.note_label || 'Catatan'));
     setFieldValue_('payoutActionNote', String(draft.note_value || '').trim());
 
@@ -3020,16 +2419,10 @@
         .withSuccessHandler(function(result) {
           closePayoutActionModal_();
           setStatusText_('Pengajuan payout berhasil dibuat');
-          showToast_('Pengajuan pencairan berhasil dibuat.', 'success', 'Payout Diajukan');
           renderResult_(
             'Pengajuan pencairan berhasil dibuat.\nNo Batch: ' + String(result.payout_batch_id || '-') +
             '\nJumlah SO: ' + String(result.jumlah_so || 0) +
-            '\nTotal: ' + formatCurrencyInput_(result.total_komisi || 0) +
-            '\nRekening: ' + String([
-              result.bank_nama || '-',
-              result.bank_no_rekening || '-',
-              result.bank_nama_pemilik || '-'
-            ].join(' | ')),
+            '\nTotal: ' + formatCurrencyInput_(result.total_komisi || 0),
             false
           );
           loadSalesData_();
@@ -3043,7 +2436,6 @@
             noteEl.disabled = false;
           }
           setStatusText_('Gagal mengajukan payout komisi');
-          showToast_('Pengajuan pencairan gagal diproses.', 'warning', 'Payout Gagal');
           renderResult_('Gagal mengajukan payout komisi: ' + (error && error.message ? error.message : error), true);
         })
         .submitSlfPayoutRequestFromDashboard(appState.currentUser.user_id, {
@@ -3058,7 +2450,6 @@
         .withSuccessHandler(function(result) {
           closePayoutActionModal_();
           setStatusText_('Batch payout berhasil ditandai dibayar');
-          showToast_('Batch payout ditandai sudah dibayar.', 'success', 'Status Diperbarui');
           renderResult_(
             'Batch payout berhasil ditandai sudah dibayar.\nNo Batch: ' + String(result.payout_batch_id || draft.payout_batch_id || '-') +
             '\nJumlah SO: ' + String(result.updated_count || 0),
@@ -3075,7 +2466,6 @@
             noteEl.disabled = false;
           }
           setStatusText_('Gagal menyimpan pembayaran batch payout');
-          showToast_('Status batch belum berhasil diperbarui.', 'warning', 'Update Gagal');
           renderResult_('Gagal menyimpan pembayaran batch payout: ' + (error && error.message ? error.message : error), true);
         })
         .markSlfPayoutBatchPaidFromDashboard(appState.currentUser.user_id, {
@@ -3091,7 +2481,6 @@
         .withSuccessHandler(function(result) {
           closePayoutActionModal_();
           setStatusText_('Batch payout ditandai sedang diproses');
-          showToast_('Batch payout ditandai sedang diproses.', 'success', 'Status Diperbarui');
           renderResult_(
             'Batch payout ditandai sedang diproses.\nNo Batch: ' + String(result.payout_batch_id || draft.payout_batch_id || '-') +
             '\nJumlah SO: ' + String(result.updated_count || 0),
@@ -3108,7 +2497,6 @@
             noteEl.disabled = false;
           }
           setStatusText_('Gagal mengubah status batch payout');
-          showToast_('Status batch belum berhasil diperbarui.', 'warning', 'Update Gagal');
           renderResult_('Gagal mengubah status batch payout: ' + (error && error.message ? error.message : error), true);
         })
         .markSlfPayoutBatchInProcessFromDashboard(appState.currentUser.user_id, {
@@ -3251,19 +2639,14 @@
   }
 
   function handleApproverExportFilterDateChange_() {
-    appState.approverExportStartDate = normalizeDateKey_(getFieldValue_('approverExportStartDate'));
-    appState.approverExportEndDate = normalizeDateKey_(getFieldValue_('approverExportEndDate'));
-    appState.approverExportFilterDate = '';
+    appState.approverExportFilterDate = normalizeDateKey_(getFieldValue_('approverExportFilterDate'));
     renderApproverExportSummary_();
     renderApproverExportTable_();
   }
 
   function handleApproverExportFilterToday_() {
-    appState.approverExportStartDate = getTodayIsoDate_();
-    appState.approverExportEndDate = appState.approverExportStartDate;
-    appState.approverExportFilterDate = appState.approverExportStartDate;
-    setFieldValue_('approverExportStartDate', appState.approverExportStartDate);
-    setFieldValue_('approverExportEndDate', appState.approverExportEndDate);
+    appState.approverExportFilterDate = getTodayIsoDate_();
+    setFieldValue_('approverExportFilterDate', appState.approverExportFilterDate);
     renderApproverExportSummary_();
     renderApproverExportTable_();
     setStatusText_('Filter export Kledo diatur ke hari ini');
@@ -3271,10 +2654,7 @@
 
   function handleApproverExportFilterAll_() {
     appState.approverExportFilterDate = '';
-    appState.approverExportStartDate = '';
-    appState.approverExportEndDate = '';
-    setFieldValue_('approverExportStartDate', '');
-    setFieldValue_('approverExportEndDate', '');
+    setFieldValue_('approverExportFilterDate', '');
     renderApproverExportSummary_();
     renderApproverExportTable_();
     setStatusText_('Menampilkan semua antrean export Kledo');
@@ -3303,7 +2683,7 @@
           '\nJumlah sheet: ' + String(result.jumlah_sheet || 0),
           false
         );
-        loadApproverBackupData_();
+        loadApproverData_();
       })
       .withFailureHandler(function(error) {
         if (button) {
@@ -3367,7 +2747,7 @@
         setStatusText_('Gagal membuat export Kledo');
         renderResult_('Gagal membuat export Kledo: ' + error.message, true);
       })
-      .generateKledoExportFromDashboard(appState.currentUser.user_id, getApproverExportFilterPayload_());
+      .generateKledoExportFromDashboard(appState.currentUser.user_id, {});
   }
 
   function handleDeliveryFilterToday_() {
@@ -4314,12 +3694,9 @@
           '</div></td>' +
           '<td>' + escapeHtml_(formatNumber_(item.qty)) + '</td>' +
           '<td>' + escapeHtml_(formatCurrencyInput_(item.harga)) + '</td>' +
-          '<td>' + escapeHtml_(formatDiscountDisplay_(item)) + '</td>' +
+          '<td>' + escapeHtml_(formatPercentValue_(item.diskon_persen)) + '</td>' +
           '<td>' + escapeHtml_(formatCurrencyInput_(item.subtotal)) + '</td>' +
-          '<td><div class="item-action-cell">' +
-            '<button type="button" class="ghost-btn" onclick="editSalesItem_(' + index + ')">Edit</button>' +
-            '<button type="button" class="danger-btn" onclick="removeSalesItem_(' + index + ')">Hapus</button>' +
-          '</div></td>' +
+          '<td><button type="button" class="danger-btn" onclick="removeSalesItem_(' + index + ')">Hapus</button></td>' +
         '</tr>';
     }).join('');
 
@@ -4346,12 +3723,9 @@
           '</div></td>' +
           '<td>' + escapeHtml_(formatNumber_(item.qty)) + '</td>' +
           '<td>' + escapeHtml_(formatCurrencyInput_(item.harga)) + '</td>' +
-          '<td>' + escapeHtml_(formatDiscountDisplay_(item)) + '</td>' +
+          '<td>' + escapeHtml_(formatPercentValue_(item.diskon_persen)) + '</td>' +
           '<td>' + escapeHtml_(formatCurrencyInput_(item.subtotal)) + '</td>' +
-          '<td><div class="item-action-cell">' +
-            '<button type="button" class="ghost-btn" onclick="editAdminItem_(' + index + ')">Edit</button>' +
-            '<button type="button" class="danger-btn" onclick="removeAdminItem_(' + index + ')">Hapus</button>' +
-          '</div></td>' +
+          '<td><button type="button" class="danger-btn" onclick="removeAdminItem_(' + index + ')">Hapus</button></td>' +
         '</tr>';
     }).join('');
 
@@ -4719,26 +4093,21 @@
     var payoutBatches = appState.salesPayoutBatches || [];
     var readyAmount = getSalesReadyPayoutAmount_();
     var minPayout = Number(appState.slfMinPayout || 0);
-    var hasBankAccount = isSalesBankAccountComplete_();
-    var isEligible = hasBankAccount && readyAmount >= minPayout && readyRows.length > 0;
+    var isEligible = readyAmount >= minPayout && readyRows.length > 0;
 
     setText_('salesPayoutReadyAmount', formatCurrencyInput_(readyAmount));
     setText_('salesPayoutReadyCount', String(readyRows.length) + ' order siap masuk batch');
     setText_('salesPayoutMinAmount', formatCurrencyInput_(minPayout));
 
     if (infoText) {
-      infoText.textContent = !hasBankAccount
-        ? 'Lengkapi rekening payout Anda terlebih dahulu agar pengajuan pencairan punya tujuan transfer yang jelas.'
-        : isEligible
+      infoText.textContent = isEligible
         ? 'Saldo siap cair sudah memenuhi minimum. Anda bisa mengajukan payout batch.'
         : ('Minimum pencairan ' + formatCurrencyInput_(minPayout) + '. Saldo siap cair saat ini ' + formatCurrencyInput_(readyAmount) + '.');
     }
 
     if (submitBtn) {
       submitBtn.disabled = !isEligible;
-      submitBtn.title = !hasBankAccount
-        ? 'Lengkapi rekening payout terlebih dahulu'
-        : isEligible
+      submitBtn.title = isEligible
         ? 'Ajukan semua komisi siap cair ke batch payout'
         : ('Belum bisa diajukan. Minimum pencairan ' + formatCurrencyInput_(minPayout) + ', saldo siap cair saat ini ' + formatCurrencyInput_(readyAmount) + '.');
     }
@@ -4787,9 +4156,6 @@
         row.nama_customer,
         row.item_summary,
         row.qty_summary,
-        row.tanggal_order,
-        row.tanggal_kirim_rencana,
-        row.tanggal_kirim,
         row.catatan,
         row.alasan_hold,
         row.alasan_batal
@@ -4820,14 +4186,11 @@
   }
 
   function renderSalesHistoryStatusOptions_() {
-    var selects = [
-      document.getElementById('salesHistoryStatusFilter'),
-      document.getElementById('salesHistoryInlineStatusFilter')
-    ].filter(Boolean);
+    var select = document.getElementById('salesHistoryStatusFilter');
     var options = ['<option value="">Semua Status</option>'];
     var statuses = {};
 
-    if (!selects.length) return;
+    if (!select) return;
 
     (appState.salesHistoryOrders || []).forEach(function(row) {
       var status = String(row.status_order || '').trim();
@@ -4842,27 +4205,13 @@
       options.push('<option value="' + escapeHtml_(status) + '">' + escapeHtml_(status) + '</option>');
     });
 
-    selects.forEach(function(select) {
-      select.innerHTML = options.join('');
-      select.value = appState.salesHistoryStatus || '';
-    });
+    select.innerHTML = options.join('');
+    setFieldValue_('salesHistoryStatusFilter', appState.salesHistoryStatus || '');
   }
 
   function renderSalesHistoryTable_() {
-    var targets = [
-      {
-        tbody: document.getElementById('salesHistoryTableBody'),
-        pagination: document.getElementById('salesHistoryPagination'),
-        compact: false
-      },
-      {
-        tbody: document.getElementById('salesHistoryInlineTableBody'),
-        pagination: document.getElementById('salesHistoryInlinePagination'),
-        compact: true
-      }
-    ].filter(function(target) {
-      return !!target.tbody;
-    });
+    var tbody = document.getElementById('salesHistoryTableBody');
+    var pagination = document.getElementById('salesHistoryPagination');
     var orders = getFilteredSalesHistoryOrders_();
     var totalPages;
     var currentPage;
@@ -4871,15 +4220,13 @@
     var pageRows;
     var pageInfo;
 
-    if (!targets.length) return;
+    if (!tbody) return;
 
     if (!orders.length) {
-      targets.forEach(function(target) {
-        target.tbody.innerHTML = '<tr><td colspan="' + (target.compact ? '6' : '12') + '" class="empty-cell">Belum ada order yang cocok dengan filter.</td></tr>';
-        if (target.pagination) {
-          target.pagination.innerHTML = '';
-        }
-      });
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">Belum ada order yang cocok dengan filter.</td></tr>';
+      if (pagination) {
+        pagination.innerHTML = '';
+      }
       return;
     }
 
@@ -4889,75 +4236,50 @@
     endIndex = Math.min(startIndex + SALES_HISTORY_PAGE_SIZE, orders.length);
     pageRows = orders.slice(startIndex, endIndex);
 
+    tbody.innerHTML = pageRows.map(function(row) {
+      var customerName = String(row.nama_customer_input || row.nama_customer || '-').trim() || '-';
+      var note = String(row.alasan_hold || row.alasan_batal || row.catatan || '-').trim() || '-';
+
+      return '' +
+        '<tr>' +
+          '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
+          '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</td>' +
+          '<td>' + escapeHtml_(customerName) + '</td>' +
+          '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
+          '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
+          '<td>' + formatNumber_(row.total_final || row.total_order || row.total || 0) + '</td>' +
+          '<td>' + escapeHtml_(String(row.jenis_komisi_order || '-').trim() || '-') + '</td>' +
+          '<td>' + formatCommissionDisplayValue_(row) + '</td>' +
+          '<td>' + buildStatusBadge_(row.status_komisi || '-') + '</td>' +
+          '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
+          '<td>' + escapeHtml_(note) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    if (!pagination) {
+      return;
+    }
+
     pageInfo = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + orders.length + ' order';
 
-    targets.forEach(function(target) {
-      target.tbody.innerHTML = pageRows.map(function(row) {
-        return target.compact ? buildSalesHistoryCompactRowHtml_(row) : buildSalesHistoryFullRowHtml_(row);
-      }).join('');
-
-      if (target.pagination) {
-        target.pagination.innerHTML = '' +
-          '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
-          '<div class="table-pagination-actions">' +
-            '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
-            '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
-            '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
-          '</div>';
-      }
-    });
+    pagination.innerHTML = '' +
+      '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
+      '<div class="table-pagination-actions">' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
+        '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleSalesHistoryPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
+      '</div>';
   }
 
-  function buildSalesHistoryFullRowHtml_(row) {
-    var customerName = String(row.nama_customer_input || row.nama_customer || '-').trim() || '-';
-    var note = String(row.alasan_hold || row.alasan_batal || row.catatan || '-').trim() || '-';
-
-    return '' +
-      '<tr>' +
-        '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
-        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</td>' +
-        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_kirim_rencana || row.tanggal_kirim || '')) + '</td>' +
-        '<td>' + escapeHtml_(customerName) + '</td>' +
-        '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
-        '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
-        '<td>' + formatNumber_(row.total_final || row.total_order || row.total || 0) + '</td>' +
-        '<td>' + escapeHtml_(String(row.jenis_komisi_order || '-').trim() || '-') + '</td>' +
-        '<td>' + formatCommissionDisplayValue_(row) + '</td>' +
-        '<td>' + buildStatusBadge_(row.status_komisi || '-') + '</td>' +
-        '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
-        '<td>' + escapeHtml_(note) + '</td>' +
-      '</tr>';
-  }
-
-  function buildSalesHistoryCompactRowHtml_(row) {
-    var customerName = String(row.nama_customer_input || row.nama_customer || '-').trim() || '-';
-
-    return '' +
-      '<tr>' +
-        '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
-        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</td>' +
-        '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_kirim_rencana || row.tanggal_kirim || '')) + '</td>' +
-        '<td>' + escapeHtml_(customerName) + '</td>' +
-        '<td>' + buildOrderItemSummaryHtml_(row) + '</td>' +
-        '<td>' + buildStatusBadge_(row.status_order || '-') + '</td>' +
-      '</tr>';
-  }
-
-  function handleSalesHistorySearchInput_(event) {
-    var sourceId = event && event.target ? event.target.id : 'salesHistorySearch';
-    appState.salesHistorySearch = getFieldValue_(sourceId);
+  function handleSalesHistorySearchInput_() {
+    appState.salesHistorySearch = getFieldValue_('salesHistorySearch');
     appState.salesHistoryPage = 1;
-    setFieldValue_('salesHistorySearch', appState.salesHistorySearch || '');
-    setFieldValue_('salesHistoryInlineSearch', appState.salesHistorySearch || '');
     renderSalesHistoryTable_();
   }
 
-  function handleSalesHistoryStatusChange_(event) {
-    var sourceId = event && event.target ? event.target.id : 'salesHistoryStatusFilter';
-    appState.salesHistoryStatus = getFieldValue_(sourceId);
+  function handleSalesHistoryStatusChange_() {
+    appState.salesHistoryStatus = getFieldValue_('salesHistoryStatusFilter');
     appState.salesHistoryPage = 1;
-    setFieldValue_('salesHistoryStatusFilter', appState.salesHistoryStatus || '');
-    setFieldValue_('salesHistoryInlineStatusFilter', appState.salesHistoryStatus || '');
     renderSalesHistoryTable_();
   }
 
@@ -5113,7 +4435,6 @@
     } else {
       clearAdminCustomerInfo_();
       setFieldValue_('admin_customer_id', '');
-      setFieldValue_('admin_customer_search', '');
       setFieldValue_('admin_nama_customer_input', '');
       setFieldValue_('admin_pic_customer', '');
       setFieldValue_('admin_alamat_kirim', '');
@@ -5143,95 +4464,6 @@
     setFieldValue_('admin_pic_customer', customer.pic || '');
     setFieldValue_('admin_alamat_kirim', customer.alamat || '');
     setFieldValue_('admin_no_hp_customer', customer.no_hp || '');
-    setFieldValue_('admin_customer_search', buildCustomerSearchLabel_(customer));
-    renderAdminCustomerSearchResults_(getFieldValue_('admin_customer_search'));
-  }
-
-  function handleAdminCustomerSearchInput_() {
-    var query = getFieldValue_('admin_customer_search');
-    var selectedCustomer = getSelectedAdminCustomer_();
-
-    if (selectedCustomer && normalizeSearchText_(query) !== normalizeSearchText_(buildCustomerSearchLabel_(selectedCustomer))) {
-      setFieldValue_('admin_customer_id', '');
-      clearAdminCustomerInfo_();
-    } else if (normalizeSearchText_(query).length < 2) {
-      setFieldValue_('admin_customer_id', '');
-      clearAdminCustomerInfo_();
-    }
-
-    renderAdminCustomerSearchResults_(query);
-  }
-
-  function renderAdminCustomerSearchResults_(query) {
-    var container = document.getElementById('adminCustomerSearchResults');
-    var normalizedQuery = normalizeSearchText_(query);
-    var selectedCustomer = getSelectedAdminCustomer_();
-    var results;
-
-    if (!container) {
-      return;
-    }
-
-    if (selectedCustomer && normalizedQuery === normalizeSearchText_(buildCustomerSearchLabel_(selectedCustomer))) {
-      container.innerHTML = '';
-      return;
-    }
-
-    if (!normalizedQuery) {
-      container.innerHTML = '<div class="customer-search-empty">Ketik minimal 2 huruf untuk mencari customer.</div>';
-      return;
-    }
-
-    if (normalizedQuery.length < 2) {
-      container.innerHTML = '<div class="customer-search-empty">Minimal 2 huruf.</div>';
-      return;
-    }
-
-    results = getSortedCustomersByName_(appState.customers).filter(function(customer) {
-      var haystack = normalizeSearchText_([
-        customer.kode_customer,
-        customer.nama_customer,
-        customer.pic,
-        customer.no_hp,
-        customer.alamat
-      ].join(' '));
-
-      return haystack.indexOf(normalizedQuery) !== -1;
-    }).slice(0, 8);
-
-    if (!results.length) {
-      container.innerHTML = '<div class="customer-search-empty">Customer tidak ditemukan.</div>';
-      return;
-    }
-
-    container.innerHTML = results.map(function(customer) {
-      var code = String(customer.kode_customer || '').trim();
-      var subtitle = [
-        customer.pic || '',
-        customer.no_hp || '',
-        customer.alamat || ''
-      ].filter(Boolean).join(' | ');
-
-      return '' +
-        '<button type="button" class="customer-search-option" onclick="selectAdminCustomerFromSearch_(\'' + escapeJs_(code) + '\')">' +
-          '<strong>' + escapeHtml_(customer.nama_customer || '-') + '</strong>' +
-          '<span>' + escapeHtml_(code || '-') + (subtitle ? ' - ' + escapeHtml_(subtitle) : '') + '</span>' +
-        '</button>';
-    }).join('');
-  }
-
-  function selectAdminCustomerFromSearch_(customerId) {
-    var customer = (appState.customers || []).find(function(row) {
-      return String(row.kode_customer || '').trim() === String(customerId || '').trim();
-    });
-
-    if (!customer) {
-      return;
-    }
-
-    setFieldValue_('admin_customer_id', customer.kode_customer || '');
-    setFieldValue_('admin_customer_search', buildCustomerSearchLabel_(customer));
-    handleAdminCustomerChange_();
   }
 
   function handleProductChange_() {
@@ -5249,16 +4481,6 @@
     calculateTotals_();
   }
 
-  function handleSalesDiscountTypeChange_() {
-    setFieldValue_('diskon', 0);
-    calculateTotals_();
-  }
-
-  function handleSalesDiscountInput_() {
-    formatDiscountInput_('diskon_tipe', 'diskon');
-    calculateTotals_();
-  }
-
   function addSalesItem_() {
     try {
       var draftItem = collectSalesItemDraft_();
@@ -5269,19 +4491,13 @@
         return;
       }
 
-      if (appState.salesEditingItemIndex >= 0) {
-        appState.salesOrderItems[appState.salesEditingItemIndex] = draftItem.item;
-        appState.salesEditingItemIndex = -1;
-      } else {
-        appState.salesOrderItems.push(draftItem.item);
-      }
+      appState.salesOrderItems.push(draftItem.item);
       renderSalesOrderItems_();
       resetSalesItemDraft_();
-      setSalesItemEditMode_(false);
       if (draftItem.item.butuh_persetujuan_harga) {
-        setStatusText_('Item disimpan, harga di bawah harga dasar akan masuk approval');
+        setStatusText_('Item ditambahkan, harga di bawah harga dasar akan masuk approval');
       } else {
-        setStatusText_('Item sales order berhasil disimpan');
+        setStatusText_('Item berhasil ditambahkan ke sales order');
       }
     } catch (error) {
       setStatusText_('Gagal tambah item');
@@ -5290,39 +4506,11 @@
   }
 
   function removeSalesItem_(index) {
-    var targetIndex = Number(index);
     appState.salesOrderItems = appState.salesOrderItems.filter(function(_, itemIndex) {
-      return itemIndex !== targetIndex;
+      return itemIndex !== Number(index);
     });
-    if (appState.salesEditingItemIndex === targetIndex) {
-      appState.salesEditingItemIndex = -1;
-      resetSalesItemDraft_();
-      setSalesItemEditMode_(false);
-    } else if (appState.salesEditingItemIndex > targetIndex) {
-      appState.salesEditingItemIndex -= 1;
-    }
     renderSalesOrderItems_();
     setStatusText_('Item berhasil dihapus dari sales order');
-  }
-
-  function editSalesItem_(index) {
-    var targetIndex = Number(index);
-    var item = appState.salesOrderItems[targetIndex];
-
-    if (!item) {
-      setStatusText_('Item tidak ditemukan');
-      return;
-    }
-
-    appState.salesEditingItemIndex = targetIndex;
-    setFieldValue_('item', item.nama_item || '');
-    setFieldValue_('qty', item.qty || '');
-    setFieldValue_('harga', formatPlainNumberInput_(item.harga || 0));
-    setFieldValue_('diskon_tipe', item.diskon_tipe || 'persen');
-    setFieldValue_('diskon', formatPlainNumberInput_(item.diskon_input || item.diskon_persen || 0));
-    calculateTotals_();
-    setSalesItemEditMode_(true);
-    setStatusText_('Edit item sales order, lalu klik Simpan Item');
   }
 
   function addAdminItem_() {
@@ -5335,19 +4523,13 @@
         return;
       }
 
-      if (appState.adminEditingItemIndex >= 0) {
-        appState.adminOrderItems[appState.adminEditingItemIndex] = draftItem.item;
-        appState.adminEditingItemIndex = -1;
-      } else {
-        appState.adminOrderItems.push(draftItem.item);
-      }
+      appState.adminOrderItems.push(draftItem.item);
       renderAdminOrderItems_();
       resetAdminItemDraft_();
-      setAdminItemEditMode_(false);
       if (draftItem.item.butuh_persetujuan_harga) {
-        setStatusText_('Item customer disimpan, harga di bawah harga dasar akan masuk approval');
+        setStatusText_('Item customer ditambahkan, harga di bawah harga dasar akan masuk approval');
       } else {
-        setStatusText_('Item order customer berhasil disimpan');
+        setStatusText_('Item berhasil ditambahkan ke order customer');
       }
     } catch (error) {
       setStatusText_('Gagal tambah item customer');
@@ -5356,39 +4538,11 @@
   }
 
   function removeAdminItem_(index) {
-    var targetIndex = Number(index);
     appState.adminOrderItems = appState.adminOrderItems.filter(function(_, itemIndex) {
-      return itemIndex !== targetIndex;
+      return itemIndex !== Number(index);
     });
-    if (appState.adminEditingItemIndex === targetIndex) {
-      appState.adminEditingItemIndex = -1;
-      resetAdminItemDraft_();
-      setAdminItemEditMode_(false);
-    } else if (appState.adminEditingItemIndex > targetIndex) {
-      appState.adminEditingItemIndex -= 1;
-    }
     renderAdminOrderItems_();
     setStatusText_('Item berhasil dihapus dari order customer');
-  }
-
-  function editAdminItem_(index) {
-    var targetIndex = Number(index);
-    var item = appState.adminOrderItems[targetIndex];
-
-    if (!item) {
-      setStatusText_('Item customer tidak ditemukan');
-      return;
-    }
-
-    appState.adminEditingItemIndex = targetIndex;
-    setFieldValue_('admin_item', item.nama_item || '');
-    setFieldValue_('admin_qty', item.qty || '');
-    setFieldValue_('admin_harga', formatPlainNumberInput_(item.harga || 0));
-    setFieldValue_('admin_diskon_tipe', item.diskon_tipe || 'persen');
-    setFieldValue_('admin_diskon', formatPlainNumberInput_(item.diskon_input || item.diskon_persen || 0));
-    calculateAdminTotals_();
-    setAdminItemEditMode_(true);
-    setStatusText_('Edit item customer, lalu klik Simpan Item');
   }
 
   function handleAdminProductChange_() {
@@ -5403,16 +4557,6 @@
   function handleAdminPriceInput_() {
     var value = parseCurrencyInput_(getFieldValue_('admin_harga'));
     setFieldValue_('admin_harga', formatPlainNumberInput_(value));
-    calculateAdminTotals_();
-  }
-
-  function handleAdminDiscountTypeChange_() {
-    setFieldValue_('admin_diskon', 0);
-    calculateAdminTotals_();
-  }
-
-  function handleAdminDiscountInput_() {
-    formatDiscountInput_('admin_diskon_tipe', 'admin_diskon');
     calculateAdminTotals_();
   }
 
@@ -5504,8 +4648,9 @@
   function calculateTotals_() {
     var qty = Number(getFieldValue_('qty') || 0);
     var harga = parseCurrencyInput_(getFieldValue_('harga'));
+    var diskonPersen = clampDiscountPercent_(getFieldValue_('diskon'));
     var subtotal = qty * harga;
-    var diskonNominal = calculateDiscountNominal_(subtotal, getFieldValue_('diskon_tipe'), getFieldValue_('diskon'));
+    var diskonNominal = subtotal * (diskonPersen / 100);
     var total = subtotal - diskonNominal;
 
     setFieldValue_('line_subtotal', formatCurrencyInput_(total > 0 ? total : 0));
@@ -5531,8 +4676,9 @@
   function calculateAdminTotals_() {
     var qty = Number(getFieldValue_('admin_qty') || 0);
     var harga = parseCurrencyInput_(getFieldValue_('admin_harga'));
+    var diskonPersen = clampDiscountPercent_(getFieldValue_('admin_diskon'));
     var subtotal = qty * harga;
-    var diskonNominal = calculateDiscountNominal_(subtotal, getFieldValue_('admin_diskon_tipe'), getFieldValue_('admin_diskon'));
+    var diskonNominal = subtotal * (diskonPersen / 100);
     var total = subtotal - diskonNominal;
 
     setFieldValue_('admin_line_subtotal', formatCurrencyInput_(total > 0 ? total : 0));
@@ -5741,98 +4887,6 @@
       });
   }
 
-  function handleCancelDelivery(noSo) {
-    var row = getDeliveryOrderByNoSo_(noSo);
-    var backdrop = document.getElementById('cancelDeliveryBackdrop');
-    var reasonInput = document.getElementById('cancelDeliveryReason');
-    var messageEl = document.getElementById('cancelDeliveryMessage');
-
-    if (!row) {
-      renderResult_('Data surat jalan tidak ditemukan.', true);
-      return;
-    }
-
-    if (String(row.status_verifikasi_cs || '').trim() === 'Sudah Dicek') {
-      renderResult_('Batal kirim tidak bisa dilakukan karena verifikasi CS sudah tersimpan.', true);
-      return;
-    }
-
-    appState.cancelDeliveryDraft = {
-      no_so: noSo,
-      no_surat_jalan: row.no_surat_jalan || '',
-      nama_customer: row.nama_customer || '-'
-    };
-
-    setText_('cancelDeliveryNoSo', noSo || '-');
-    setText_('cancelDeliveryNoSj', row.no_surat_jalan || '-');
-    setText_('cancelDeliveryCustomer', row.nama_customer || '-');
-    if (reasonInput) {
-      reasonInput.value = '';
-    }
-    if (messageEl) {
-      messageEl.textContent = '';
-      messageEl.classList.add('hidden');
-    }
-    if (backdrop) {
-      backdrop.classList.remove('hidden');
-    }
-  }
-
-  function closeCancelDeliveryModal_() {
-    appState.cancelDeliveryDraft = null;
-    var backdrop = document.getElementById('cancelDeliveryBackdrop');
-    var messageEl = document.getElementById('cancelDeliveryMessage');
-
-    if (messageEl) {
-      messageEl.textContent = '';
-      messageEl.classList.add('hidden');
-    }
-    if (backdrop) {
-      backdrop.classList.add('hidden');
-    }
-  }
-
-  function submitCancelDelivery_() {
-    var draft = appState.cancelDeliveryDraft || {};
-    var reason = getFieldValue_('cancelDeliveryReason');
-    var messageEl = document.getElementById('cancelDeliveryMessage');
-
-    reason = String(reason || '').trim();
-    if (!draft.no_so) {
-      renderResult_('Pilih surat jalan yang ingin dibatalkan dulu.', true);
-      return;
-    }
-    if (!reason) {
-      if (messageEl) {
-        messageEl.textContent = 'Alasan batal kirim wajib diisi.';
-        messageEl.classList.remove('hidden');
-      }
-      return;
-    }
-
-    setStatusText_('Membatalkan pengiriman...');
-    google.script.run
-      .withSuccessHandler(function(result) {
-        setStatusText_('Pengiriman dibatalkan');
-        renderResult_(result && result.sales_order_found === false
-          ? 'SJ ' + (result.no_surat_jalan || '-') + ' dibatalkan dan dihapus dari daftar Surat Jalan. Data SO asal tidak ditemukan.'
-          : 'SJ ' + (result.no_surat_jalan || '-') + ' dibatalkan. Order ' + result.no_so + ' kembali ke Siap Kirim.', false);
-        closeCancelDeliveryModal_();
-        loadAdminOperationsData_();
-      })
-      .withFailureHandler(function(error) {
-        setStatusText_('Gagal batal kirim');
-        if (messageEl) {
-          messageEl.textContent = 'Gagal batal kirim: ' + (error && error.message ? error.message : error);
-          messageEl.classList.remove('hidden');
-        }
-      })
-      .cancelDeliveryFromDashboard(appState.currentUser.user_id, {
-        no_so: draft.no_so,
-        alasan_batal_kirim: reason
-      });
-  }
-
   function handleCompleteOrder(noSo) {
     setStatusText_('Menyelesaikan order...');
     google.script.run
@@ -5874,20 +4928,6 @@
       .getSuratJalanPrintDataFromDashboard(appState.currentUser.user_id, noSo);
   }
 
-  function handlePrintSjNota(noSo) {
-    setStatusText_('Menyiapkan halaman print SJ + Nota...');
-    google.script.run
-      .withSuccessHandler(function(data) {
-        setStatusText_('Halaman print SJ + Nota siap');
-        openPrintWindow_(data || {}, { mode: 'combined_dual_page' });
-      })
-      .withFailureHandler(function(error) {
-        setStatusText_('Gagal menyiapkan print');
-        renderResult_('Gagal menyiapkan print SJ + Nota: ' + error.message, true);
-      })
-      .getSuratJalanPrintDataFromDashboard(appState.currentUser.user_id, noSo);
-  }
-
   function handlePreviewSuratJalan(noSo) {
     setStatusText_('Menyiapkan preview surat jalan...');
     google.script.run
@@ -5917,48 +4957,25 @@
   }
 
   function submitAgentOrderForm_(event) {
-    var submitTimeout;
-
-    if (event && typeof event.preventDefault === 'function') {
-      event.preventDefault();
-    }
+    event.preventDefault();
 
     var payload = collectAgentFormData_();
     var validationMessage = validateAgentFormPayload_(payload);
     var submitBtn = document.getElementById('submitAgentBtn');
 
-    if (submitBtn && submitBtn.disabled) {
-      return;
-    }
-
     if (validationMessage) {
       setStatusText_('Form pengiriman belum lengkap');
-      showAgentSubmitMessage_(validationMessage);
       renderResult_(validationMessage, true);
       return;
     }
 
-    if (submitBtn) {
-      submitBtn.disabled = true;
-    }
+    submitBtn.disabled = true;
     setStatusText_('Mengirim pengiriman...');
-    clearAgentSubmitMessage_();
-    submitTimeout = window.setTimeout(function() {
-      if (submitBtn) {
-        submitBtn.disabled = false;
-      }
-      setStatusText_('Submit pengiriman timeout');
-      showAgentSubmitMessage_('Submit belum mendapat respon dari Apps Script. Coba klik Submit sekali lagi. Jika tetap gagal, refresh halaman lalu login ulang.');
-    }, 45000);
 
     google.script.run
       .withSuccessHandler(function(result) {
-        window.clearTimeout(submitTimeout);
-        if (submitBtn) {
-          submitBtn.disabled = false;
-        }
+        submitBtn.disabled = false;
         setStatusText_('Pengiriman berhasil diproses');
-        clearAgentSubmitMessage_();
         renderResult_(
           'Order customer berhasil dibuat.\nNo. SO: ' + result.no_so + '\nStatus Order: ' + result.status_order,
           result.butuh_persetujuan === 'Ya'
@@ -5972,39 +4989,11 @@
         }
       })
       .withFailureHandler(function(error) {
-        var message = 'Gagal submit pengiriman: ' + (error && error.message ? error.message : error);
-
-        window.clearTimeout(submitTimeout);
-        if (submitBtn) {
-          submitBtn.disabled = false;
-        }
+        submitBtn.disabled = false;
         setStatusText_('Pengiriman gagal diproses');
-        showAgentSubmitMessage_(message);
-        renderResult_(message, true);
+        renderResult_('Gagal submit pengiriman: ' + error.message, true);
       })
       .submitAgentOrderFromAdmin(appState.currentUser.user_id, payload);
-  }
-
-  function showAgentSubmitMessage_(message) {
-    var messageEl = document.getElementById('agentSubmitMessage');
-
-    if (!messageEl) {
-      return;
-    }
-
-    messageEl.textContent = String(message || '').trim();
-    messageEl.classList.toggle('hidden', !messageEl.textContent);
-  }
-
-  function clearAgentSubmitMessage_() {
-    var messageEl = document.getElementById('agentSubmitMessage');
-
-    if (!messageEl) {
-      return;
-    }
-
-    messageEl.textContent = '';
-    messageEl.classList.add('hidden');
   }
 
   function getActiveAdminView_() {
@@ -6123,35 +5112,15 @@
     });
   }
 
-  function handleFieldMonitoringDateChange_() {
-    appState.fieldMonitoringDate = getFieldValue_('fieldMonitoringDate') || getTodayIsoDate_();
-    appState.mtrMapDate = appState.fieldMonitoringDate;
-    setFieldValue_('mtrMapDate', appState.fieldMonitoringDate);
-    loadControllerData_(function() {
-      setStatusText_('Monitoring sales diperbarui');
-    });
-  }
-
-  function handleFieldMonitoringRefresh_() {
-    appState.fieldMonitoringDate = getFieldValue_('fieldMonitoringDate') || appState.fieldMonitoringDate || getTodayIsoDate_();
-    appState.mtrMapDate = appState.fieldMonitoringDate;
-    setFieldValue_('mtrMapDate', appState.fieldMonitoringDate);
-    loadControllerData_(function() {
-      setStatusText_('Monitoring sales diperbarui');
-    });
-  }
-
   function collectSalesItemDraft_() {
     calculateTotals_();
 
     var namaItem = String(getFieldValue_('item') || '').trim();
     var qty = Number(getFieldValue_('qty') || 0);
     var harga = parseCurrencyInput_(getFieldValue_('harga'));
-    var diskonTipe = normalizeDiscountType_(getFieldValue_('diskon_tipe'));
-    var diskonInput = getDiscountInputValue_(diskonTipe, getFieldValue_('diskon'));
+    var diskonPersen = clampDiscountPercent_(getFieldValue_('diskon'));
     var grossSubtotal = qty * harga;
-    var diskon = calculateDiscountNominal_(grossSubtotal, diskonTipe, diskonInput);
-    var diskonPersen = grossSubtotal > 0 ? (diskon / grossSubtotal) * 100 : 0;
+    var diskon = grossSubtotal * (diskonPersen / 100);
     var subtotal = parseCurrencyInput_(getFieldValue_('line_subtotal'));
     var product = getProductByName_(namaItem);
     var hargaDasar = Number(product && (product.harga_dasar || product.harga_default) || 0);
@@ -6180,11 +5149,11 @@
       return { validationMessage: 'Harga item tidak boleh negatif.' };
     }
 
-    if (diskonInput < 0) {
+    if (diskonPersen < 0) {
       return { validationMessage: 'Diskon item tidak boleh negatif.' };
     }
 
-    if (diskon > grossSubtotal) {
+    if (diskonPersen > 100) {
       return { validationMessage: 'Diskon item maksimal 100%.' };
     }
 
@@ -6199,8 +5168,6 @@
         harga_dasar: hargaDasar,
         diskon: diskon,
         diskon_persen: diskonPersen,
-        diskon_tipe: diskonTipe,
-        diskon_input: diskonInput,
         butuh_persetujuan_harga: harga < hargaDasar,
         subtotal: subtotal
       }
@@ -6213,11 +5180,9 @@
     var namaItem = String(getFieldValue_('admin_item') || '').trim();
     var qty = Number(getFieldValue_('admin_qty') || 0);
     var harga = parseCurrencyInput_(getFieldValue_('admin_harga'));
-    var diskonTipe = normalizeDiscountType_(getFieldValue_('admin_diskon_tipe'));
-    var diskonInput = getDiscountInputValue_(diskonTipe, getFieldValue_('admin_diskon'));
+    var diskonPersen = clampDiscountPercent_(getFieldValue_('admin_diskon'));
     var grossSubtotal = qty * harga;
-    var diskon = calculateDiscountNominal_(grossSubtotal, diskonTipe, diskonInput);
-    var diskonPersen = grossSubtotal > 0 ? (diskon / grossSubtotal) * 100 : 0;
+    var diskon = grossSubtotal * (diskonPersen / 100);
     var subtotal = parseCurrencyInput_(getFieldValue_('admin_line_subtotal'));
     var product = getProductByName_(namaItem);
     var hargaDasar = Number(product && (product.harga_dasar || product.harga_default) || 0);
@@ -6246,11 +5211,11 @@
       return { validationMessage: 'Harga item customer tidak boleh negatif.' };
     }
 
-    if (diskonInput < 0) {
+    if (diskonPersen < 0) {
       return { validationMessage: 'Diskon item customer tidak boleh negatif.' };
     }
 
-    if (diskon > grossSubtotal) {
+    if (diskonPersen > 100) {
       return { validationMessage: 'Diskon item customer maksimal 100%.' };
     }
 
@@ -6265,8 +5230,6 @@
         harga_dasar: hargaDasar,
         diskon: diskon,
         diskon_persen: diskonPersen,
-        diskon_tipe: diskonTipe,
-        diskon_input: diskonInput,
         butuh_persetujuan_harga: harga < hargaDasar,
         subtotal: subtotal
       }
@@ -6305,7 +5268,6 @@
     setFieldValue_('item', '');
     setFieldValue_('qty', '');
     setFieldValue_('harga', formatPlainNumberInput_(0));
-    setFieldValue_('diskon_tipe', 'persen');
     setFieldValue_('diskon', 0);
     setFieldValue_('line_subtotal', formatCurrencyInput_(0));
   }
@@ -6314,25 +5276,8 @@
     setFieldValue_('admin_item', '');
     setFieldValue_('admin_qty', '');
     setFieldValue_('admin_harga', formatPlainNumberInput_(0));
-    setFieldValue_('admin_diskon_tipe', 'persen');
     setFieldValue_('admin_diskon', 0);
     setFieldValue_('admin_line_subtotal', formatCurrencyInput_(0));
-  }
-
-  function setSalesItemEditMode_(isEditing) {
-    var addButton = document.getElementById('addSalesItemBtn');
-
-    if (addButton) {
-      addButton.textContent = isEditing ? 'Simpan Item' : 'Tambah Item';
-    }
-  }
-
-  function setAdminItemEditMode_(isEditing) {
-    var addButton = document.getElementById('addAdminItemBtn');
-
-    if (addButton) {
-      addButton.textContent = isEditing ? 'Simpan Item' : 'Tambah Item';
-    }
   }
 
   function collectFormData_() {
@@ -6381,7 +5326,6 @@
     var selectedCustomer = getSelectedAdminCustomer_();
     var formData = {
       jenis_customer: jenisCustomer,
-      sales_source_id: getFieldValue_('admin_sales_source') || 'OFFICE',
       customer_id: jenisCustomer === 'Lama' ? getFieldValue_('admin_customer_id') : '',
       nama_customer_input: getFieldValue_('admin_nama_customer_input'),
       alamat_kirim: getFieldValue_('admin_alamat_kirim'),
@@ -6412,14 +5356,6 @@
   function validateAgentFormPayload_(payload) {
     if (!Array.isArray(payload.items) || !payload.items.length) {
       return 'Minimal satu item order customer wajib ditambahkan.';
-    }
-
-    if (String(payload.jenis_customer || '') === 'Lama' && !String(payload.customer_id || '').trim()) {
-      return 'Pilih customer lama dari hasil pencarian.';
-    }
-
-    if (!String(payload.tanggal_kirim_rencana || '').trim()) {
-      return 'Tanggal Kirim Rencana wajib diisi.';
     }
 
     if (!String(payload.tanggal_jatuh_tempo || '').trim()) {
@@ -6454,10 +5390,6 @@
 
     if (!Array.isArray(payload.items) || !payload.items.length) {
       return 'Minimal satu item order wajib ditambahkan.';
-    }
-
-    if (!String(payload.tanggal_kirim_rencana || '').trim()) {
-      return 'Tanggal Kirim Rencana wajib diisi.';
     }
 
     if (!String(payload.tanggal_jatuh_tempo || '').trim()) {
@@ -6582,64 +5514,6 @@
     globalResultContent.className = className;
   }
 
-  function showToast_(message, type, title) {
-    var stack = document.getElementById('appToastStack');
-    var toastId = 'toast-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 10000));
-    var toast;
-    var tone = String(type || 'info').trim() || 'info';
-
-    if (!stack || !message) {
-      return;
-    }
-
-    toast = document.createElement('div');
-    toast.className = 'app-toast app-toast-' + tone;
-    toast.setAttribute('role', 'status');
-    toast.setAttribute('data-toast-id', toastId);
-    toast.innerHTML =
-      '<div class="app-toast-title">' + escapeHtml_(String(title || getToastDefaultTitle_(tone))) + '</div>' +
-      '<div class="app-toast-message">' + escapeHtml_(String(message || '')) + '</div>';
-
-    stack.appendChild(toast);
-
-    toastHideTimers_[toastId] = window.setTimeout(function() {
-      removeToast_(toastId);
-    }, 2800);
-  }
-
-  function removeToast_(toastId) {
-    var stack = document.getElementById('appToastStack');
-    var toast;
-
-    if (!stack || !toastId) {
-      return;
-    }
-
-    if (toastHideTimers_[toastId]) {
-      clearTimeout(toastHideTimers_[toastId]);
-      delete toastHideTimers_[toastId];
-    }
-
-    toast = stack.querySelector('[data-toast-id="' + toastId + '"]');
-    if (toast && toast.parentNode) {
-      toast.parentNode.removeChild(toast);
-    }
-  }
-
-  function getToastDefaultTitle_(type) {
-    var tone = String(type || 'info').trim().toLowerCase();
-
-    if (tone === 'success') {
-      return 'Berhasil';
-    }
-
-    if (tone === 'warning') {
-      return 'Perlu Perhatian';
-    }
-
-    return 'Info';
-  }
-
   function handleLogout_() {
     clearSavedUserSession_();
     appState.currentUser = {};
@@ -6670,13 +5544,13 @@
     }
 
     document.querySelectorAll('.tab-btn').forEach(function(button) {
-      var allowed = elementAllowsRole_(button, roleKey);
+      var allowed = button.dataset.role === roleKey;
       button.classList.toggle('hidden', !allowed);
       button.disabled = !allowed;
     });
 
     document.querySelectorAll('.tab-panel').forEach(function(panel) {
-      panel.classList.toggle('hidden', !elementAllowsRole_(panel, roleKey));
+      panel.classList.toggle('hidden', panel.dataset.role !== roleKey);
       panel.classList.remove('active');
     });
 
@@ -6687,21 +5561,10 @@
       if (roleKey === 'approver') {
         activateApproverView_('approval');
       }
-      if (roleKey === 'sales') {
-        activateSalesView_(currentUserIsSlfMurni_() ? 'order' : 'activity');
-      }
-      if (roleKey === 'sales' || roleKey === 'approver' || roleKey === 'cs_admin' || roleKey === 'controller' || roleKey === 'mtr') {
-        activateTab_(roleKey === 'cs_admin' ? 'admin' : (roleKey === 'mtr' ? 'controller' : roleKey));
+      if (roleKey === 'sales' || roleKey === 'approver' || roleKey === 'cs_admin' || roleKey === 'controller') {
+        activateTab_(roleKey === 'cs_admin' ? 'admin' : roleKey);
       }
     }
-  }
-
-  function elementAllowsRole_(element, roleKey) {
-    var roles = String(element && element.dataset ? element.dataset.role || '' : '')
-      .split(/\s+/)
-      .filter(Boolean);
-
-    return roles.indexOf(roleKey) !== -1;
   }
 
   function renderUnauthorizedState_() {
@@ -6783,14 +5646,7 @@
       tipe_sales: incomingUser.tipe_sales || currentUser.tipe_sales || '',
       kode_sales: incomingUser.kode_sales || currentUser.kode_sales || '',
       channel_sales_default: incomingUser.channel_sales_default || currentUser.channel_sales_default || '',
-      bank_nama: incomingUser.bank_nama || currentUser.bank_nama || '',
-      bank_no_rekening: incomingUser.bank_no_rekening || currentUser.bank_no_rekening || '',
-      bank_nama_pemilik: incomingUser.bank_nama_pemilik || currentUser.bank_nama_pemilik || '',
-      bank_account_complete: typeof incomingUser.bank_account_complete === 'boolean'
-        ? incomingUser.bank_account_complete
-        : !!currentUser.bank_account_complete,
       is_freelance: typeof incomingUser.is_freelance === 'boolean' ? incomingUser.is_freelance : !!currentUser.is_freelance,
-      is_slfm: typeof incomingUser.is_slfm === 'boolean' ? incomingUser.is_slfm : !!currentUser.is_slfm,
       authorized: typeof incomingUser.authorized === 'boolean' ? incomingUser.authorized : !!currentUser.authorized
     };
   }
@@ -6838,107 +5694,20 @@
       ensureApproverKpiDataLoaded_();
     } else if (targetView === 'commission') {
       loadApproverCommissionData_();
-    } else if (targetView === 'export') {
-      loadApproverExportData_();
-    } else if (targetView === 'backup') {
-      loadApproverBackupData_();
     }
   }
 
   function currentUserIsFreelance_() {
-    var currentUser = appState.currentUser || {};
-    var tipeSales = normalizeClientText_(currentUser.tipe_sales);
-
-    return !!(
-      currentUser.is_freelance ||
-      currentUserIsSlfMurni_() ||
-      tipeSales === 'freelance'
-    );
-  }
-
-  function currentUserIsSlfMurni_() {
-    var currentUser = appState.currentUser || {};
-    var tipeSales = normalizeClientText_(currentUser.tipe_sales);
-    var userId = normalizeClientText_(currentUser.user_id);
-
-    return !!(
-      currentUser.is_slfm ||
-      tipeSales.indexOf('slfm') === 0 ||
-      userId.indexOf('slfm') === 0
-    );
-  }
-
-  function activateSalesView_(viewName) {
-    var isSlfMurni = currentUserIsSlfMurni_();
-    var targetView = isSlfMurni ? 'order' : 'activity';
-    var isFreelance = currentUserIsFreelance_();
-
-    if (viewName === 'order' || viewName === 'history' || (!isSlfMurni && viewName === 'kpi')) {
-      targetView = viewName;
-    } else if (viewName === 'commission' && isFreelance) {
-      targetView = 'commission';
-    }
-
-    document.querySelectorAll('.sales-subtab-btn').forEach(function(button) {
-      var isCommissionButton = button.dataset.salesView === 'commission';
-      var isActivityButton = button.dataset.salesView === 'activity';
-      var isKpiButton = button.dataset.salesView === 'kpi';
-      button.classList.toggle('hidden', isCommissionButton && !isFreelance);
-      button.classList.toggle('hidden', isSlfMurni && (isActivityButton || isKpiButton));
-      button.classList.toggle('active', button.dataset.salesView === targetView);
-    });
-
-    document.querySelectorAll('.sales-view-panel').forEach(function(panel) {
-      panel.classList.toggle('active', panel.id === 'sales-view-' + targetView);
-    });
-
-    if (targetView === 'history') {
-      renderSalesHistoryStatusOptions_();
-      renderSalesHistoryTable_();
-    } else if (targetView === 'kpi') {
-      loadSalesKpiSummary_();
-    } else if (targetView === 'commission') {
-      renderSalesCommissionSummary_();
-      renderSalesPayoutSection_();
-    }
+    return !!(appState.currentUser && appState.currentUser.is_freelance);
   }
 
   function applySalesModeUi_() {
     var summarySection = document.getElementById('salesCommissionSummarySection');
     var customerSearch = document.getElementById('customer_search');
-    var commissionTab = document.getElementById('salesCommissionTabBtn');
     var isFreelance = currentUserIsFreelance_();
-    var isSlfMurni = currentUserIsSlfMurni_();
 
     if (summarySection) {
       summarySection.classList.toggle('hidden', !isFreelance);
-    }
-
-    if (commissionTab) {
-      commissionTab.classList.toggle('hidden', !isFreelance);
-    }
-
-    if (!isFreelance && document.getElementById('sales-view-commission') && document.getElementById('sales-view-commission').classList.contains('active')) {
-      activateSalesView_('activity');
-    }
-
-    document.querySelectorAll('.sales-subtab-btn').forEach(function(button) {
-      var view = button.dataset.salesView;
-      button.classList.toggle('hidden', isSlfMurni && (view === 'activity' || view === 'kpi'));
-    });
-
-    ['sales-view-activity', 'sales-view-kpi'].forEach(function(panelId) {
-      var panel = document.getElementById(panelId);
-      if (panel) {
-        panel.classList.toggle('hidden', isSlfMurni);
-      }
-    });
-
-    if (isSlfMurni && (
-      (document.getElementById('sales-view-activity') && document.getElementById('sales-view-activity').classList.contains('active')) ||
-      (document.getElementById('sales-view-kpi') && document.getElementById('sales-view-kpi').classList.contains('active'))
-    )) {
-      activateSalesView_('order');
     }
 
     if (customerSearch) {
@@ -6946,70 +5715,11 @@
         ? 'Ketik customer milik Anda: nama, kode customer, PIC, atau no. HP'
         : 'Ketik nama, kode customer, PIC, atau no. HP';
     }
-
-    renderSalesBankAccountFields_();
-    renderSalesBankAccountSummary_();
-  }
-
-  function renderSalesBankAccountFields_() {
-    var currentUser = appState.currentUser || {};
-
-    setFieldValue_('salesBankName', currentUser.bank_nama || '');
-    setFieldValue_('salesBankAccountNumber', currentUser.bank_no_rekening || '');
-    setFieldValue_('salesBankAccountHolder', currentUser.bank_nama_pemilik || '');
-  }
-
-  function renderSalesBankAccountSummary_() {
-    var currentUser = appState.currentUser || {};
-    var title = document.getElementById('salesBankSummaryTitle');
-    var text = document.getElementById('salesBankSummaryText');
-
-    if (!title || !text) {
-      return;
-    }
-
-    if (!isSalesBankAccountComplete_()) {
-      title.textContent = 'Rekening payout belum diisi';
-      text.textContent = 'Lengkapi rekening agar pengajuan pencairan punya tujuan transfer yang jelas.';
-      return;
-    }
-
-    title.textContent = 'Rekening aktif';
-    text.textContent = [
-      currentUser.bank_nama || '-',
-      currentUser.bank_no_rekening || '-',
-      currentUser.bank_nama_pemilik || '-'
-    ].join(' | ');
-  }
-
-  function isSalesBankAccountComplete_() {
-    var currentUser = appState.currentUser || {};
-
-    return !!(
-      currentUser.bank_nama &&
-      currentUser.bank_no_rekening &&
-      currentUser.bank_nama_pemilik
-    );
-  }
-
-  function getSalesBankAccountDisplay_() {
-    var currentUser = appState.currentUser || {};
-
-    if (!isSalesBankAccountComplete_()) {
-      return '-';
-    }
-
-    return [
-      currentUser.bank_nama || '-',
-      currentUser.bank_no_rekening || '-',
-      currentUser.bank_nama_pemilik || '-'
-    ].join(' | ');
   }
 
   function resetForm_() {
     document.getElementById('salesOrderForm').reset();
     appState.salesOrderItems = [];
-    appState.salesEditingItemIndex = -1;
     setTodayAsDefault_();
     clearSalesCustomerSelection_();
     clearCustomerInfo_();
@@ -7017,29 +5727,24 @@
     resetSalesSubmitResultState_();
     renderSalesOrderItems_();
     resetSalesItemDraft_();
-    setSalesItemEditMode_(false);
     renderResult_('Belum ada order yang dikirim.', false);
     document.querySelector('input[name="jenis_customer"][value="Lama"]').checked = true;
     handleJenisCustomerChange_();
     handleSalesChange_();
-    renderSalesBankAccountFields_();
     setStatusText_('Form sudah direset');
   }
 
   function clearSalesOrderFormAfterSubmit_() {
     document.getElementById('salesOrderForm').reset();
     appState.salesOrderItems = [];
-    appState.salesEditingItemIndex = -1;
     clearSalesCustomerSelection_();
     clearCustomerInfo_();
     document.querySelector('input[name="jenis_customer"][value="Lama"]').checked = true;
     setTodayAsDefault_();
     resetSalesItemDraft_();
     renderSalesOrderItems_();
-    setSalesItemEditMode_(false);
     handleJenisCustomerChange_();
     handleSalesChange_();
-    renderSalesBankAccountFields_();
   }
 
   function resetSalesSubmitResultState_() {
@@ -7056,18 +5761,10 @@
   function resetAgentForm_() {
     document.getElementById('agentOrderForm').reset();
     appState.adminOrderItems = [];
-    appState.adminEditingItemIndex = -1;
     document.querySelector('input[name="admin_jenis_customer"][value="Lama"]').checked = true;
-    renderAdminSalesSourceOptions_();
-    setFieldValue_('admin_sales_source', 'OFFICE');
-    setFieldValue_('admin_customer_id', '');
-    setFieldValue_('admin_customer_search', '');
     clearAdminCustomerInfo_();
-    renderAdminCustomerSearchResults_('');
     renderAdminOrderItems_();
     resetAdminItemDraft_();
-    setAdminItemEditMode_(false);
-    clearAgentSubmitMessage_();
     handleAdminJenisCustomerChange_();
     handleAdminProductChange_();
     setFieldValue_('admin_tanggal_kirim_rencana', getFieldValue_('tanggal_kirim_rencana'));
@@ -7075,10 +5772,8 @@
   }
 
   function openAgentModal_() {
-    if (!(appState.customers && appState.customers.length) ||
-        !(appState.products && appState.products.length) ||
-        !(appState.salesUsers && appState.salesUsers.length)) {
-      setStatusText_('Memuat data customer, sales & produk...');
+    if (!(appState.customers && appState.customers.length) || !(appState.products && appState.products.length)) {
+      setStatusText_('Memuat data customer & produk...');
       loadAdminAgentFormData_(function() {
         resetAgentForm_();
         document.getElementById('agentModalBackdrop').classList.remove('hidden');
@@ -7102,9 +5797,7 @@
     appState.salesOrderItems = appState.salesOrderItems || [];
     appState.deliveryFilterDate = appState.deliveryFilterDate || iso;
     appState.approverFilterDate = appState.approverFilterDate || iso;
-    appState.approverExportStartDate = appState.approverExportStartDate || appState.approverExportFilterDate || iso;
-    appState.approverExportEndDate = appState.approverExportEndDate || appState.approverExportFilterDate || iso;
-    appState.approverExportFilterDate = appState.approverExportStartDate;
+    appState.approverExportFilterDate = appState.approverExportFilterDate || iso;
     appState.salesKpiMonth = appState.salesKpiMonth || monthKey;
     appState.approverKpiMonth = appState.approverKpiMonth || monthKey;
     setFieldValue_('tanggal_kirim_rencana', iso);
@@ -7119,8 +5812,7 @@
     setFieldValue_('admin_line_subtotal', formatCurrencyInput_(0));
     setFieldValue_('deliveryFilterDate', appState.deliveryFilterDate);
     setFieldValue_('approverFilterDate', appState.approverFilterDate);
-    setFieldValue_('approverExportStartDate', appState.approverExportStartDate);
-    setFieldValue_('approverExportEndDate', appState.approverExportEndDate);
+    setFieldValue_('approverExportFilterDate', appState.approverExportFilterDate);
     setFieldValue_('salesKpiMonth', appState.salesKpiMonth);
     setFieldValue_('approverKpiMonth', appState.approverKpiMonth);
     updateSalesNewCustomerRequirements_(getJenisCustomer_() === 'Baru');
@@ -7135,35 +5827,18 @@
 
     setFieldValue_('deliveryFilterDate', appState.deliveryFilterDate);
     setFieldValue_('deliverySearch', appState.deliverySearch || '');
-    setFieldValue_('deliveryStatusFilter', appState.deliveryStatusFilter || '');
-    setFieldValue_('deliveryVerificationFilter', appState.deliveryVerificationFilter || '');
   }
 
   function getFilteredDeliveryOrders_() {
     var filterDate = normalizeDateKey_(appState.deliveryFilterDate);
-    var statusFilter = normalizeSearchText_(appState.deliveryStatusFilter || '');
-    var verificationFilter = normalizeSearchText_(appState.deliveryVerificationFilter || '');
-    var rows = appState.deliveryOrders.slice();
 
-    if (filterDate) {
-      rows = rows.filter(function(row) {
-        return getDeliveryDateKey_(row) === filterDate;
-      });
+    if (!filterDate) {
+      return appState.deliveryOrders.slice();
     }
 
-    if (statusFilter) {
-      rows = rows.filter(function(row) {
-        return normalizeSearchText_(row && row.status_kirim) === statusFilter;
-      });
-    }
-
-    if (verificationFilter) {
-      rows = rows.filter(function(row) {
-        return normalizeSearchText_((row && row.status_verifikasi_cs) || 'Belum Dicek') === verificationFilter;
-      });
-    }
-
-    return rows;
+    return appState.deliveryOrders.filter(function(row) {
+      return getDeliveryDateKey_(row) === filterDate;
+    });
   }
 
   function getDeliveryDateKey_(row) {
@@ -7546,7 +6221,7 @@
   }
 
   function escapeHtml_(value) {
-    return String(value === null || typeof value === 'undefined' ? '' : value)
+    return String(value || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -7555,7 +6230,7 @@
   }
 
   function escapeJs_(value) {
-    return String(value === null || typeof value === 'undefined' ? '' : value)
+    return String(value || '')
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "\\'");
   }
@@ -7606,51 +6281,6 @@
 
   function formatPercentValue_(value) {
     return formatNumber_(Number(value || 0)) + '%';
-  }
-
-  function normalizeDiscountType_(value) {
-    return String(value || '').trim() === 'nominal' ? 'nominal' : 'persen';
-  }
-
-  function getDiscountInputValue_(type, value) {
-    return normalizeDiscountType_(type) === 'nominal'
-      ? parseCurrencyInput_(value)
-      : clampDiscountPercent_(value);
-  }
-
-  function calculateDiscountNominal_(grossSubtotal, type, value) {
-    var subtotal = Number(grossSubtotal || 0);
-    var discountType = normalizeDiscountType_(type);
-    var discountValue = getDiscountInputValue_(discountType, value);
-    var discount = discountType === 'nominal' ? discountValue : subtotal * (discountValue / 100);
-
-    if (discount < 0) {
-      return 0;
-    }
-
-    return Math.min(discount, subtotal);
-  }
-
-  function formatDiscountInput_(typeFieldId, inputFieldId) {
-    if (normalizeDiscountType_(getFieldValue_(typeFieldId)) !== 'nominal') {
-      return;
-    }
-
-    setFieldValue_(inputFieldId, formatPlainNumberInput_(parseCurrencyInput_(getFieldValue_(inputFieldId))));
-  }
-
-  function formatDiscountDisplay_(item) {
-    var discount = Number(item && item.diskon || 0);
-
-    if (!discount) {
-      return '-';
-    }
-
-    if (normalizeDiscountType_(item && item.diskon_tipe) === 'nominal') {
-      return formatCurrencyInput_(discount);
-    }
-
-    return formatPercentValue_(item && item.diskon_persen) + ' / ' + formatCurrencyInput_(discount);
   }
 
   function clampDiscountPercent_(value) {
@@ -8057,12 +6687,9 @@
     var tabRoleMap = {
       sales: 'sales',
       approver: 'approver',
+      controller: 'controller',
       admin: 'cs_admin'
     };
-
-    if (tabName === 'controller') {
-      return currentUserHasRole_('controller') || currentUserHasRole_('mtr');
-    }
 
     return currentUserHasRole_(tabRoleMap[tabName] || '');
   }
@@ -8193,49 +6820,20 @@
       { rank: 2, name: 'AIRTIS Cup 240ml', qty: '180', omzet: 'Rp 14.400.000' },
       { rank: 3, name: 'AIRTIS Botol 600ml', qty: '142', omzet: 'Rp 18.460.000' }
     ];
-    appState.controllerFieldMonitoring = {
-      summary: { total_sales: 0, hijau: 0, kuning: 0, merah: 0 },
-      rows: []
-    };
     appState.controllerLastUpdated = lastUpdated;
   }
 
   function renderControllerDashboard_() {
-    renderControllerHeader_();
-    syncControllerTechnicalPanels_();
     renderControllerPresetButtons_();
     renderControllerSummaryCards_();
     renderControllerSalesKpiSnapshot_();
     renderControllerTrend_();
-    renderControllerFieldMonitoring_();
-    renderMtrMapFilters_();
-    renderMtrSalesMovementMap_();
     renderControllerStatList_('controllerStatusSummary', appState.controllerStatusSummary || []);
     renderControllerStatList_('controllerOpsSummary', appState.controllerOpsSummary || []);
     renderControllerRankingTable_('controllerTopSalesBody', appState.controllerTopSales || [], 'sales');
     renderControllerRankingTable_('controllerTopCustomersBody', appState.controllerTopCustomers || [], 'customers');
     renderControllerRankingTable_('controllerTopItemsBody', appState.controllerTopItems || [], 'items');
     setText_('controllerLastUpdated', formatControllerLastUpdated_(appState.controllerLastUpdated || ''));
-  }
-
-  function renderControllerHeader_() {
-    var isMtr = currentUserHasRole_('mtr');
-
-    setText_('controllerKicker', isMtr ? 'Monitoring Sales' : 'Monitoring Read-Only');
-    setText_('controllerDashboardTitle', isMtr ? 'Dashboard MTR' : 'Dashboard Global');
-    setText_('controllerDashboardSubtitle', isMtr
-      ? 'Pengawasan aktivitas lapangan, anomali, dan catatan MTR'
-      : 'Ringkasan Sales Order dan Operasional');
-    setText_('controllerModeChip', isMtr ? 'Mode MTR' : 'Mode Controller');
-  }
-
-  function syncControllerTechnicalPanels_() {
-    var showFieldMonitoring = currentUserHasRole_('mtr');
-    var fieldMonitoringCard = document.querySelector('.controller-field-monitoring-card');
-
-    if (fieldMonitoringCard) {
-      fieldMonitoringCard.classList.toggle('hidden', !showFieldMonitoring);
-    }
   }
 
   function renderControllerPresetButtons_() {
@@ -8263,7 +6861,6 @@
     var snapshot = appState.controllerSalesKpiSnapshot || {};
     var summary = snapshot.summary || {};
     var tbody = document.getElementById('controllerSalesKpiBody');
-    var mobileContainer = document.getElementById('controllerSalesKpiMobile');
     var rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
 
     setText_('controllerKpiSalesTotalTarget', summary.total_target_qty || '0');
@@ -8272,13 +6869,11 @@
     setText_('controllerKpiSalesTotalProgress', summary.total_progress_percent || '0%');
 
     if (!tbody) {
-      renderControllerSalesKpiSnapshotMobile_(mobileContainer, rows);
       return;
     }
 
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Belum ada data KPI.</td></tr>';
-      renderControllerSalesKpiSnapshotMobile_(mobileContainer, rows);
       return;
     }
 
@@ -8293,559 +6888,6 @@
           '<td>' + buildStatusBadge_(row.status_kpi || 'Belum Ada Target') + '</td>' +
         '</tr>';
     }).join('');
-
-    renderControllerSalesKpiSnapshotMobile_(mobileContainer, rows);
-  }
-
-  function renderControllerSalesKpiSnapshotMobile_(container, rows) {
-    if (!container) {
-      return;
-    }
-
-    if (!rows || !rows.length) {
-      container.innerHTML = '<article class="controller-mobile-card controller-mobile-empty">Belum ada data KPI.</article>';
-      return;
-    }
-
-    container.innerHTML = rows.map(function(row) {
-      return '' +
-        '<article class="controller-mobile-card controller-mobile-kpi-card">' +
-          '<div class="controller-mobile-card-head">' +
-            '<div class="controller-kpi-sales-cell">' +
-              '<strong>' + escapeHtml_(row.sales_name || '-') + '</strong>' +
-              '<small>' + escapeHtml_(row.sales_id || '-') + '</small>' +
-            '</div>' +
-            buildStatusBadge_(row.status_kpi || 'Belum Ada Target') +
-          '</div>' +
-          '<div class="controller-mobile-metric-grid">' +
-            buildControllerMobileMetric_('Target', row.target_qty || '0') +
-            buildControllerMobileMetric_('Realisasi', row.achieved_qty || '0') +
-            buildControllerMobileMetric_('Sisa', row.remaining_qty || '0') +
-            buildControllerMobileMetric_('Capaian', row.progress_percent || '0%') +
-          '</div>' +
-        '</article>';
-    }).join('');
-  }
-
-  function renderControllerFieldMonitoring_() {
-    var data = appState.controllerFieldMonitoring || {};
-    var summary = data.summary || {};
-    var rows = Array.isArray(data.rows) ? data.rows : [];
-    var weekly = Array.isArray(data.weekly) ? data.weekly : [];
-    var body = document.getElementById('fieldMonitoringBody');
-    var weeklyList = document.getElementById('fieldWeeklyAnomalyList');
-    var activeDate = data.tanggal || appState.fieldMonitoringDate || getTodayIsoDate_();
-
-    appState.fieldMonitoringDate = activeDate;
-    setFieldValue_('fieldMonitoringDate', activeDate);
-    setText_('fieldMonitorTotalSales', summary.total_sales || '0');
-    setText_('fieldMonitorGreen', summary.hijau || '0');
-    setText_('fieldMonitorYellow', summary.kuning || '0');
-    setText_('fieldMonitorRed', summary.merah || '0');
-
-    if (!body) {
-      return;
-    }
-
-    if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="7" class="empty-cell">Belum ada data pengawasan.</td></tr>';
-    } else {
-      body.innerHTML = rows.map(function(row) {
-        var slots = Array.isArray(row.slots) ? row.slots : [];
-        var doneSlots = slots.filter(function(slot) {
-          return slot.status && slot.status !== 'Tidak Update';
-        }).length;
-        var lateSlots = slots.filter(function(slot) {
-          return slot.status === 'Terlambat' || slot.status === 'Lebih Awal';
-        }).length;
-        var missingSlots = Math.max(0, slots.length - doneSlots);
-        var detailSlots = slots.map(function(slot) {
-          var statusText = String(slot.status || 'Tidak Update');
-          var statusClass = statusText.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-          return '' +
-            '<span class="field-monitor-slot slot-' + escapeHtml_(statusClass) + '">' +
-              '<b>' + escapeHtml_(slot.label || slot.target || '-') + '</b>' +
-              '<em>' + escapeHtml_(statusText) + '</em>' +
-              '<small>' + escapeHtml_(slot.jam || '-') + '</small>' +
-            '</span>';
-        }).join('');
-        var detailMaps = slots.filter(function(slot) {
-          return !!String(slot.lokasi || '').trim();
-        }).map(function(slot) {
-          return '' +
-            '<a class="field-monitor-map-chip" href="' + escapeHtml_(slot.lokasi) + '" target="_blank" rel="noopener">' +
-              escapeHtml_(slot.label || slot.target || '-') +
-              '<small>' + escapeHtml_(slot.jam || '-') + '</small>' +
-            '</a>';
-        }).join('') || '<span class="field-monitor-empty">-</span>';
-        var updateInfo = '' +
-          '<div class="field-monitor-detail-grid">' +
-            detailSlots +
-          '</div>';
-        var progressInfo = '' +
-          '<div class="field-monitor-progress">' +
-            '<strong>' + escapeHtml_(doneSlots) + '/' + escapeHtml_(slots.length || 5) + ' checkpoint</strong>' +
-            '<small>' + escapeHtml_(lateSlots) + ' telat | ' + escapeHtml_(missingSlots) + ' belum update</small>' +
-          '</div>';
-        var mapsLink = row.lokasi_terakhir
-          ? '<a href="' + escapeHtml_(row.lokasi_terakhir) + '" target="_blank" rel="noopener">Maps</a><small class="field-monitor-time">' + escapeHtml_(row.lokasi_terakhir_jam || '-') + '</small>'
-          : '-';
-        var salesNotes = Array.isArray(row.catatan_kegiatan_sales) ? row.catatan_kegiatan_sales : [];
-        var salesNotesHtml = salesNotes.length
-          ? '<div class="field-monitor-sales-notes">' +
-              '<small class="field-monitor-time">Catatan kegiatan sales</small>' +
-              salesNotes.slice(-3).map(function(note) {
-                var noteTitle = [note.jenis_kegiatan, note.nama_customer].filter(Boolean).join(' - ') || 'Catatan';
-                var noteBody = note.hasil_kegiatan || '-';
-                return '' +
-                  '<div class="field-monitor-sales-note">' +
-                    '<strong>' + escapeHtml_(note.jam || '-') + ' ' + escapeHtml_(noteTitle) + '</strong>' +
-                    '<span>' + escapeHtml_(noteBody) + '</span>' +
-                    (note.lokasi ? '<a href="' + escapeHtml_(note.lokasi) + '" target="_blank" rel="noopener">Maps</a>' : '') +
-                  '</div>';
-              }).join('') +
-            '</div>'
-          : '<div class="field-monitor-sales-notes"><small class="field-monitor-time">Belum ada catatan kegiatan sales</small></div>';
-        var noteText = row.catatan_mtr_terakhir
-          ? '<small class="field-monitor-time">' + escapeHtml_(row.status_monitoring_mtr || 'Catatan') + '</small>' + escapeHtml_(row.catatan_mtr_terakhir)
-          : '<small class="field-monitor-time">Belum ada catatan</small>';
-        var noteAction = currentUserHasRole_('mtr') || currentUserHasRole_('controller')
-          ? '<button type="button" class="ghost-btn tiny-btn" onclick="handleCreateMonitoringNote_(\'' + escapeJs_(row.user_id || '') + '\')">Catat</button>'
-          : '';
-
-        return '' +
-          '<tr>' +
-            '<td><div class="controller-kpi-sales-cell"><strong>' + escapeHtml_(row.nama_user || '-') + '</strong><small>' + escapeHtml_(row.user_id || '-') + '</small></div></td>' +
-            '<td>' + buildStatusBadge_(row.status_harian || '-') + '</td>' +
-            '<td>' + updateInfo + '</td>' +
-            '<td><div class="field-monitor-map-grid">' + detailMaps + '</div></td>' +
-            '<td>' + progressInfo + '</td>' +
-            '<td>' + mapsLink + '</td>' +
-            '<td><div class="field-monitor-note-cell">' + noteText + salesNotesHtml + noteAction + '</div></td>' +
-          '</tr>';
-      }).join('');
-    }
-
-    if (!weeklyList) {
-      return;
-    }
-
-    if (!weekly.length) {
-      weeklyList.innerHTML = '' +
-        '<article class="controller-stat-item">' +
-          '<div class="controller-stat-copy">' +
-            '<strong>Belum ada anomali</strong>' +
-            '<small>Data akan muncul bila ada telat, perpindahan tidak wajar, atau ganti perangkat.</small>' +
-          '</div>' +
-        '</article>';
-      return;
-    }
-
-    weeklyList.innerHTML = weekly.slice(0, 6).map(function(row) {
-      return '' +
-        '<article class="controller-stat-item">' +
-          '<div class="controller-stat-copy">' +
-            '<strong>' + escapeHtml_(row.nama_user || row.user_id || '-') + '</strong>' +
-            '<small>Telat: ' + escapeHtml_(row.telat || 0) + ' | Lokasi: ' + escapeHtml_(row.anomali_lokasi || 0) + ' | Perangkat: ' + escapeHtml_(row.anomali_perangkat || 0) + '</small>' +
-          '</div>' +
-          '<span class="controller-stat-value">Cek</span>' +
-        '</article>';
-    }).join('');
-  }
-
-  function renderMtrMapFilters_() {
-    var dateInput = document.getElementById('mtrMapDate');
-    var salesSelect = document.getElementById('mtrMapSales');
-    var monitoringDate = appState.fieldMonitoringDate || (appState.controllerFieldMonitoring || {}).tanggal || appState.controllerEndDate || getTodayIsoDate_();
-    var rows = ((appState.controllerFieldMonitoring || {}).rows || []).slice();
-    var currentValue;
-
-    if (!appState.mtrMapDate) {
-      appState.mtrMapDate = monitoringDate;
-    }
-
-    if (dateInput) {
-      dateInput.value = appState.mtrMapDate || monitoringDate;
-    }
-
-    if (!salesSelect) {
-      return;
-    }
-
-    currentValue = appState.mtrMapSales || salesSelect.value || '';
-    rows.sort(function(left, right) {
-      return String(left.nama_user || left.user_id || '').localeCompare(String(right.nama_user || right.user_id || ''), 'id-ID');
-    });
-
-    salesSelect.innerHTML = '<option value="">Semua sales</option>' + rows.map(function(row) {
-      var id = String(row.user_id || '').trim();
-      var name = String(row.nama_user || id || '-').trim();
-      var channel = String(row.channel_sales_default || row.tipe_sales || '').trim();
-
-      return '<option value="' + escapeHtml_(id) + '">' + escapeHtml_(name + (id ? ' (' + id + ')' : '') + (channel ? ' - ' + channel : '')) + '</option>';
-    }).join('');
-    salesSelect.value = currentValue;
-    appState.mtrMapSales = salesSelect.value || '';
-  }
-
-  function handleMtrMapFilterChange_() {
-    appState.mtrMapDate = getFieldValue_('mtrMapDate') || getTodayIsoDate_();
-    appState.mtrMapSales = getFieldValue_('mtrMapSales') || '';
-    loadMtrSalesMovementMapData_();
-  }
-
-  function loadMtrSalesMovementMapData_() {
-    if (!ensureAuthorizedSession_()) return;
-
-    var dateKey = getFieldValue_('mtrMapDate') || appState.mtrMapDate || ((appState.controllerFieldMonitoring || {}).tanggal || getTodayIsoDate_());
-    var salesId = getFieldValue_('mtrMapSales') || appState.mtrMapSales || '';
-
-    appState.mtrMapDate = dateKey;
-    appState.mtrMapSales = salesId;
-    setText_('mtrMapPlaceholder', 'Memuat peta histori sales...');
-
-    google.script.run
-      .withSuccessHandler(function(data) {
-        appState.mtrMapData = data || null;
-        if (data && data.tanggal) {
-          appState.mtrMapDate = data.tanggal;
-          setFieldValue_('mtrMapDate', data.tanggal);
-        }
-        if (data && data.fallback_used) {
-          setStatusText_('Peta memakai histori terakhir: ' + formatShortDateId_(data.tanggal));
-        }
-        renderMtrMapFilters_();
-        renderMtrSalesMovementMap_();
-      })
-      .withFailureHandler(function(error) {
-        setText_('mtrMapPlaceholder', 'Gagal memuat data peta.');
-        renderResult_('Gagal memuat data peta MTR: ' + (error && error.message ? error.message : error), true);
-      })
-      .getMtrSalesMovementMapData(appState.currentUser.user_id, {
-        tanggal: dateKey,
-        sales_id: salesId,
-        fallback_latest: 'Ya'
-      });
-  }
-
-  function renderMtrSalesMovementMap_() {
-    var data = appState.mtrMapData || {};
-    var routes = Array.isArray(data.routes) ? data.routes : [];
-    var canvas = document.getElementById('mtrSalesMap');
-    var placeholder = document.getElementById('mtrMapPlaceholder');
-
-    renderMtrMapSummary_(routes);
-    renderMtrMapTimeline_(routes);
-
-    if (!canvas) {
-      return;
-    }
-
-    if (window.__mapLibreScriptFailed || typeof maplibregl === 'undefined') {
-      if (placeholder) {
-        placeholder.textContent = 'MapLibre gagal dimuat. Cek koneksi internet lalu refresh.';
-        placeholder.classList.remove('hidden');
-      }
-      return;
-    }
-
-    if (!mtrSalesMapInstance_) {
-      mtrSalesMapInstance_ = new maplibregl.Map({
-        container: 'mtrSalesMap',
-        style: 'https://tiles.openfreemap.org/styles/bright',
-        center: [106.816666, -6.2],
-        zoom: 10,
-        attributionControl: true
-      });
-      mtrSalesMapInstance_.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-      mtrSalesMapInstance_.addControl(new maplibregl.FullscreenControl(), 'top-right');
-      mtrSalesMapInstance_.on('load', function() {
-        drawMtrSalesMovementMap_(routes);
-      });
-      return;
-    }
-
-    if (!mtrSalesMapInstance_.loaded()) {
-      mtrSalesMapInstance_.once('load', function() {
-        drawMtrSalesMovementMap_(routes);
-      });
-      return;
-    }
-
-    drawMtrSalesMovementMap_(routes);
-  }
-
-  function drawMtrSalesMovementMap_(routes) {
-    var bounds = null;
-    var colors = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2'];
-    var pointCount = 0;
-
-    clearMtrSalesMovementMap_();
-
-    (routes || []).forEach(function(route, routeIndex) {
-      var points = Array.isArray(route.points) ? route.points : [];
-      var coordinates = [];
-      var routeColor = colors[routeIndex % colors.length];
-
-      points.forEach(function(point, pointIndex) {
-        var lng = Number(point.longitude);
-        var lat = Number(point.latitude);
-
-        if (isNaN(lng) || isNaN(lat)) {
-          return;
-        }
-
-        coordinates.push([lng, lat]);
-        pointCount += 1;
-        addMtrSalesMovementMarker_(route, point, pointIndex, routeColor);
-
-        if (!bounds) {
-          bounds = new maplibregl.LngLatBounds([lng, lat], [lng, lat]);
-        } else {
-          bounds.extend([lng, lat]);
-        }
-      });
-
-      if (coordinates.length >= 2) {
-        addMtrSalesMovementRoute_(route.sales_id || routeIndex, coordinates, routeColor);
-      }
-    });
-
-    setText_('mtrMapPlaceholder', pointCount ? '' : 'Belum ada titik GPS untuk filter ini.');
-    var placeholder = document.getElementById('mtrMapPlaceholder');
-    if (placeholder) {
-      placeholder.classList.toggle('hidden', !!pointCount);
-    }
-
-    if (bounds) {
-      mtrSalesMapInstance_.fitBounds(bounds, {
-        padding: { top: 42, right: 42, bottom: 42, left: 42 },
-        maxZoom: 15,
-        duration: 600
-      });
-    }
-  }
-
-  function clearMtrSalesMovementMap_() {
-    if (!mtrSalesMapInstance_) {
-      return;
-    }
-
-    mtrSalesMapMarkers_.forEach(function(marker) {
-      marker.remove();
-    });
-    mtrSalesMapMarkers_ = [];
-
-    mtrSalesMapRouteIds_.forEach(function(ids) {
-      try {
-        if (mtrSalesMapInstance_.getLayer(ids.layerId)) {
-          mtrSalesMapInstance_.removeLayer(ids.layerId);
-        }
-        if (mtrSalesMapInstance_.getSource(ids.sourceId)) {
-          mtrSalesMapInstance_.removeSource(ids.sourceId);
-        }
-      } catch (error) {
-        // Abaikan cleanup map yang sudah berubah state.
-      }
-    });
-    mtrSalesMapRouteIds_ = [];
-  }
-
-  function addMtrSalesMovementRoute_(salesId, coordinates, color) {
-    var safeId = String(salesId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '-');
-    var sourceId = 'mtr-route-source-' + safeId;
-    var layerId = 'mtr-route-layer-' + safeId;
-
-    mtrSalesMapInstance_.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: coordinates
-        }
-      }
-    });
-
-    mtrSalesMapInstance_.addLayer({
-      id: layerId,
-      type: 'line',
-      source: sourceId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': color,
-        'line-width': 4,
-        'line-opacity': 0.78
-      }
-    });
-
-    mtrSalesMapRouteIds_.push({ sourceId: sourceId, layerId: layerId });
-  }
-
-  function addMtrSalesMovementMarker_(route, point, pointIndex, routeColor) {
-    var el = document.createElement('button');
-    var markerClass = getMtrMapMarkerClass_(point, pointIndex, route.points || []);
-    var lng = Number(point.longitude);
-    var lat = Number(point.latitude);
-    var marker;
-    var popupHtml;
-
-    el.type = 'button';
-    el.className = 'mtr-map-marker ' + markerClass;
-    el.textContent = String(pointIndex + 1);
-    el.style.borderColor = routeColor;
-    el.title = (route.nama_sales || '-') + ' - ' + (point.jam || '-');
-
-    popupHtml = '' +
-      '<div class="mtr-map-popup">' +
-        '<strong>' + escapeHtml_(route.nama_sales || route.sales_id || '-') + '</strong>' +
-        '<small>' + escapeHtml_((point.jam || '-') + ' | ' + (point.tipe_aktivitas || '-')) + '</small>' +
-        (point.nama_customer ? '<p>Customer: ' + escapeHtml_(point.nama_customer) + '</p>' : '') +
-        (point.hasil_kegiatan ? '<p>Hasil: ' + escapeHtml_(point.hasil_kegiatan) + '</p>' : '') +
-        '<p>Status waktu: ' + escapeHtml_(point.status_waktu || '-') + '</p>' +
-        '<p>Status lokasi: ' + escapeHtml_(point.status_lokasi || '-') + '</p>' +
-        '<p>Perangkat: ' + escapeHtml_(point.status_perangkat || '-') + '</p>' +
-        (point.link_maps ? '<a href="' + escapeHtml_(point.link_maps) + '" target="_blank" rel="noopener">Buka Google Maps</a>' : '') +
-      '</div>';
-
-    marker = new maplibregl.Marker({ element: el })
-      .setLngLat([lng, lat])
-      .setPopup(new maplibregl.Popup({ offset: 18, closeButton: false }).setHTML(popupHtml))
-      .addTo(mtrSalesMapInstance_);
-
-    mtrSalesMapMarkers_.push(marker);
-  }
-
-  function getMtrMapMarkerClass_(point, pointIndex, points) {
-    var typeKey = String(point && point.tipe_aktivitas || '').toLowerCase();
-
-    if (point && point.severity === 'alert') {
-      return 'marker-alert';
-    }
-    if (point && point.severity === 'warning') {
-      return 'marker-warning';
-    }
-    if (typeKey.indexOf('selesai') !== -1 || pointIndex === points.length - 1) {
-      return 'marker-end';
-    }
-    if (typeKey.indexOf('mulai') !== -1 || pointIndex === 0) {
-      return 'marker-start';
-    }
-    if (typeKey.indexOf('catat') !== -1 || typeKey.indexOf('kegiatan') !== -1) {
-      return 'marker-work';
-    }
-    return 'marker-update';
-  }
-
-  function renderMtrMapSummary_(routes) {
-    var container = document.getElementById('mtrMapSummary');
-    var routeCount = (routes || []).length;
-    var pointCount = 0;
-    var distance = 0;
-    var anomalyCount = 0;
-    var selectedSales = getFieldValue_('mtrMapSales') || appState.mtrMapSales || '';
-
-    if (!container) {
-      return;
-    }
-
-    (routes || []).forEach(function(route) {
-      pointCount += Number(route.total_points || 0);
-      distance += Number(route.total_distance_km || 0);
-      anomalyCount += Number(route.total_anomali || 0);
-    });
-
-    container.innerHTML = '' +
-      '<span class="summary-label">Ringkasan Peta</span>' +
-      '<strong>' + escapeHtml_(pointCount) + ' titik GPS</strong>' +
-      '<small>' + escapeHtml_(routeCount) + ' sales ditampilkan' + (selectedSales ? ' | ' + escapeHtml_(selectedSales) : '') + '</small>' +
-      '<div class="mtr-map-summary-grid">' +
-        '<span><b>' + escapeHtml_(roundClientNumber_(distance, 2)) + ' km</b><small>estimasi jarak</small></span>' +
-        '<span><b>' + escapeHtml_(anomalyCount) + '</b><small>anomali</small></span>' +
-      '</div>';
-  }
-
-  function renderMtrMapTimeline_(routes) {
-    var container = document.getElementById('mtrMapTimeline');
-    var points = [];
-
-    if (!container) {
-      return;
-    }
-
-    (routes || []).forEach(function(route) {
-      (route.points || []).forEach(function(point) {
-        points.push({
-          route: route,
-          point: point
-        });
-      });
-    });
-
-    points.sort(function(left, right) {
-      return String(left.point.jam || '').localeCompare(String(right.point.jam || ''));
-    });
-
-    if (!points.length) {
-      container.innerHTML = '<article class="mtr-map-empty">Belum ada titik histori.</article>';
-      return;
-    }
-
-    container.innerHTML = points.slice(0, 60).map(function(item) {
-      var point = item.point;
-      var route = item.route;
-      var statusClass = point.severity === 'alert' ? 'is-alert' : (point.severity === 'warning' ? 'is-warning' : '');
-
-      return '' +
-        '<article class="mtr-map-timeline-item ' + statusClass + '">' +
-          '<strong>' + escapeHtml_(point.jam || '-') + ' - ' + escapeHtml_(point.tipe_aktivitas || '-') + '</strong>' +
-          '<small>' + escapeHtml_(route.nama_sales || route.sales_id || '-') + (point.nama_customer ? ' | ' + escapeHtml_(point.nama_customer) : '') + '</small>' +
-        '</article>';
-    }).join('');
-  }
-
-  function roundClientNumber_(value, precision) {
-    var power = Math.pow(10, precision || 0);
-    return Math.round(Number(value || 0) * power) / power;
-  }
-
-  function handleCreateMonitoringNote_(salesId) {
-    if (!ensureAuthorizedSession_()) return;
-
-    var row = ((appState.controllerFieldMonitoring || {}).rows || []).find(function(item) {
-      return String(item.user_id || '').trim() === String(salesId || '').trim();
-    }) || {};
-    var salesName = row.nama_user || salesId || '-';
-    var note = window.prompt('Catatan MTR untuk ' + salesName + ':', '');
-
-    if (!note || !String(note).trim()) {
-      return;
-    }
-
-    setStatusText_('Menyimpan catatan monitoring...');
-
-    google.script.run
-      .withSuccessHandler(function(result) {
-        renderResult_(result && result.message ? result.message : 'Catatan monitoring tersimpan.', false);
-        setStatusText_('Catatan monitoring tersimpan');
-        loadControllerData_();
-      })
-      .withFailureHandler(function(error) {
-        setStatusText_('Gagal simpan catatan monitoring');
-        renderResult_('Gagal simpan catatan monitoring: ' + (error && error.message ? error.message : error), true);
-      })
-      .createMonitoringNoteFromDashboard(appState.currentUser.user_id, {
-        tanggal: ((appState.controllerFieldMonitoring || {}).tanggal || appState.controllerEndDate || ''),
-        sales_id: salesId,
-        status_monitoring: row.status_harian === 'Hijau' ? 'Dipantau' : 'Perlu Follow Up',
-        kategori_temuan: row.status_harian || 'Catatan Manual',
-        catatan_mtr: String(note).trim()
-      });
   }
 
   function renderControllerTrend_() {
@@ -9123,21 +7165,13 @@
 
   function renderControllerRankingTable_(targetId, rows, mode) {
     var body = document.getElementById(targetId);
-    var mobileContainerIdMap = {
-      controllerTopSalesBody: 'controllerTopSalesMobile',
-      controllerTopCustomersBody: 'controllerTopCustomersMobile',
-      controllerTopItemsBody: 'controllerTopItemsMobile'
-    };
-    var mobileContainer = document.getElementById(mobileContainerIdMap[targetId] || '');
 
     if (!body) {
-      renderControllerRankingMobile_(mobileContainer, rows, mode);
       return;
     }
 
     if (!rows || !rows.length) {
       body.innerHTML = '<tr><td colspan="4" class="empty-cell">Belum ada data.</td></tr>';
-      renderControllerRankingMobile_(mobileContainer, rows, mode);
       return;
     }
 
@@ -9146,52 +7180,12 @@
       var fourthValue = mode === 'items' ? row.order_count : row.omzet;
       return '' +
         '<tr>' +
-          '<td class="rank-cell">' + escapeHtml_(row.rank || '-') + '</td>' +
-          '<td class="name-cell"><span class="controller-ranking-name">' + escapeHtml_(row.name || '-') + '</span></td>' +
-          '<td class="metric-cell">' + escapeHtml_(thirdValue || '-') + '</td>' +
-          '<td class="amount-cell">' + escapeHtml_(fourthValue || '-') + '</td>' +
+          '<td>' + escapeHtml_(row.rank || '-') + '</td>' +
+          '<td>' + escapeHtml_(row.name || '-') + '</td>' +
+          '<td>' + escapeHtml_(thirdValue || '-') + '</td>' +
+          '<td>' + escapeHtml_(fourthValue || '-') + '</td>' +
         '</tr>';
     }).join('');
-
-    renderControllerRankingMobile_(mobileContainer, rows, mode);
-  }
-
-  function renderControllerRankingMobile_(container, rows, mode) {
-    if (!container) {
-      return;
-    }
-
-    if (!rows || !rows.length) {
-      container.innerHTML = '<article class="controller-mobile-card controller-mobile-empty">Belum ada data.</article>';
-      return;
-    }
-
-    container.innerHTML = rows.map(function(row) {
-      var thirdLabel = mode === 'items' ? 'Qty' : 'SO';
-      var thirdValue = mode === 'items' ? row.qty : row.so;
-      var fourthLabel = mode === 'items' ? 'Order SO' : 'Omzet';
-      var fourthValue = mode === 'items' ? row.order_count : row.omzet;
-
-      return '' +
-        '<article class="controller-mobile-card">' +
-          '<div class="controller-mobile-card-head">' +
-            '<strong class="controller-mobile-rank">#' + escapeHtml_(row.rank || '-') + '</strong>' +
-            '<div class="controller-mobile-title">' + escapeHtml_(row.name || '-') + '</div>' +
-          '</div>' +
-          '<div class="controller-mobile-metric-grid">' +
-            buildControllerMobileMetric_(thirdLabel, thirdValue || '-') +
-            buildControllerMobileMetric_(fourthLabel, fourthValue || '-') +
-          '</div>' +
-        '</article>';
-    }).join('');
-  }
-
-  function buildControllerMobileMetric_(label, value) {
-    return '' +
-      '<div class="controller-mobile-metric">' +
-        '<span class="controller-mobile-metric-label">' + escapeHtml_(label || '-') + '</span>' +
-        '<strong class="controller-mobile-metric-value">' + escapeHtml_(value || '-') + '</strong>' +
-      '</div>';
   }
 
   function padNumber_(value) {
@@ -9344,16 +7338,6 @@
     });
   }
 
-  function applyControllerFieldMonitoringPayload_(fieldMonitoring) {
-    var source = fieldMonitoring || {};
-    appState.controllerFieldMonitoring = {
-      tanggal: source.tanggal || '',
-      summary: source.summary || { total_sales: 0, hijau: 0, kuning: 0, merah: 0 },
-      rows: Array.isArray(source.rows) ? source.rows : [],
-      weekly: Array.isArray(source.weekly) ? source.weekly : []
-    };
-  }
-
   function formatControllerLastUpdated_(value) {
     var text = String(value || '').trim();
     var match = text.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
@@ -9399,13 +7383,9 @@
     var mode = String(safeOptions.mode || '').trim().toLowerCase();
     var isPreview = mode === 'preview_sj';
     var isNotaOnly = mode === 'nota_only';
-    var isCombinedDualPage = mode === 'combined_dual_page';
-    var pageTitle = isPreview ? 'Preview Surat Jalan' : (isCombinedDualPage ? 'Surat Jalan + Nota' : (isNotaOnly ? 'Nota' : 'Surat Jalan'));
-    var pageNumber = isCombinedDualPage
-      ? ((data.no_surat_jalan || data.no_so || '') + ' / ' + buildPrintNotaNumber_(data))
-      : (isNotaOnly ? buildPrintNotaNumber_(data) : (data.no_surat_jalan || data.no_so || ''));
+    var pageTitle = isPreview ? 'Preview Surat Jalan' : (isNotaOnly ? 'Nota' : 'Surat Jalan');
+    var pageNumber = isNotaOnly ? buildPrintNotaNumber_(data) : (data.no_surat_jalan || data.no_so || '');
     var printBodyHtml = buildPrintSheet_(data, safeOptions);
-    var printAutoScript = isPreview ? '' : buildPrintAutoCloseScript_();
 
     return '' +
       '<!DOCTYPE html>' +
@@ -9418,19 +7398,17 @@
           '*{box-sizing:border-box;}' +
           'html,body{margin:0;padding:0;background:#fff;color:#000;}' +
           'body{font-family:"Courier New","Lucida Console",Courier,monospace;font-size:10pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
-          '.print-stack{display:flex;flex-direction:column;align-items:center;gap:4mm;}' +
           '.sheet{width:215mm;height:140mm;margin:0 auto;background:#fff;overflow:hidden;page-break-inside:avoid;break-inside:avoid;page-break-after:auto;break-after:auto;}' +
-          '.sheet.sheet-break{page-break-after:always;break-after:page;}' +
           '.print-area{width:215mm;height:140mm;margin:0 auto;padding:0;overflow:hidden;}' +
           '.print-section{width:215mm;height:140mm;margin:0;padding:4.2mm 5.8mm 3.2mm;background:#fff;overflow:hidden;break-inside:avoid;page-break-inside:avoid;page-break-before:auto;page-break-after:auto;break-before:auto;break-after:auto;}' +
-          '.section-header{display:grid;grid-template-columns:minmax(0,1fr) 48mm;gap:2.4mm;align-items:start;border-bottom:1.5px solid #000;padding:2.8mm 0 1.5mm;margin-bottom:1.8mm;}' +
-          '.company-block{min-width:0;padding-top:0.6mm;}' +
+          '.section-header{display:grid;grid-template-columns:minmax(0,1fr) 59mm;gap:3.2mm;align-items:start;border-bottom:1.5px solid #000;padding:0 0 1.5mm;margin-bottom:1.8mm;}' +
+          '.company-block{min-width:0;}' +
           '.company-text{min-width:0;}' +
-          '.company{font-weight:900;font-size:11.8pt;line-height:1.12;letter-spacing:-0.1px;white-space:nowrap;overflow-wrap:normal;word-break:normal;}' +
+          '.company{font-weight:900;font-size:13pt;line-height:1;letter-spacing:-0.2px;}' +
           '.meta-line{font-size:7.9pt;font-weight:800;line-height:1.08;margin-top:0.5mm;}' +
-          '.doc-title{text-align:right;font-weight:900;min-width:0;padding-top:0.2mm;}' +
-          '.doc-title .title{font-size:14.6pt;line-height:1;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}' +
-          '.doc-title .number{font-size:9.4pt;line-height:1.05;margin-top:0.8mm;letter-spacing:-0.1px;white-space:nowrap;}' +
+          '.doc-title{text-align:right;font-weight:900;min-width:0;}' +
+          '.doc-title .title{font-size:15.5pt;line-height:1;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}' +
+          '.doc-title .number{font-size:10pt;line-height:1.05;margin-top:1mm;letter-spacing:-0.25px;white-space:nowrap;}' +
           '.fields{display:grid;grid-template-columns:1fr 1fr;gap:0.9mm 4mm;margin-top:1.4mm;}' +
           '.field{display:grid;grid-template-columns:20mm 2mm 1fr;font-size:8.9pt;font-weight:800;line-height:1.1;align-items:baseline;}' +
           '.field .label{font-weight:900;}' +
@@ -9458,21 +7436,21 @@
           '.tight td{height:5.3mm;}' +
           '.note-title{font-weight:900;margin-bottom:0.8mm;}' +
           '.surat-jalan-section{padding:2.8mm 4.5mm 2mm 4.5mm;}' +
-          '.surat-jalan-section .section-header{grid-template-columns:minmax(0,1fr) 48mm;gap:2.4mm;padding-top:2.8mm;}' +
-          '.surat-jalan-section .company{font-size:11.8pt;letter-spacing:-0.1px;white-space:nowrap;}' +
+          '.surat-jalan-section .section-header{grid-template-columns:minmax(0,1fr) 48mm;gap:2.4mm;}' +
+          '.surat-jalan-section .company{font-size:13.2pt;letter-spacing:-0.45px;white-space:nowrap;}' +
           '.surat-jalan-section .meta-line{font-size:8.1pt;}' +
-          '.surat-jalan-section .doc-title .title{font-size:14.4pt;letter-spacing:-0.1px;}' +
-          '.surat-jalan-section .doc-title .number{font-size:9.3pt;letter-spacing:-0.1px;}' +
+          '.surat-jalan-section .doc-title .title{font-size:15.3pt;letter-spacing:-0.35px;}' +
+          '.surat-jalan-section .doc-title .number{font-size:10.2pt;letter-spacing:-0.45px;}' +
           '.surat-jalan-section .field,.surat-jalan-section .full-row{font-size:9.4pt;}' +
           '.surat-jalan-section table{font-size:9pt;}' +
           '.surat-jalan-section th,.surat-jalan-section td{padding:0.75mm 1mm;}' +
           '.surat-jalan-section .notes-box{min-height:6.5mm;max-height:10.5mm;font-size:8.8pt;}' +
-          '.nota-section{padding:8.2mm 4.5mm 2mm 4.5mm;}' +
-          '.nota-section .section-header{grid-template-columns:minmax(0,1fr) 48mm;gap:2.4mm;padding-top:1.2mm;}' +
-          '.nota-section .company{font-size:11.8pt;letter-spacing:-0.1px;white-space:nowrap;}' +
+          '.nota-section{padding:2.8mm 4.5mm 2mm 4.5mm;}' +
+          '.nota-section .section-header{grid-template-columns:minmax(0,1fr) 48mm;gap:2.4mm;}' +
+          '.nota-section .company{font-size:13.2pt;letter-spacing:-0.45px;white-space:nowrap;}' +
           '.nota-section .meta-line{font-size:8.1pt;}' +
-          '.nota-section .doc-title .title{font-size:14.4pt;letter-spacing:-0.1px;}' +
-          '.nota-section .doc-title .number{font-size:9.3pt;letter-spacing:-0.1px;}' +
+          '.nota-section .doc-title .title{font-size:15.3pt;letter-spacing:-0.35px;}' +
+          '.nota-section .doc-title .number{font-size:10.2pt;letter-spacing:-0.45px;}' +
           '.nota-section .field,.nota-section .full-row{font-size:9.3pt;}' +
           '.nota-section .field{grid-template-columns:22mm 2mm 1fr;}' +
           '.nota-section table{font-size:8.8pt;}' +
@@ -9487,33 +7465,13 @@
           '.nota-section .sig{font-size:8.2pt;}' +
           '.nota-section .sig .line{height:8.5mm;}' +
           '@media screen{body{background:#eee;padding:4mm 0}.sheet{box-shadow:0 0 0 1px #bbb}.preview-banner + .surat-jalan-section{height:132mm;padding-top:2.4mm}}' +
-          '@media print{html,body{margin:0;padding:0;overflow:visible;background:#fff}.print-stack{display:block}.sheet{position:relative;width:196mm;height:126mm;margin:0 auto;box-shadow:none;overflow:hidden;page-break-before:avoid;page-break-inside:avoid;break-before:avoid;break-inside:avoid}.sheet.sheet-break{page-break-after:always;break-after:page}.preview-banner{display:none}.print-area{width:196mm;height:126mm;margin:0;overflow:hidden}.print-section{width:196mm;height:126mm;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;break-before:avoid}.print-sj-only .sheet,.print-nota-only .sheet,.print-sj-only .print-area,.print-nota-only .print-area,.print-sj-only .print-section,.print-nota-only .print-section,.print-combined-dual-page .sheet,.print-combined-dual-page .print-area,.print-combined-dual-page .print-section{width:196mm;height:126mm}.print-combined-dual-page .sheet:last-child{page-break-after:auto;break-after:auto}}' +
+          '@media print{html,body{width:215mm;height:140mm;margin:0;padding:0;overflow:hidden;background:#fff}.sheet{width:196mm;height:128mm;margin:6mm 0 0 9.5mm;box-shadow:none;overflow:hidden;page-break-after:avoid;break-after:avoid}.preview-banner{display:none}.print-area{width:196mm;height:128mm;margin:0;overflow:hidden}.print-section{width:196mm;height:128mm;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid;break-before:avoid;break-after:avoid}.print-sj-only .sheet,.print-nota-only .sheet,.print-sj-only .print-area,.print-nota-only .print-area,.print-sj-only .print-section,.print-nota-only .print-section{width:196mm;height:128mm}}' +
         '</style>' +
       '</head>' +
-      '<body class="' + (isCombinedDualPage ? 'print-combined-dual-page' : (isNotaOnly ? 'print-nota-only' : 'print-sj-only')) + '">' +
+      '<body class="' + (isNotaOnly ? 'print-nota-only' : 'print-sj-only') + '"' + (isPreview ? '' : ' onload="window.print()"') + '>' +
         printBodyHtml +
-        printAutoScript +
       '</body>' +
       '</html>';
-  }
-
-  function buildPrintAutoCloseScript_() {
-    return '' +
-      '<script>' +
-        '(function(){' +
-          'var closed=false;' +
-          'function closePrintWindow(){' +
-            'if(closed){return;}' +
-            'closed=true;' +
-            'setTimeout(function(){window.close();},250);' +
-          '}' +
-          'window.addEventListener("afterprint",closePrintWindow);' +
-          'window.addEventListener("focus",function(){setTimeout(closePrintWindow,500);});' +
-          'window.addEventListener("load",function(){' +
-            'setTimeout(function(){window.print();},250);' +
-          '});' +
-        '})();' +
-      '<\\/script>';
   }
 
   function buildPrintSheet_(data, options) {
@@ -9521,33 +7479,14 @@
     var mode = String(safeOptions.mode || '').trim().toLowerCase();
     var isPreview = mode === 'preview_sj';
     var isNotaOnly = mode === 'nota_only';
-    var isCombinedDualPage = mode === 'combined_dual_page';
-
-    if (isCombinedDualPage) {
-      return '' +
-        '<div class="print-stack">' +
-          '<div class="sheet sheet-break">' +
-            '<div class="print-area">' +
-              buildSuratJalanSection_(data) +
-            '</div>' +
-          '</div>' +
-          '<div class="sheet">' +
-            '<div class="print-area">' +
-              buildNotaSection_(data) +
-            '</div>' +
-          '</div>' +
-        '</div>';
-    }
 
     return '' +
-      '<div class="print-stack">' +
-        '<div class="sheet">' +
-          '<div class="print-area">' +
-            (isPreview
-              ? '<div class="preview-banner"><span>PREVIEW DOKUMEN</span><span>Belum dicetak</span></div>'
-              : '') +
-            (isNotaOnly ? buildNotaSection_(data) : buildSuratJalanSection_(data)) +
-          '</div>' +
+      '<div class="sheet">' +
+        '<div class="print-area">' +
+          (isPreview
+            ? '<div class="preview-banner"><span>PREVIEW DOKUMEN</span><span>Belum dicetak</span></div>'
+            : '') +
+          (isNotaOnly ? buildNotaSection_(data) : buildSuratJalanSection_(data)) +
         '</div>' +
       '</div>';
   }
@@ -9684,7 +7623,7 @@
 
   function buildPrintHeader_(title, number, compactTop) {
     return '' +
-      '<div class="section-header"' + (compactTop ? ' style="padding-top:1mm;"' : '') + '>' +
+      '<div class="section-header"' + (compactTop ? ' style="padding-top:0;"' : '') + '>' +
         '<div class="company-block">' +
           '<div class="company-text">' +
             '<div class="company">PT ABUYAMAS TIRTA SEJAHTERA</div>' +
@@ -9841,12 +7780,6 @@
 
     if (!noSo) {
       return '-';
-    }
-
-    var matchedNoSo = noSo.match(/^SO-?(\d{4})(\d{2})(\d{2})(\d+)$/i);
-
-    if (matchedNoSo) {
-      return 'NT-' + matchedNoSo[4] + matchedNoSo[3] + matchedNoSo[2] + matchedNoSo[1];
     }
 
     return noSo.replace(/^SO/i, 'NT');

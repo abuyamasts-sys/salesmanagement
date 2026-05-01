@@ -68,7 +68,7 @@ function getSalesOrderFormData(userId) {
     products: getProductCatalog_(),
     salesHistoryOrders: getSalesOrderHistoryForSales_(currentUser.user_id, 30),
     salesPayoutBatches: listSlfPayoutBatchesForSales_(currentUser.user_id),
-    fieldActivity: getFieldActivityTodayForSales(currentUser.user_id),
+    fieldActivity: currentUser.is_slfm ? null : getFieldActivityTodayForSales(currentUser.user_id),
     slfMinPayout: getSlfMinPayoutAmount_(),
     deliveryPriority: APP_CONFIG.DELIVERY_PRIORITY,
     customerType: APP_CONFIG.CUSTOMER_TYPE
@@ -195,18 +195,51 @@ function getApproverDashboardData(userId) {
   });
 }
 
-function getReadyKledoExportOrders_() {
-  return getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).filter(function(row) {
+function getReadyKledoExportOrders_(options) {
+  var filter = normalizeKledoExportDateRange_(options || {});
+  var readyRows = [];
+  var neededNoSo = {};
+  var detailsByNoSo;
+  var suratJalanByNoSo = {};
+
+  getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).forEach(function(row) {
     var statusOrder = normalizeText_(row.status_order);
     var verificationStatus = String(row.status_verifikasi_cs || '').trim();
     var exportStatus = String(row.status_export_kledo || '').trim();
+    var rowDate = normalizeSheetDateToYmd_(row.tanggal_selesai || row.tanggal_verifikasi_cs || row.tanggal_order);
 
-    return statusOrder === 'selesai' &&
+    if (!(statusOrder === 'selesai' &&
       verificationStatus === 'Sudah Dicek' &&
-      exportStatus !== 'Sudah Export';
-  }).map(function(orderRow) {
-    var order = buildSalesOrderClientRow_(orderRow || {});
-    var suratJalan = findSuratJalanByNoSo_(order.no_so) || {};
+      exportStatus !== 'Sudah Export')) {
+      return;
+    }
+
+    if (filter.start && (!rowDate || rowDate < filter.start)) {
+      return;
+    }
+
+    if (filter.end && (!rowDate || rowDate > filter.end)) {
+      return;
+    }
+
+    readyRows.push(row);
+    if (String(row.no_so || '').trim()) {
+      neededNoSo[String(row.no_so || '').trim()] = true;
+    }
+  });
+
+  detailsByNoSo = getSalesOrderDetailsMapForNoSo_(neededNoSo);
+  getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN).forEach(function(row) {
+    var noSo = String(row.no_so || '').trim();
+    if (noSo && neededNoSo[noSo] && !suratJalanByNoSo[noSo]) {
+      suratJalanByNoSo[noSo] = row;
+    }
+  });
+
+  return readyRows.map(function(orderRow) {
+    var noSoKey = String(orderRow.no_so || '').trim();
+    var order = buildSalesOrderClientRowFromDetails_(orderRow || {}, detailsByNoSo[noSoKey] || null);
+    var suratJalan = suratJalanByNoSo[noSoKey] || {};
 
     return {
       no_so: order.no_so || '',
@@ -364,6 +397,7 @@ function getAdminDashboardData(userId) {
   return toClientValue_({
     currentUser: currentUser,
     admins: [currentUser],
+    salesUsers: getActiveSalesUsersForSelection_(),
     customers: getActiveCustomers(),
     products: getProductCatalog_(),
     tomorrowPlanDate: tomorrowPlanDate,
@@ -465,6 +499,34 @@ function getAdminOperationsData(userId, options) {
       return buildAdminDeliveryListRow_(row, salesOrderByNoSo[noSoKey] || {});
     })
   });
+}
+
+function getApproverExportDataFromDashboard(userId, formData) {
+  requireCurrentUserRole_(['Approver'], userId);
+  maybeBackfillCompletedOrdersVerification_();
+
+  return toClientValue_({
+    currentUser: getCurrentUserProfile(userId),
+    exportOrders: getReadyKledoExportOrders_(formData || {})
+  });
+}
+
+function normalizeKledoExportDateRange_(options) {
+  var safeOptions = options || {};
+  var start = normalizeSheetDateToYmd_(safeOptions.tanggal_mulai || safeOptions.start_date || safeOptions.date_from || '');
+  var end = normalizeSheetDateToYmd_(safeOptions.tanggal_sampai || safeOptions.end_date || safeOptions.date_to || '');
+  var swap;
+
+  if (start && end && start > end) {
+    swap = start;
+    start = end;
+    end = swap;
+  }
+
+  return {
+    start: start,
+    end: end
+  };
 }
 
 function buildAdminReadyOrderListRow_(order, rawDetails) {
@@ -659,6 +721,7 @@ function getAdminAgentFormData(userId) {
 
   return toClientValue_({
     currentUser: currentUser,
+    salesUsers: getActiveSalesUsersForSelection_(),
     customers: getActiveCustomers(),
     products: getProductCatalog_()
   });
@@ -867,12 +930,12 @@ function verifyDeliveredOrderFromDashboard(userId, formData) {
 
 function generateKledoExportFromDashboard(userId, formData) {
   var currentUser = requireCurrentUserRole_(['Approver'], userId);
-  return toClientValue_(generateKledoExportBatchFile(currentUser));
+  return toClientValue_(generateKledoExportBatchFile(currentUser, formData || {}));
 }
 
 function markKledoExportedFromDashboard(userId, formData) {
   var currentUser = requireCurrentUserRole_(['Approver'], userId);
-  return toClientValue_(markKledoBatchExported(currentUser, formData.catatan_export_kledo || ''));
+  return toClientValue_(markKledoBatchExported(currentUser, formData.catatan_export_kledo || '', formData || {}));
 }
 
 function completeOrderFromDashboard(userId, formData) {
@@ -882,16 +945,26 @@ function completeOrderFromDashboard(userId, formData) {
 
 function submitAgentOrderFromAdmin(userId, formData) {
   var currentUser = requireCurrentUserRole_(['CS/Admin'], userId);
+  var salesSource = resolveAgentOrderSalesSource_(currentUser, formData || {});
   var catatan = formData.catatan || '';
   var catatanGabungan = '[AGEN/CS] Input oleh ' + currentUser.nama_user;
+
+  if (salesSource.is_office) {
+    catatanGabungan += ' | Sumber order: Office';
+  } else {
+    catatanGabungan += ' | Dibantu input untuk sales: ' + salesSource.sales_nama + ' (' + salesSource.sales_id + ')';
+  }
 
   if (catatan) {
     catatanGabungan += ' | ' + catatan;
   }
 
   return submitSalesOrder({
-    sales_id: currentUser.user_id,
-    sales_nama: currentUser.nama_user + ' (CS/Admin)',
+    sales_id: salesSource.sales_id,
+    sales_nama: salesSource.sales_nama,
+    tipe_sales: salesSource.tipe_sales,
+    channel_sales: salesSource.channel_sales,
+    is_freelance: salesSource.is_freelance,
     jenis_customer: formData.jenis_customer,
     customer_id: formData.customer_id,
     nama_customer_input: formData.nama_customer_input,
@@ -909,6 +982,57 @@ function submitAgentOrderFromAdmin(userId, formData) {
     tanggal_kirim_rencana: formData.tanggal_kirim_rencana,
     catatan: catatanGabungan
   });
+}
+
+function getActiveSalesUsersForSelection_() {
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.MASTER_USER, APP_CONFIG.HEADERS.MASTER_USER);
+
+  return getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).filter(function(user) {
+    return normalizeRoleKey_(user.role) === 'sales' &&
+      normalizeText_(user.status_aktif) === 'aktif';
+  }).map(function(user) {
+    var profile = getCurrentUserProfile(user.user_id);
+
+    return {
+      user_id: profile.user_id,
+      nama_user: profile.nama_user,
+      tipe_sales: profile.tipe_sales,
+      channel_sales_default: profile.channel_sales_default,
+      is_freelance: profile.is_freelance
+    };
+  }).sort(function(left, right) {
+    return String(left.nama_user || '').localeCompare(String(right.nama_user || ''), 'id-ID');
+  });
+}
+
+function resolveAgentOrderSalesSource_(currentUser, formData) {
+  var sourceId = String(formData && formData.sales_source_id || '').trim();
+  var selectedProfile;
+
+  if (!sourceId || normalizeText_(sourceId) === 'office') {
+    return {
+      is_office: true,
+      sales_id: currentUser.user_id,
+      sales_nama: currentUser.nama_user + ' (CS/Admin)',
+      tipe_sales: 'Internal',
+      channel_sales: 'SLS',
+      is_freelance: false
+    };
+  }
+
+  selectedProfile = getCurrentUserProfile(sourceId);
+  if (!selectedProfile.authorized || normalizeRoleKey_(selectedProfile.role) !== 'sales') {
+    throw new Error('Sales yang dipilih tidak valid atau tidak aktif.');
+  }
+
+  return {
+    is_office: false,
+    sales_id: selectedProfile.user_id,
+    sales_nama: selectedProfile.nama_user,
+    tipe_sales: selectedProfile.tipe_sales,
+    channel_sales: selectedProfile.channel_sales_default,
+    is_freelance: selectedProfile.is_freelance
+  };
 }
 
 function getSuratJalanPrintDataFromDashboard(userId, noSo) {
