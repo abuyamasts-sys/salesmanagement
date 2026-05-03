@@ -66,17 +66,18 @@ function buildControllerDashboardSummary_(salesOrders, salesOrderDetails, filter
   var details = Array.isArray(salesOrderDetails) ? salesOrderDetails : [];
   var detailQtyByNoSo = buildControllerDetailQtyByNoSo_(details);
   var today = String(filter.today || '').trim();
-  var weekStart = String(filter.weekStart || '').trim();
   var monthStart = String(filter.monthStart || '').trim();
   var monthEnd = String(filter.monthEnd || filter.today || '').trim();
+  var periodStart = String(filter.startDate || monthStart || '').trim();
+  var periodEnd = String(filter.endDate || monthEnd || today || '').trim();
 
   return {
     so_today: buildControllerOrderCount_(orders, today, today),
     omzet_today: buildControllerOmzetTotal_(orders, today, today),
     customers_today: buildControllerUniqueCustomerCount_(orders, today, today),
     qty_today: buildControllerQtyTotal_(orders, detailQtyByNoSo, today, today),
-    so_week: buildControllerOrderCount_(orders, weekStart, today),
-    omzet_week: buildControllerOmzetTotal_(orders, weekStart, today),
+    so_week: buildControllerOrderCount_(orders, periodStart, periodEnd),
+    omzet_week: buildControllerOmzetTotal_(orders, periodStart, periodEnd),
     so_month: buildControllerOrderCount_(orders, monthStart, monthEnd),
     omzet_month: buildControllerOmzetTotal_(orders, monthStart, monthEnd)
   };
