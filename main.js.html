@@ -9247,7 +9247,7 @@
         '<tr>' +
           '<td class="rank-cell">' + escapeHtml_(row.rank || '-') + '</td>' +
           '<td class="name-cell"><span class="controller-ranking-name">' + escapeHtml_(row.name || '-') + '</span></td>' +
-          (mode === 'sales' ? '<td>' + buildStatusBadge_(row.tipe_sales || '-') + '</td>' : '') +
+          (mode === 'sales' ? '<td class="sales-type-cell">' + buildControllerSalesTypeBadge_(row.tipe_sales || '-') + '</td>' : '') +
           '<td class="metric-cell">' + escapeHtml_(thirdValue || '-') + '</td>' +
           '<td class="amount-cell">' + escapeHtml_(fourthValue || '-') + '</td>' +
         '</tr>';
@@ -9294,6 +9294,14 @@
         '<span class="controller-mobile-metric-label">' + escapeHtml_(label || '-') + '</span>' +
         '<strong class="controller-mobile-metric-value">' + escapeHtml_(value || '-') + '</strong>' +
       '</div>';
+  }
+
+  function buildControllerSalesTypeBadge_(value) {
+    var text = String(value || '-').trim() || '-';
+    var normalized = normalizeSearchText_(text);
+    var className = normalized === 'freelance' ? 'freelance' : 'tetap';
+
+    return '<span class="controller-sales-type-badge ' + className + '">' + escapeHtml_(text) + '</span>';
   }
 
   function padNumber_(value) {

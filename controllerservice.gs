@@ -455,11 +455,11 @@ function normalizeControllerSalesTypeLabel_(value) {
   var normalized = normalizeText_(text);
 
   if (!text) {
-    return 'Sales Tetap';
+    return 'Tetap';
   }
 
   if (normalized.indexOf('slfm') === 0 || normalized.indexOf('slf') === 0) {
-    return 'Freelance / SLF';
+    return 'Freelance';
   }
 
   if (normalized === 'freelance') {
@@ -467,7 +467,7 @@ function normalizeControllerSalesTypeLabel_(value) {
   }
 
   if (normalized === 'internal' || normalized === 'tetap' || normalized === 'sales tetap') {
-    return 'Sales Tetap';
+    return 'Tetap';
   }
 
   return text;
