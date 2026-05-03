@@ -897,10 +897,13 @@
           applyControllerTopSalesPayload_(payload.topSales || []);
           applyControllerTopCustomersPayload_(payload.topCustomers || []);
           applyControllerTopItemsPayload_(payload.topItems || []);
-          applyControllerFieldMonitoringPayload_(payload.fieldMonitoring || null);
+          if (Object.prototype.hasOwnProperty.call(payload, 'fieldMonitoring')) {
+            applyControllerFieldMonitoringPayload_(payload.fieldMonitoring || null);
+          }
           appState.controllerLastUpdated = String(payload.lastUpdated || '').trim() || appState.controllerLastUpdated;
           renderControllerDashboard_();
           setStatusText_(currentUserHasRole_('mtr') ? 'Dashboard monitoring siap' : 'Dashboard controller siap');
+          loadControllerFieldMonitoringData_();
           loadMtrSalesMovementMapData_();
 
           if (callback) callback();
@@ -918,6 +921,22 @@
         startDate: appState.controllerStartDate,
         endDate: appState.controllerEndDate,
         monitoringDate: appState.fieldMonitoringDate || ''
+      });
+  }
+
+  function loadControllerFieldMonitoringData_() {
+    if (!ensureAuthorizedSession_()) return;
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        applyControllerFieldMonitoringPayload_(data || null);
+        renderControllerFieldMonitoring_();
+      })
+      .withFailureHandler(function(error) {
+        renderResult_('Gagal memuat pengawasan sales lapangan: ' + (error && error.message ? error.message : error), true);
+      })
+      .getFieldMonitoringDashboardData(appState.currentUser.user_id, {
+        tanggal: appState.fieldMonitoringDate || appState.controllerEndDate || getTodayIsoDate_()
       });
   }
 
@@ -6218,7 +6237,6 @@
   function handleControllerRefresh_() {
     loadControllerData_(function() {
       setStatusText_('Dashboard controller diperbarui');
-      renderResult_('Dashboard Controller masih memakai placeholder frontend. Backend summary akan disambungkan pada tahap berikutnya.', false);
     });
   }
 
@@ -6226,18 +6244,18 @@
     appState.fieldMonitoringDate = getFieldValue_('fieldMonitoringDate') || getTodayIsoDate_();
     appState.mtrMapDate = appState.fieldMonitoringDate;
     setFieldValue_('mtrMapDate', appState.fieldMonitoringDate);
-    loadControllerData_(function() {
-      setStatusText_('Monitoring sales diperbarui');
-    });
+    loadControllerFieldMonitoringData_();
+    loadMtrSalesMovementMapData_();
+    setStatusText_('Monitoring sales diperbarui');
   }
 
   function handleFieldMonitoringRefresh_() {
     appState.fieldMonitoringDate = getFieldValue_('fieldMonitoringDate') || appState.fieldMonitoringDate || getTodayIsoDate_();
     appState.mtrMapDate = appState.fieldMonitoringDate;
     setFieldValue_('mtrMapDate', appState.fieldMonitoringDate);
-    loadControllerData_(function() {
-      setStatusText_('Monitoring sales diperbarui');
-    });
+    loadControllerFieldMonitoringData_();
+    loadMtrSalesMovementMapData_();
+    setStatusText_('Monitoring sales diperbarui');
   }
 
   function collectSalesItemDraft_() {

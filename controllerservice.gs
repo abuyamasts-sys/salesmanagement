@@ -6,18 +6,15 @@ function getControllerDashboardData(userId, filters) {
   var salesOrders = getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER);
   var salesOrderDetails = getControllerSalesOrderDetails_();
   var deliveryOrders = getControllerDeliveryOrders_();
-  var billingData = getAdminBillingData_(currentUser, {});
+  var billingSummary = getControllerBillingOpenSummary_();
   var summary = buildControllerDashboardSummary_(salesOrders, salesOrderDetails, filter);
   var statusSummary = buildControllerStatusSummary_(salesOrders, filter);
-  var opsSummary = buildControllerOpsSummary_(salesOrders, deliveryOrders, billingData, filter);
+  var opsSummary = buildControllerOpsSummary_(salesOrders, deliveryOrders, billingSummary, filter);
   var trend = buildControllerTrend7Days_(salesOrders, filter.today);
   var salesKpiSnapshot = buildControllerSalesKpiSnapshot_();
   var topSales = buildControllerTopSales_(salesOrders, filter);
   var topCustomers = buildControllerTopCustomers_(salesOrders, filter);
   var topItems = buildControllerTopItems_(salesOrderDetails, salesOrders, filter);
-  var fieldMonitoring = getFieldMonitoringDashboardData(userId, {
-    tanggal: normalizeSheetDateToYmd_((filters || {}).monitoringDate || '') || filter.today
-  });
 
   return toClientValue_({
     currentUser: currentUser,
@@ -30,7 +27,6 @@ function getControllerDashboardData(userId, filters) {
     topSales: topSales,
     topCustomers: topCustomers,
     topItems: topItems,
-    fieldMonitoring: fieldMonitoring,
     lastUpdated: getControllerDashboardLastUpdated_()
   });
 }
@@ -297,19 +293,43 @@ function buildControllerStatusSummary_(salesOrders, filter) {
   });
 }
 
-function buildControllerOpsSummary_(salesOrders, deliveryOrders, billingData, filter) {
+function buildControllerOpsSummary_(salesOrders, deliveryOrders, billingSummary, filter) {
   var filteredOrders = filterControllerOrdersByDashboardRange_(salesOrders, filter);
   var deliveryRows = Array.isArray(deliveryOrders) ? deliveryOrders : [];
   var filteredDeliveryRows = filterControllerDeliveryByDashboardRange_(deliveryRows, filter);
-  var billingSummary = billingData && billingData.billingSummary ? billingData.billingSummary : {};
+  var safeBillingSummary = billingSummary || {};
 
   return {
     ready_orders: countControllerOrdersByStatus_(filteredOrders, 'siap kirim'),
     sj_ready: countControllerDeliveryByStatus_(filteredDeliveryRows, 'siap kirim'),
     sj_delivered: countControllerDeliveryByStatus_(filteredDeliveryRows, 'terkirim'),
     sj_completed: countControllerDeliveryByStatus_(filteredDeliveryRows, 'selesai'),
-    unpaid: Number(billingSummary.belum_lunas || 0) + Number(billingSummary.sebagian || 0)
+    unpaid: Number(safeBillingSummary.belum_lunas || 0) + Number(safeBillingSummary.sebagian || 0)
   };
+}
+
+function getControllerBillingOpenSummary_() {
+  var sheet = getSheetByNameOrNull_(APP_CONFIG.SHEETS.TAGIHAN);
+  var summary = {
+    belum_lunas: 0,
+    sebagian: 0
+  };
+
+  if (!sheet) {
+    return summary;
+  }
+
+  getSheetData_(APP_CONFIG.SHEETS.TAGIHAN).forEach(function(row) {
+    var status = normalizeText_(row.status_tagihan);
+
+    if (status === 'belum lunas') {
+      summary.belum_lunas += 1;
+    } else if (status === 'sebagian') {
+      summary.sebagian += 1;
+    }
+  });
+
+  return summary;
 }
 
 function countControllerOrdersByStatus_(salesOrders, statusKey) {
