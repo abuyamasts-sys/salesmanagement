@@ -62,7 +62,7 @@
     backupSummary: null,
     backupHistory: [],
     backupHistoryPage: 1,
-    controllerFilterPreset: 'today',
+    controllerFilterPreset: 'month',
     controllerStartDate: '',
     controllerEndDate: '',
     controllerSummary: null,
@@ -888,6 +888,7 @@
           var payload = data || {};
 
           syncCurrentUser_(payload.currentUser);
+          applyControllerFilterPayload_(payload.filter || null);
           applyControllerSummaryPayload_(payload.summary || null);
           applyControllerSalesKpiSnapshotPayload_(payload.salesKpiSnapshot || null);
           applyControllerStatusSummaryPayload_(payload.statusSummary || []);
@@ -6198,7 +6199,7 @@
   }
 
   function handleControllerPresetChange_(presetKey) {
-    appState.controllerFilterPreset = String(presetKey || '').trim() || 'today';
+    appState.controllerFilterPreset = String(presetKey || '').trim() || 'month';
     applyControllerPresetRange_();
     syncControllerPlaceholderState_();
     renderControllerDashboard_();
@@ -8167,7 +8168,7 @@
 
   function ensureControllerFilterDefaults_() {
     if (!appState.controllerFilterPreset) {
-      appState.controllerFilterPreset = 'today';
+      appState.controllerFilterPreset = 'month';
     }
 
     if (!appState.controllerStartDate && !appState.controllerEndDate) {
@@ -8213,7 +8214,7 @@
 
     if (presetKey === 'month') {
       monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      end = new Date(today);
+      end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
       return { startDate: toIso(monthStart), endDate: toIso(end) };
     }
 
@@ -9309,6 +9310,14 @@
       so_month: formatNumber_(source.so_month || 0),
       omzet_month: formatCurrencyInput_(source.omzet_month || 0)
     };
+  }
+
+  function applyControllerFilterPayload_(filter) {
+    var source = filter || {};
+
+    appState.controllerFilterPreset = String(source.preset || appState.controllerFilterPreset || 'month').trim() || 'month';
+    appState.controllerStartDate = String(source.startDate || appState.controllerStartDate || '').trim();
+    appState.controllerEndDate = String(source.endDate || appState.controllerEndDate || '').trim();
   }
 
   function applyControllerStatusSummaryPayload_(statusSummary) {

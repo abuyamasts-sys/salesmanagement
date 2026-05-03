@@ -8,13 +8,13 @@ function getControllerDashboardData(userId, filters) {
   var deliveryOrders = getControllerDeliveryOrders_();
   var billingData = getAdminBillingData_(currentUser, {});
   var summary = buildControllerDashboardSummary_(salesOrders, salesOrderDetails, filter);
-  var statusSummary = buildControllerStatusSummary_(salesOrders);
-  var opsSummary = buildControllerOpsSummary_(salesOrders, deliveryOrders, billingData);
+  var statusSummary = buildControllerStatusSummary_(salesOrders, filter);
+  var opsSummary = buildControllerOpsSummary_(salesOrders, deliveryOrders, billingData, filter);
   var trend = buildControllerTrend7Days_(salesOrders, filter.today);
   var salesKpiSnapshot = buildControllerSalesKpiSnapshot_();
-  var topSales = buildControllerTopSales_(salesOrders);
-  var topCustomers = buildControllerTopCustomers_(salesOrders);
-  var topItems = buildControllerTopItems_(salesOrderDetails);
+  var topSales = buildControllerTopSales_(salesOrders, filter);
+  var topCustomers = buildControllerTopCustomers_(salesOrders, filter);
+  var topItems = buildControllerTopItems_(salesOrderDetails, salesOrders, filter);
   var fieldMonitoring = getFieldMonitoringDashboardData(userId, {
     tanggal: normalizeSheetDateToYmd_((filters || {}).monitoringDate || '') || filter.today
   });
@@ -39,15 +39,25 @@ function buildControllerDashboardFilter_(filters) {
   var now = getNowParts_().timestamp;
   var startOfWeek = getControllerStartOfWeek_(now);
   var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  var endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   var payload = filters || {};
+  var preset = String(payload.preset || '').trim() || 'month';
+  var startDate = normalizeSheetDateToYmd_(payload.startDate || '');
+  var endDate = normalizeSheetDateToYmd_(payload.endDate || '');
+
+  if (!startDate && !endDate && preset !== 'all') {
+    startDate = normalizeSheetDateToYmd_(startOfMonth);
+    endDate = normalizeSheetDateToYmd_(endOfMonth);
+  }
 
   return {
-    preset: String(payload.preset || '').trim() || 'today',
-    startDate: normalizeSheetDateToYmd_(payload.startDate || ''),
-    endDate: normalizeSheetDateToYmd_(payload.endDate || ''),
+    preset: preset,
+    startDate: startDate,
+    endDate: endDate,
     today: normalizeSheetDateToYmd_(now),
     weekStart: normalizeSheetDateToYmd_(startOfWeek),
-    monthStart: normalizeSheetDateToYmd_(startOfMonth)
+    monthStart: normalizeSheetDateToYmd_(startOfMonth),
+    monthEnd: normalizeSheetDateToYmd_(endOfMonth)
   };
 }
 
@@ -58,6 +68,7 @@ function buildControllerDashboardSummary_(salesOrders, salesOrderDetails, filter
   var today = String(filter.today || '').trim();
   var weekStart = String(filter.weekStart || '').trim();
   var monthStart = String(filter.monthStart || '').trim();
+  var monthEnd = String(filter.monthEnd || filter.today || '').trim();
 
   return {
     so_today: buildControllerOrderCount_(orders, today, today),
@@ -66,8 +77,8 @@ function buildControllerDashboardSummary_(salesOrders, salesOrderDetails, filter
     qty_today: buildControllerQtyTotal_(orders, detailQtyByNoSo, today, today),
     so_week: buildControllerOrderCount_(orders, weekStart, today),
     omzet_week: buildControllerOmzetTotal_(orders, weekStart, today),
-    so_month: buildControllerOrderCount_(orders, monthStart, today),
-    omzet_month: buildControllerOmzetTotal_(orders, monthStart, today)
+    so_month: buildControllerOrderCount_(orders, monthStart, monthEnd),
+    omzet_month: buildControllerOmzetTotal_(orders, monthStart, monthEnd)
   };
 }
 
@@ -253,7 +264,7 @@ function getControllerStartOfWeek_(dateValue) {
   return date;
 }
 
-function buildControllerStatusSummary_(salesOrders) {
+function buildControllerStatusSummary_(salesOrders, filter) {
   var statusConfig = [
     { key: 'draft', label: 'Draft' },
     { key: 'menunggu persetujuan', label: 'Menunggu Persetujuan' },
@@ -264,8 +275,9 @@ function buildControllerStatusSummary_(salesOrders) {
     { key: 'selesai', label: 'Selesai' }
   ];
   var counts = {};
+  var filteredOrders = filterControllerOrdersByDashboardRange_(salesOrders, filter);
 
-  (salesOrders || []).forEach(function(order) {
+  filteredOrders.forEach(function(order) {
     var statusKey = normalizeText_(order.status_order || '');
 
     if (!statusKey) {
@@ -284,15 +296,17 @@ function buildControllerStatusSummary_(salesOrders) {
   });
 }
 
-function buildControllerOpsSummary_(salesOrders, deliveryOrders, billingData) {
+function buildControllerOpsSummary_(salesOrders, deliveryOrders, billingData, filter) {
+  var filteredOrders = filterControllerOrdersByDashboardRange_(salesOrders, filter);
   var deliveryRows = Array.isArray(deliveryOrders) ? deliveryOrders : [];
+  var filteredDeliveryRows = filterControllerDeliveryByDashboardRange_(deliveryRows, filter);
   var billingSummary = billingData && billingData.billingSummary ? billingData.billingSummary : {};
 
   return {
-    ready_orders: countControllerOrdersByStatus_(salesOrders, 'siap kirim'),
-    sj_ready: countControllerDeliveryByStatus_(deliveryRows, 'siap kirim'),
-    sj_delivered: countControllerDeliveryByStatus_(deliveryRows, 'terkirim'),
-    sj_completed: countControllerDeliveryByStatus_(deliveryRows, 'selesai'),
+    ready_orders: countControllerOrdersByStatus_(filteredOrders, 'siap kirim'),
+    sj_ready: countControllerDeliveryByStatus_(filteredDeliveryRows, 'siap kirim'),
+    sj_delivered: countControllerDeliveryByStatus_(filteredDeliveryRows, 'terkirim'),
+    sj_completed: countControllerDeliveryByStatus_(filteredDeliveryRows, 'selesai'),
     unpaid: Number(billingSummary.belum_lunas || 0) + Number(billingSummary.sebagian || 0)
   };
 }
@@ -340,7 +354,8 @@ function buildControllerTrend7Days_(salesOrders, todayKey) {
   return rows;
 }
 
-function buildControllerTopSales_(salesOrders) {
+function buildControllerTopSales_(salesOrders, filter) {
+  var filteredOrders = filterControllerOrdersByDashboardRange_(salesOrders, filter);
   var salesUsers = getSheetData_(APP_CONFIG.SHEETS.MASTER_USER).filter(function(user) {
     return normalizeText_(user.role) === 'sales' &&
       normalizeText_(user.status_aktif || 'aktif') === 'aktif';
@@ -366,7 +381,7 @@ function buildControllerTopSales_(salesOrders) {
     return result;
   }, {});
 
-  (salesOrders || []).forEach(function(order) {
+  filteredOrders.forEach(function(order) {
     var salesId = String(order.sales_id || '').trim();
     var target = grouped[salesId];
 
@@ -393,10 +408,11 @@ function buildControllerTopSales_(salesOrders) {
   });
 }
 
-function buildControllerTopCustomers_(salesOrders) {
+function buildControllerTopCustomers_(salesOrders, filter) {
   var grouped = {};
+  var filteredOrders = filterControllerOrdersByDashboardRange_(salesOrders, filter);
 
-  (salesOrders || []).forEach(function(order) {
+  filteredOrders.forEach(function(order) {
     var customerKey = getControllerCustomerKey_(order);
     var customerId = String(order.customer_id || '').trim();
     var customerName = String(order.nama_customer_input || '').trim() || customerId || 'Tanpa Customer';
@@ -433,14 +449,15 @@ function buildControllerTopCustomers_(salesOrders) {
   }).slice(0, 5);
 }
 
-function buildControllerTopItems_(salesOrderDetails) {
+function buildControllerTopItems_(salesOrderDetails, salesOrders, filter) {
   var grouped = {};
+  var allowedNoSo = buildControllerNoSoSetByDashboardRange_(salesOrders, filter);
 
   (salesOrderDetails || []).forEach(function(detail) {
     var itemName = String(detail.nama_item || '').trim();
     var noSo = String(detail.no_so || '').trim();
 
-    if (!itemName) {
+    if (!itemName || !noSo || !allowedNoSo[noSo]) {
       return;
     }
 
@@ -476,6 +493,51 @@ function buildControllerTopItems_(salesOrderDetails) {
 
     return String(left.nama_item || '').localeCompare(String(right.nama_item || ''), 'id-ID');
   }).slice(0, 5);
+}
+
+function filterControllerOrdersByDashboardRange_(orders, filter) {
+  var safeFilter = filter || {};
+  return filterControllerOrdersByDateRange_(orders, safeFilter.startDate || '', safeFilter.endDate || '');
+}
+
+function filterControllerDeliveryByDashboardRange_(deliveryOrders, filter) {
+  var safeFilter = filter || {};
+  var startKey = String(safeFilter.startDate || '').trim();
+  var endKey = String(safeFilter.endDate || '').trim();
+
+  if (!startKey && !endKey) {
+    return Array.isArray(deliveryOrders) ? deliveryOrders : [];
+  }
+
+  return (deliveryOrders || []).filter(function(row) {
+    var deliveryDate = normalizeSheetDateToYmd_(row.tanggal_kirim || row.tanggal_cetak || '');
+
+    if (!deliveryDate) {
+      return false;
+    }
+
+    if (startKey && deliveryDate < startKey) {
+      return false;
+    }
+
+    if (endKey && deliveryDate > endKey) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function buildControllerNoSoSetByDashboardRange_(salesOrders, filter) {
+  return filterControllerOrdersByDashboardRange_(salesOrders, filter).reduce(function(result, order) {
+    var noSo = String(order.no_so || '').trim();
+
+    if (noSo) {
+      result[noSo] = true;
+    }
+
+    return result;
+  }, {});
 }
 
 function parseControllerDateKey_(value) {
