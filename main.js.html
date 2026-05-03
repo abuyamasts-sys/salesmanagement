@@ -9235,7 +9235,7 @@
     }
 
     if (!rows || !rows.length) {
-      body.innerHTML = '<tr><td colspan="4" class="empty-cell">Belum ada data.</td></tr>';
+      body.innerHTML = '<tr><td colspan="' + (mode === 'sales' ? '5' : '4') + '" class="empty-cell">Belum ada data.</td></tr>';
       renderControllerRankingMobile_(mobileContainer, rows, mode);
       return;
     }
@@ -9247,6 +9247,7 @@
         '<tr>' +
           '<td class="rank-cell">' + escapeHtml_(row.rank || '-') + '</td>' +
           '<td class="name-cell"><span class="controller-ranking-name">' + escapeHtml_(row.name || '-') + '</span></td>' +
+          (mode === 'sales' ? '<td>' + buildStatusBadge_(row.tipe_sales || '-') + '</td>' : '') +
           '<td class="metric-cell">' + escapeHtml_(thirdValue || '-') + '</td>' +
           '<td class="amount-cell">' + escapeHtml_(fourthValue || '-') + '</td>' +
         '</tr>';
@@ -9270,6 +9271,7 @@
       var thirdValue = mode === 'items' ? row.qty : row.so;
       var fourthLabel = mode === 'items' ? 'Order SO' : 'Omzet';
       var fourthValue = mode === 'items' ? row.order_count : row.omzet;
+      var typeMetric = mode === 'sales' ? buildControllerMobileMetric_('Tipe', row.tipe_sales || '-') : '';
 
       return '' +
         '<article class="controller-mobile-card">' +
@@ -9278,6 +9280,7 @@
             '<div class="controller-mobile-title">' + escapeHtml_(row.name || '-') + '</div>' +
           '</div>' +
           '<div class="controller-mobile-metric-grid">' +
+            typeMetric +
             buildControllerMobileMetric_(thirdLabel, thirdValue || '-') +
             buildControllerMobileMetric_(fourthLabel, fourthValue || '-') +
           '</div>' +
@@ -9419,6 +9422,7 @@
       return {
         rank: index + 1,
         name: row.sales_nama || row.sales_id || '-',
+        tipe_sales: row.tipe_sales || '-',
         so: formatNumber_(row.so_count || 0),
         omzet: formatCurrencyInput_(row.omzet || 0)
       };

@@ -368,6 +368,7 @@ function buildControllerTopSales_(salesOrders, filter) {
       sales_id: userId,
       sales_kode: salesCode,
       sales_nama: displayName,
+      tipe_sales: normalizeControllerSalesTypeLabel_(user.tipe_sales || ''),
       so_count: 0,
       omzet: 0
     };
@@ -446,7 +447,30 @@ function buildControllerTopCustomers_(salesOrders, filter) {
     }
 
     return String(left.nama_customer || '').localeCompare(String(right.nama_customer || ''), 'id-ID');
-  }).slice(0, 5);
+  }).slice(0, 10);
+}
+
+function normalizeControllerSalesTypeLabel_(value) {
+  var text = String(value || '').trim();
+  var normalized = normalizeText_(text);
+
+  if (!text) {
+    return 'Sales Tetap';
+  }
+
+  if (normalized.indexOf('slfm') === 0 || normalized.indexOf('slf') === 0) {
+    return 'Freelance / SLF';
+  }
+
+  if (normalized === 'freelance') {
+    return 'Freelance';
+  }
+
+  if (normalized === 'internal' || normalized === 'tetap' || normalized === 'sales tetap') {
+    return 'Sales Tetap';
+  }
+
+  return text;
 }
 
 function buildControllerTopItems_(salesOrderDetails, salesOrders, filter) {
