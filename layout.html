@@ -1486,7 +1486,7 @@
             <div class="panel-header">
               <div>
                 <h2>CS/Admin</h2>
-                <p class="panel-subtitle">Kelola order siap kirim, buat surat jalan, dan update status pengiriman.</p>
+                <p class="panel-subtitle">Kelola order operasional, buat surat jalan, dan update status pengiriman.</p>
               </div>
               <div class="inline-actions">
                 <button type="button" class="primary-btn" id="openAgentModalBtn">Input Pengiriman</button>
@@ -1496,9 +1496,9 @@
 
             <div class="summary-grid">
               <article class="summary-card">
-                <span class="summary-label">Order Siap Kirim</span>
+                <span class="summary-label">Order Operasional</span>
                 <strong class="summary-value" id="summaryReadyOrders">0</strong>
-                <span class="summary-note">Menunggu dibuat surat jalan</span>
+                <span class="summary-note">Siap SJ atau menunggu approval</span>
               </article>
               <article class="summary-card">
                 <span class="summary-label">SJ Siap Kirim</span>
@@ -1526,7 +1526,7 @@
             <section class="admin-view-panel active" id="admin-view-operations">
               <div class="section-header section-header-inline ready-order-header">
                 <div>
-                  <h3 class="section-title compact">Order Siap Kirim</h3>
+                  <h3 class="section-title compact">Order Operasional</h3>
                   <p class="panel-subtitle">Ketik minimal 2 huruf untuk mencari customer atau No SO dengan cepat.</p>
                 </div>
                 <div class="ready-order-search-wrap">
@@ -2123,11 +2123,30 @@
             <span>Total Final</span>
             <input id="verificationTotalFinal" type="text" readonly />
           </label>
+          <label class="field">
+            <span>Nominal Transfer Diterima</span>
+            <input id="verificationPaymentReceived" type="number" min="0" step="1" oninput="updateDeliveryVerificationTotals_()" />
+          </label>
+          <label class="field">
+            <span>Selisih Pembayaran</span>
+            <input id="verificationPaymentDiff" type="text" readonly />
+          </label>
+          <label class="field">
+            <span>Status Pembayaran</span>
+            <input id="verificationPaymentStatus" type="text" readonly />
+          </label>
         </div>
+
+        <div class="sales-info-note hidden" id="verificationPaymentNotice" style="margin-top:12px;"></div>
 
         <label class="field" style="margin-top:16px;">
           <span>Catatan Verifikasi CS</span>
           <textarea id="verificationNote" rows="3" placeholder="Catatan koreksi qty, selisih rupiah, retur, atau alasan perubahan"></textarea>
+        </label>
+
+        <label class="field" style="margin-top:16px;">
+          <span>Catatan Pembayaran</span>
+          <textarea id="verificationPaymentNote" rows="2" placeholder="Wajib diisi jika nominal transfer berbeda dari total final"></textarea>
         </label>
 
         <div class="action-row" style="margin-top:16px;">

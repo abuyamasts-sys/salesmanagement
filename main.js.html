@@ -2090,10 +2090,22 @@
   }
 
   function buildApproverOrderCellHtml_(row) {
+    var paymentLines = [];
+
+    if (String(row.status_persetujuan_pembayaran || '').trim()) {
+      paymentLines.push('<div class="approver-meta-line"><strong>Status Bayar:</strong> ' + escapeHtml_(row.status_persetujuan_pembayaran) + '</div>');
+    }
+
+    if (Number(row.nominal_transfer_diterima || 0) > 0) {
+      paymentLines.push('<div class="approver-meta-line"><strong>Transfer:</strong> Rp ' + escapeHtml_(formatNumber_(row.nominal_transfer_diterima || 0)) + '</div>');
+      paymentLines.push('<div class="approver-meta-line"><strong>Selisih:</strong> Rp ' + escapeHtml_(formatNumber_(row.selisih_pembayaran || 0)) + '</div>');
+    }
+
     return '' +
       '<div class="approver-order-cell">' +
         buildOrderDetailCellHtml_(row) +
         '<div class="approver-order-total"><strong>Total:</strong> Rp ' + escapeHtml_(formatNumber_(row.total || 0)) + '</div>' +
+        (paymentLines.length ? '<div class="approver-meta">' + paymentLines.join('') + '</div>' : '') +
       '</div>';
   }
 
@@ -2199,8 +2211,8 @@
     orderedRows = getFilteredReadyOrders_().slice().sort(function(left, right) {
       var leftStatus = getAdminReadyOrderDisplayStatus_(left);
       var rightStatus = getAdminReadyOrderDisplayStatus_(right);
-      var leftPriority = normalizeSearchText_(leftStatus) === 'pending kirim' ? 0 : 1;
-      var rightPriority = normalizeSearchText_(rightStatus) === 'pending kirim' ? 0 : 1;
+      var leftPriority = getAdminReadyOrderPriority_(leftStatus);
+      var rightPriority = getAdminReadyOrderPriority_(rightStatus);
       var leftDate = normalizeDateKey_(left && left.tanggal_kirim_rencana) || '9999-12-31';
       var rightDate = normalizeDateKey_(right && right.tanggal_kirim_rencana) || '9999-12-31';
 
@@ -2251,12 +2263,7 @@
           '<td>' + escapeHtml_(getOrderQtyLabel_(row)) + '</td>' +
           '<td>' + buildStatusBadge_(displayStatus) + '</td>' +
           '<td>' + formatNumber_(row.total_order || row.total) + '</td>' +
-          '<td><div class="ready-order-actions">' +
-            '<button type="button" class="danger-btn" onclick="openCancelSalesOrderModal(\'' + escapeJs_(noSo) + '\')">Batalkan SO</button>' +
-            '<button type="button" class="ghost-btn" onclick="openCsRevisionModal(\'' + escapeJs_(noSo) + '\')">Revisi CS</button>' +
-            '<button type="button" class="preview-btn" onclick="handlePreviewSuratJalan(\'' + escapeJs_(noSo) + '\')">Preview</button>' +
-            '<button type="button" class="approve-btn" onclick="handleCreateSuratJalan(\'' + escapeJs_(noSo) + '\')">Buat SJ</button>' +
-          '</div></td>' +
+          '<td>' + buildReadyOrderActionsHtml_(row, noSo) + '</td>' +
         '</tr>';
     }).join('');
 
@@ -2285,6 +2292,39 @@
     }
 
     return statusOrder || '-';
+  }
+
+  function getAdminReadyOrderPriority_(status) {
+    var normalizedStatus = normalizeSearchText_(status);
+
+    if (normalizedStatus === 'menunggu persetujuan') {
+      return 0;
+    }
+
+    if (normalizedStatus === 'pending kirim') {
+      return 1;
+    }
+
+    return 2;
+  }
+
+  function buildReadyOrderActionsHtml_(row, noSo) {
+    var statusOrder = normalizeSearchText_(row && row.status_order);
+    var needsApproval = statusOrder === 'menunggu persetujuan' ||
+      normalizeSearchText_(row && row.butuh_persetujuan) === 'ya';
+    var actions = [
+      '<button type="button" class="danger-btn" onclick="openCancelSalesOrderModal(\'' + escapeJs_(noSo) + '\')">Batalkan SO</button>',
+      '<button type="button" class="ghost-btn" onclick="openCsRevisionModal(\'' + escapeJs_(noSo) + '\')">Revisi CS</button>'
+    ];
+
+    if (needsApproval) {
+      actions.push('<span class="ready-order-waiting">Menunggu Approval</span>');
+    } else {
+      actions.push('<button type="button" class="preview-btn" onclick="handlePreviewSuratJalan(\'' + escapeJs_(noSo) + '\')">Preview</button>');
+      actions.push('<button type="button" class="approve-btn" onclick="handleCreateSuratJalan(\'' + escapeJs_(noSo) + '\')">Buat SJ</button>');
+    }
+
+    return '<div class="ready-order-actions">' + actions.join('') + '</div>';
   }
 
   function getReadyOrderPageTotal_() {
@@ -2417,6 +2457,7 @@
       var noSo = String(row.no_so || '');
       var actions = [];
       var statusVerifikasi = String(row.status_verifikasi_cs || 'Belum Dicek');
+      var statusPersetujuanPembayaran = String(row.status_persetujuan_pembayaran || '').trim();
 
       if (String(row.status_kirim || '') === 'Siap Kirim') {
         actions.push('<button type="button" class="approve-btn" onclick="handleMarkDelivered(\'' + escapeJs_(noSo) + '\')">Terkirim</button>');
@@ -2425,8 +2466,12 @@
       if (String(row.status_kirim || '') === 'Terkirim') {
         actions.push('<button type="button" class="ghost-btn" onclick="openDeliveryVerification(\'' + escapeJs_(noSo) + '\')">Verifikasi CS</button>');
 
-        if (statusVerifikasi === 'Sudah Dicek') {
+        if (statusVerifikasi === 'Sudah Dicek' && ['Menunggu Persetujuan', 'Ditolak', 'Kurang Bayar'].indexOf(statusPersetujuanPembayaran) === -1) {
           actions.push('<button type="button" class="ghost-btn" onclick="handleCompleteOrder(\'' + escapeJs_(noSo) + '\')">Selesai</button>');
+        } else if (statusVerifikasi === 'Sudah Dicek' && statusPersetujuanPembayaran === 'Menunggu Persetujuan') {
+          actions.push('<div class="sales-info-note">Silahkan meminta approval approver untuk menyelesaikan transaksi.</div>');
+        } else if (statusVerifikasi === 'Sudah Dicek') {
+          actions.push('<div class="sales-info-note">Transaksi belum bisa diselesaikan. Cek status pembayaran.</div>');
         }
       }
 
@@ -3484,6 +3529,8 @@
     setText_('verificationCustomer', order.nama_customer || order.nama_customer_input || '-');
     setText_('verificationStatus', order.status_verifikasi_cs || 'Belum Dicek');
     setFieldValue_('verificationNote', order.catatan_verifikasi_cs || '');
+    setFieldValue_('verificationPaymentReceived', String(Number(order.nominal_transfer_diterima || order.total_final || order.total || 0)));
+    setFieldValue_('verificationPaymentNote', order.catatan_pembayaran_cs || '');
 
     if (!tbody) {
       return;
@@ -3551,6 +3598,51 @@
     setFieldValue_('verificationSubtotalFinal', formatCurrencyInput_(totals.subtotal));
     setFieldValue_('verificationDiskonFinal', formatCurrencyInput_(totals.diskon));
     setFieldValue_('verificationTotalFinal', formatCurrencyInput_(totals.total));
+    updateDeliveryVerificationPaymentSummary_(totals.total);
+  }
+
+  function updateDeliveryVerificationPaymentSummary_(totalFinal) {
+    var nominalTransfer = Number(getFieldValue_('verificationPaymentReceived') || 0);
+    var selisih = nominalTransfer - Number(totalFinal || 0);
+    var status = resolveVerificationPaymentStatus_(selisih);
+    var notice = document.getElementById('verificationPaymentNotice');
+
+    setFieldValue_('verificationPaymentDiff', formatCurrencyInput_(selisih));
+    setFieldValue_('verificationPaymentStatus', status);
+
+    if (!notice) {
+      return;
+    }
+
+    if (selisih > 2000) {
+      notice.textContent = 'Silahkan meminta approval approver untuk menyelesaikan transaksi.';
+      notice.classList.remove('hidden');
+      return;
+    }
+
+    if (selisih < 0) {
+      notice.textContent = 'Nominal transfer lebih kecil dari total final. Transaksi belum bisa diselesaikan.';
+      notice.classList.remove('hidden');
+      return;
+    }
+
+    if (selisih > 0) {
+      notice.textContent = 'Lebih bayar sampai Rp 2.000 cukup dicatat oleh CS.';
+      notice.classList.remove('hidden');
+      return;
+    }
+
+    notice.textContent = '';
+    notice.classList.add('hidden');
+  }
+
+  function resolveVerificationPaymentStatus_(selisih) {
+    var diff = Number(selisih || 0);
+
+    if (diff < 0) return 'Kurang Bayar';
+    if (diff > 2000) return 'Menunggu Approval';
+    if (diff > 0) return 'Lebih Bayar Toleransi';
+    return 'Sesuai';
   }
 
   function collectDeliveryVerificationPayload_() {
@@ -3574,7 +3666,9 @@
     return {
       no_so: appState.currentDeliveryVerificationNoSo,
       items: items,
-      catatan_verifikasi_cs: getFieldValue_('verificationNote')
+      catatan_verifikasi_cs: getFieldValue_('verificationNote'),
+      nominal_transfer_diterima: Number(getFieldValue_('verificationPaymentReceived') || 0),
+      catatan_pembayaran_cs: getFieldValue_('verificationPaymentNote')
     };
   }
 
@@ -3591,7 +3685,11 @@
     google.script.run
       .withSuccessHandler(function(result) {
         setStatusText_('Verifikasi CS berhasil disimpan');
-        renderResult_('Verifikasi CS untuk order ' + result.no_so + ' berhasil disimpan. Tombol Selesai sekarang aktif.', false);
+        if (result && result.requires_payment_approval) {
+          renderResult_('Verifikasi CS untuk order ' + result.no_so + ' berhasil disimpan. Silahkan meminta approval approver untuk menyelesaikan transaksi.', false);
+        } else {
+          renderResult_('Verifikasi CS untuk order ' + result.no_so + ' berhasil disimpan. Tombol Selesai sekarang aktif.', false);
+        }
         closeDeliveryVerificationModal_();
         loadAdminOperationsData_();
       })

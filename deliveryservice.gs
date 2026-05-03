@@ -441,6 +441,12 @@ function verifyDeliveredOrder(noSo, userId, payload) {
   var detailMap = {};
   var totals;
   var now;
+  var nominalTransfer;
+  var selisihPembayaran;
+  var catatanPembayaran;
+  var statusPersetujuanPembayaran;
+  var paymentApprovalReason;
+  var pendingApproval;
 
   if (!suratJalan) {
     throw new Error('Surat jalan tidak ditemukan untuk no_so: ' + noSo);
@@ -522,6 +528,25 @@ function verifyDeliveredOrder(noSo, userId, payload) {
   });
 
   now = getNowParts_();
+  nominalTransfer = Number(verificationPayload.nominal_transfer_diterima);
+  if (isNaN(nominalTransfer)) {
+    nominalTransfer = totals.total;
+  }
+  if (nominalTransfer < 0) {
+    throw new Error('Nominal transfer diterima tidak boleh negatif.');
+  }
+
+  selisihPembayaran = nominalTransfer - totals.total;
+  catatanPembayaran = String(verificationPayload.catatan_pembayaran_cs || verificationPayload.catatan_verifikasi_cs || '').trim();
+
+  if (selisihPembayaran !== 0 && !catatanPembayaran) {
+    throw new Error('Catatan pembayaran wajib diisi jika nominal transfer berbeda dari total final.');
+  }
+
+  statusPersetujuanPembayaran = determinePaymentApprovalStatus_(selisihPembayaran);
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.APPROVAL_ORDER, APP_CONFIG.HEADERS.APPROVAL_ORDER);
+  pendingApproval = findPendingApprovalByNoSo_(noSo);
 
   updateRowByKey_(APP_CONFIG.SHEETS.SALES_ORDER, 'no_so', noSo, {
     subtotal_final: totals.subtotal,
@@ -530,8 +555,30 @@ function verifyDeliveredOrder(noSo, userId, payload) {
     status_verifikasi_cs: 'Sudah Dicek',
     diverifikasi_oleh: userId,
     tanggal_verifikasi_cs: now.tanggal + ' ' + now.jam,
-    catatan_verifikasi_cs: verificationPayload.catatan_verifikasi_cs || ''
+    catatan_verifikasi_cs: verificationPayload.catatan_verifikasi_cs || '',
+    nominal_transfer_diterima: nominalTransfer,
+    selisih_pembayaran: selisihPembayaran,
+    status_persetujuan_pembayaran: statusPersetujuanPembayaran,
+    catatan_pembayaran_cs: catatanPembayaran,
+    status_order: statusPersetujuanPembayaran === 'Menunggu Persetujuan' ? 'Menunggu Persetujuan' : resolvePostVerificationOrderStatus_(salesOrder, pendingApproval),
+    butuh_persetujuan: statusPersetujuanPembayaran === 'Menunggu Persetujuan' ? 'Ya' : resolvePostVerificationApprovalFlag_(salesOrder, pendingApproval),
+    alasan_hold: statusPersetujuanPembayaran === 'Menunggu Persetujuan' ? 'Selisih pembayaran lebih dari Rp 2.000' : resolvePostVerificationHoldReason_(salesOrder, pendingApproval)
   });
+
+  if (statusPersetujuanPembayaran === 'Menunggu Persetujuan') {
+    if (!pendingApproval) {
+      paymentApprovalReason = buildPaymentApprovalReason_(totals.total, nominalTransfer, selisihPembayaran, catatanPembayaran);
+      createApprovalOrder_(noSo, userId, paymentApprovalReason);
+      logStatusOrder_(noSo, salesOrder.status_order, 'Menunggu Persetujuan', userId, paymentApprovalReason);
+    }
+  } else if (pendingApproval && isPaymentApprovalReason_(pendingApproval.alasan_approval)) {
+    updateRowByKey_(APP_CONFIG.SHEETS.APPROVAL_ORDER, 'approval_id', pendingApproval.approval_id, {
+      status_approval: 'Ditolak',
+      diputuskan_oleh: userId,
+      tanggal_keputusan: now.tanggal + ' ' + now.jam,
+      catatan_approval: 'Ditutup otomatis karena CS mengubah nominal transfer sehingga tidak perlu approval selisih pembayaran.'
+    });
+  }
 
   if (normalizeText_(salesOrder.channel_sales) === 'slf') {
     updateSalesOrderCommissionStatus_(noSo, 'Menunggu Pembayaran', {
@@ -545,7 +592,11 @@ function verifyDeliveredOrder(noSo, userId, payload) {
     status_verifikasi_cs: 'Sudah Dicek',
     subtotal_final: totals.subtotal,
     diskon_final: totals.diskon,
-    total_final: totals.total
+    total_final: totals.total,
+    nominal_transfer_diterima: nominalTransfer,
+    selisih_pembayaran: selisihPembayaran,
+    status_persetujuan_pembayaran: statusPersetujuanPembayaran,
+    requires_payment_approval: statusPersetujuanPembayaran === 'Menunggu Persetujuan'
   };
 }
 
@@ -561,6 +612,18 @@ function completeOrder(noSo, userId, catatanKirim) {
 
   if (String(salesOrder.status_verifikasi_cs || '').trim() !== 'Sudah Dicek') {
     throw new Error('Order belum bisa selesai. CS wajib simpan verifikasi qty dan nominal final terlebih dahulu.');
+  }
+
+  if (String(salesOrder.status_persetujuan_pembayaran || '').trim() === 'Menunggu Persetujuan') {
+    throw new Error('Transaksi belum bisa diselesaikan. Silahkan meminta approval approver untuk menyelesaikan transaksi.');
+  }
+
+  if (String(salesOrder.status_persetujuan_pembayaran || '').trim() === 'Ditolak') {
+    throw new Error('Transaksi belum bisa diselesaikan karena approval selisih pembayaran ditolak.');
+  }
+
+  if (String(salesOrder.status_persetujuan_pembayaran || '').trim() === 'Kurang Bayar') {
+    throw new Error('Transaksi belum bisa diselesaikan karena nominal transfer lebih kecil dari total final.');
   }
 
   result = updateDeliveryOrderStatus_(noSo, userId, 'Selesai', 'Selesai', catatanKirim);
@@ -584,6 +647,63 @@ function completeOrder(noSo, userId, catatanKirim) {
   result.status_export_kledo = 'Siap Export';
   result.tanggal_selesai = now.tanggal;
   return result;
+}
+
+function determinePaymentApprovalStatus_(selisihPembayaran) {
+  var diff = Number(selisihPembayaran || 0);
+
+  if (diff < 0) {
+    return 'Kurang Bayar';
+  }
+
+  if (diff > 2000) {
+    return 'Menunggu Persetujuan';
+  }
+
+  if (diff > 0) {
+    return 'Lebih Bayar Disetujui Otomatis';
+  }
+
+  return 'Sesuai';
+}
+
+function buildPaymentApprovalReason_(totalFinal, nominalTransfer, selisihPembayaran, catatanPembayaran) {
+  return [
+    'Approval selisih pembayaran',
+    'Total final Rp ' + formatNumberServer_(totalFinal),
+    'Transfer diterima Rp ' + formatNumberServer_(nominalTransfer),
+    'Lebih bayar Rp ' + formatNumberServer_(selisihPembayaran),
+    'Catatan CS: ' + String(catatanPembayaran || '-').trim()
+  ].join(' | ');
+}
+
+function isPaymentApprovalReason_(reason) {
+  return normalizeText_(reason || '').indexOf('approval selisih pembayaran') !== -1;
+}
+
+function resolvePostVerificationOrderStatus_(salesOrder, pendingApproval) {
+  if (pendingApproval && isPaymentApprovalReason_(pendingApproval.alasan_approval) &&
+    normalizeText_(salesOrder.status_order) === 'menunggu persetujuan') {
+    return 'Terkirim';
+  }
+
+  return salesOrder.status_order;
+}
+
+function resolvePostVerificationApprovalFlag_(salesOrder, pendingApproval) {
+  if (pendingApproval && isPaymentApprovalReason_(pendingApproval.alasan_approval)) {
+    return 'Tidak';
+  }
+
+  return salesOrder.butuh_persetujuan;
+}
+
+function resolvePostVerificationHoldReason_(salesOrder, pendingApproval) {
+  if (pendingApproval && isPaymentApprovalReason_(pendingApproval.alasan_approval)) {
+    return '';
+  }
+
+  return salesOrder.alasan_hold;
 }
 
 function generateKledoExportBatchFile(currentUser, options) {

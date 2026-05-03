@@ -28,6 +28,7 @@ function testRejectLatestWaitingOrder() {
 
 function decideApproval_(noSo, approverId, statusApproval, statusOrderBaru, catatanApproval) {
   var approval = findApprovalByNoSo_(noSo);
+  var decisionTarget;
 
   if (!approval) {
     throw new Error('Approval order tidak ditemukan untuk no_so: ' + noSo);
@@ -50,6 +51,8 @@ function decideApproval_(noSo, approverId, statusApproval, statusOrderBaru, cata
     throw new Error('Catatan approval wajib diisi.');
   }
 
+  decisionTarget = resolveApprovalDecisionTarget_(approval, salesOrder, statusApproval, statusOrderBaru);
+
   var updatedApproval = updateRowByKey_(APP_CONFIG.SHEETS.APPROVAL_ORDER, 'approval_id', approval.approval_id, {
     status_approval: statusApproval,
     diputuskan_oleh: approverId,
@@ -57,14 +60,11 @@ function decideApproval_(noSo, approverId, statusApproval, statusOrderBaru, cata
     catatan_approval: note
   });
 
-  var updatedSalesOrder = updateRowByKey_(APP_CONFIG.SHEETS.SALES_ORDER, 'no_so', noSo, {
-    status_order: statusOrderBaru,
-    butuh_persetujuan: statusApproval === 'Disetujui' ? 'Tidak' : salesOrder.butuh_persetujuan
-  });
+  var updatedSalesOrder = updateRowByKey_(APP_CONFIG.SHEETS.SALES_ORDER, 'no_so', noSo, decisionTarget.updates);
 
-  logStatusOrder_(noSo, salesOrder.status_order, statusOrderBaru, approverId, note);
+  logStatusOrder_(noSo, salesOrder.status_order, decisionTarget.status_order, approverId, note);
 
-  if (normalizeText_(statusOrderBaru) === 'siap kirim') {
+  if (normalizeText_(decisionTarget.status_order) === 'siap kirim') {
     try {
       var nowForKpi = getNowParts_();
       recordKpiLogForOrderIfEligible_(noSo, approverId, nowForKpi.tanggal + ' ' + nowForKpi.jam);
@@ -78,6 +78,38 @@ function decideApproval_(noSo, approverId, statusApproval, statusOrderBaru, cata
     no_so: noSo,
     status_approval: updatedApproval.status_approval,
     status_order: updatedSalesOrder.status_order
+  };
+}
+
+function resolveApprovalDecisionTarget_(approval, salesOrder, statusApproval, defaultStatusOrder) {
+  var reason = normalizeText_(approval.alasan_approval || '');
+  var isPaymentApproval = reason.indexOf('approval selisih pembayaran') !== -1;
+  var targetStatus = defaultStatusOrder;
+  var updates;
+
+  if (isPaymentApproval) {
+    targetStatus = 'Terkirim';
+    updates = {
+      status_order: targetStatus,
+      butuh_persetujuan: 'Tidak',
+      alasan_hold: statusApproval === 'Disetujui' ? '' : 'Approval selisih pembayaran ditolak',
+      status_persetujuan_pembayaran: statusApproval === 'Disetujui' ? 'Disetujui' : 'Ditolak'
+    };
+
+    return {
+      status_order: targetStatus,
+      updates: updates
+    };
+  }
+
+  updates = {
+    status_order: targetStatus,
+    butuh_persetujuan: statusApproval === 'Disetujui' ? 'Tidak' : salesOrder.butuh_persetujuan
+  };
+
+  return {
+    status_order: targetStatus,
+    updates: updates
   };
 }
 

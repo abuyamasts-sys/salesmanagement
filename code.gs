@@ -182,6 +182,10 @@ function getApproverDashboardData(userId) {
         qty: order.qty_summary || order.qty || '',
         details: order.details || [],
         total: order.total_order || order.total || '',
+        nominal_transfer_diterima: order.nominal_transfer_diterima || '',
+        selisih_pembayaran: order.selisih_pembayaran || '',
+        status_persetujuan_pembayaran: order.status_persetujuan_pembayaran || '',
+        catatan_pembayaran_cs: order.catatan_pembayaran_cs || '',
         sales_nama: order.sales_nama || '',
         status_order: order.status_order || '',
         status_customer: customer ? (customer.status_customer || '') : '',
@@ -378,8 +382,7 @@ function getAdminDashboardData(userId) {
   });
 
   var readyOrders = salesOrders.filter(function(row) {
-    var statusOrder = normalizeText_(row.status_order);
-    return statusOrder === 'siap kirim' || statusOrder === 'pending kirim';
+    return isAdminOperationalOrderStatus_(row.status_order);
   }).filter(function(row) {
     return !suratJalanByNoSo[String(row.no_so || '').trim()];
   }).map(function(order) {
@@ -472,8 +475,7 @@ function getAdminOperationsData(userId, options) {
   }) : filteredDeliveryOrders;
 
   readyOrders = salesOrders.filter(function(row) {
-    var statusOrder = normalizeText_(row.status_order);
-    return statusOrder === 'siap kirim' || statusOrder === 'pending kirim';
+    return isAdminOperationalOrderStatus_(row.status_order);
   }).filter(function(row) {
     return !suratJalanByNoSo[String(row.no_so || '').trim()];
   });
@@ -499,6 +501,13 @@ function getAdminOperationsData(userId, options) {
       return buildAdminDeliveryListRow_(row, salesOrderByNoSo[noSoKey] || {});
     })
   });
+}
+
+function isAdminOperationalOrderStatus_(statusOrder) {
+  var normalizedStatus = normalizeText_(statusOrder);
+  return normalizedStatus === 'siap kirim' ||
+    normalizedStatus === 'pending kirim' ||
+    normalizedStatus === 'menunggu persetujuan';
 }
 
 function getApproverExportDataFromDashboard(userId, formData) {
@@ -545,6 +554,7 @@ function buildAdminReadyOrderListRow_(order, rawDetails) {
     total_order: row.total_order || row.total || 0,
     total_final: row.total_final || row.total || 0,
     status_order: row.status_order || '',
+    butuh_persetujuan: row.butuh_persetujuan || '',
     catatan: row.catatan || '',
     alasan_hold: row.alasan_hold || '',
     alasan_batal: row.alasan_batal || ''
@@ -568,7 +578,11 @@ function buildAdminDeliveryListRow_(suratJalan, order) {
     status_verifikasi_cs: sourceOrder.status_verifikasi_cs || 'Belum Dicek',
     diverifikasi_oleh: sourceOrder.diverifikasi_oleh || '',
     tanggal_verifikasi_cs: sourceOrder.tanggal_verifikasi_cs || '',
-    catatan_verifikasi_cs: sourceOrder.catatan_verifikasi_cs || ''
+    catatan_verifikasi_cs: sourceOrder.catatan_verifikasi_cs || '',
+    nominal_transfer_diterima: sourceOrder.nominal_transfer_diterima || '',
+    selisih_pembayaran: sourceOrder.selisih_pembayaran || '',
+    status_persetujuan_pembayaran: sourceOrder.status_persetujuan_pembayaran || '',
+    catatan_pembayaran_cs: sourceOrder.catatan_pembayaran_cs || ''
   };
 }
 
@@ -598,6 +612,10 @@ function getDeliveryVerificationData_(noSo) {
     diverifikasi_oleh: order.diverifikasi_oleh || '',
     tanggal_verifikasi_cs: order.tanggal_verifikasi_cs || '',
     catatan_verifikasi_cs: order.catatan_verifikasi_cs || '',
+    nominal_transfer_diterima: order.nominal_transfer_diterima || order.total_final || order.total || '',
+    selisih_pembayaran: order.selisih_pembayaran || '',
+    status_persetujuan_pembayaran: order.status_persetujuan_pembayaran || '',
+    catatan_pembayaran_cs: order.catatan_pembayaran_cs || '',
     details: order.details || []
   };
 }
@@ -924,7 +942,9 @@ function verifyDeliveredOrderFromDashboard(userId, formData) {
 
   return verifyDeliveredOrder(formData.no_so, currentUser.user_id, {
     items: Array.isArray(formData.items) ? formData.items : [],
-    catatan_verifikasi_cs: formData.catatan_verifikasi_cs || ''
+    catatan_verifikasi_cs: formData.catatan_verifikasi_cs || '',
+    nominal_transfer_diterima: formData.nominal_transfer_diterima,
+    catatan_pembayaran_cs: formData.catatan_pembayaran_cs || ''
   });
 }
 

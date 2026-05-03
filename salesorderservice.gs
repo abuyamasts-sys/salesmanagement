@@ -51,6 +51,10 @@ function submitSalesOrder(payload) {
     diverifikasi_oleh: '',
     tanggal_verifikasi_cs: '',
     catatan_verifikasi_cs: '',
+    nominal_transfer_diterima: totals.total_order,
+    selisih_pembayaran: 0,
+    status_persetujuan_pembayaran: '',
+    catatan_pembayaran_cs: '',
     status_export_kledo: 'Belum Siap',
     tanggal_export_kledo: '',
     diekspor_oleh: '',
@@ -1174,7 +1178,11 @@ function buildSalesOrderClientRowFromDetails_(order, rawDetails) {
     tanggal_selesai: source.tanggal_selesai || '',
     diverifikasi_oleh: source.diverifikasi_oleh || '',
     tanggal_verifikasi_cs: source.tanggal_verifikasi_cs || '',
-    catatan_verifikasi_cs: source.catatan_verifikasi_cs || ''
+    catatan_verifikasi_cs: source.catatan_verifikasi_cs || '',
+    nominal_transfer_diterima: Number(source.nominal_transfer_diterima || 0),
+    selisih_pembayaran: Number(source.selisih_pembayaran || 0),
+    status_persetujuan_pembayaran: source.status_persetujuan_pembayaran || '',
+    catatan_pembayaran_cs: source.catatan_pembayaran_cs || ''
   });
 }
 
@@ -1217,7 +1225,11 @@ function buildSalesOrderClientRow_(order) {
     tanggal_selesai: source.tanggal_selesai || '',
     diverifikasi_oleh: source.diverifikasi_oleh || '',
     tanggal_verifikasi_cs: source.tanggal_verifikasi_cs || '',
-    catatan_verifikasi_cs: source.catatan_verifikasi_cs || ''
+    catatan_verifikasi_cs: source.catatan_verifikasi_cs || '',
+    nominal_transfer_diterima: Number(source.nominal_transfer_diterima || 0),
+    selisih_pembayaran: Number(source.selisih_pembayaran || 0),
+    status_persetujuan_pembayaran: source.status_persetujuan_pembayaran || '',
+    catatan_pembayaran_cs: source.catatan_pembayaran_cs || ''
   });
 }
 
