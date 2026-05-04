@@ -36,6 +36,7 @@
     approverExportFilterDate: '',
     approverExportStartDate: '',
     approverExportEndDate: '',
+    approverExportPage: 1,
     readyOrders: [],
     readyOrderSearch: '',
     deliveryOrders: [],
@@ -89,6 +90,7 @@
   var LAST_ASYNC_STATUS_TIMER = null;
   var KPI_SAVE_ASYNC_STATUS_TIMER = null;
   var SALES_KPI_ORDERS_PAGE_SIZE = 10;
+  var APPROVER_EXPORT_PAGE_SIZE = 10;
   var READY_ORDER_PAGE_SIZE = 10;
   var DELIVERY_PAGE_SIZE = 10;
   var SALES_HISTORY_PAGE_SIZE = 10;
@@ -423,6 +425,7 @@
     window.handleReadyOrderPageChange_ = handleReadyOrderPageChange_;
     window.handleSalesHistoryPageChange_ = handleSalesHistoryPageChange_;
     window.handleBackupHistoryPageChange_ = handleBackupHistoryPageChange_;
+    window.handleApproverExportPageChange_ = handleApproverExportPageChange_;
     window.handleRemoveCsRevisionItem_ = handleRemoveCsRevisionItem_;
     window.handleCsRevisionLineInput_ = handleCsRevisionLineInput_;
     window.handleBillingPartialPay_ = handleBillingPartialPay_;
@@ -688,6 +691,8 @@
 
       google.script.run
         .withSuccessHandler(function(result) {
+          var successMessage = result && result.message ? result.message : 'Aktivitas tersimpan.';
+          var updateCount = result && result.today ? Number(result.today.total_update_lokasi || 0) : 0;
           setFieldActivityButtonsDisabled_(false);
           appState.fieldActivity = {
             config: appState.fieldActivity && appState.fieldActivity.config ? appState.fieldActivity.config : null,
@@ -696,7 +701,13 @@
           };
           renderSalesFieldActivity_();
           setStatusText_('Aktivitas tersimpan');
-          renderResult_(result && result.message ? result.message : 'Aktivitas tersimpan.', false);
+          renderResult_(successMessage, false);
+          if (activityType === 'Update Lokasi') {
+            showToast_('Update lokasi ke-' + formatNumber_(updateCount || 1) + ' berhasil dicatat.', 'success', 'Lokasi tersimpan');
+            setText_('salesActivityNote', 'Lokasi berhasil dicatat. Total update lokasi hari ini: ' + formatNumber_(updateCount || 1) + '.');
+          } else {
+            showToast_(successMessage, 'success', 'Aktivitas tersimpan');
+          }
           if (activityType === 'Catat Kegiatan') {
             setFieldValue_('fieldWorkResult', '');
           }
@@ -806,18 +817,25 @@
     var statusBadge = document.getElementById('salesActivityStatusBadge');
     var timeline = document.getElementById('salesActivityTimeline');
     var hasStarted = slots.some(function(slot) {
-      return slot.target === '08:00' && slot.status !== 'Tidak Update';
+      return slot.type === 'Mulai Kerja' && slot.status !== 'Tidak Update';
     });
     var hasEnded = slots.some(function(slot) {
       return slot.type === 'Selesai Kerja' && slot.status !== 'Tidak Update';
     });
-    var fallbackLabels = slots.length
-      ? slots.map(function(slot) { return slot.label || slot.target || '-'; })
-      : (config.startTime ? [config.startTime].concat(config.updateTimes || []).concat([config.endTime]) : ['08:00', '10:00', '12:00', '14:00', '16:00']);
+    var totalUpdateLokasi = Number(today.total_update_lokasi || 0);
+    var totalKegiatan = Number(today.total_catatan_kegiatan_sales || 0);
+    var lastLocationTime = today.jam_lokasi_terakhir || '';
+    var fieldSummary = [
+      { label: 'Mulai', value: today.jam_mulai || '-' },
+      { label: 'Update', value: formatNumber_(totalUpdateLokasi) + ' titik' },
+      { label: 'Kegiatan', value: formatNumber_(totalKegiatan) + ' catatan' },
+      { label: 'Terakhir', value: lastLocationTime || lastUpdate || '-' },
+      { label: 'Selesai', value: today.jam_selesai || '-' }
+    ];
 
-    setText_('salesActivityNextAction', nextAction.label || 'Mulai Kerja 08:00');
+    setText_('salesActivityNextAction', buildSalesActivityHeadline_(today, nextAction));
     setText_('salesActivityLastUpdate', 'Update terakhir: ' + (lastUpdate || '-'));
-    setText_('salesActivitySubtitle', today.jadwal_kerja || config.scheduleText || 'Jadwal kerja sales. Toleransi 30 menit.');
+    setText_('salesActivitySubtitle', today.jadwal_kerja || config.scheduleText || 'Mulai kerja, update lokasi bebas, dan selesai kerja.');
     setText_('salesActivityNote', buildSalesActivityNote_(today));
 
     if (statusBadge) {
@@ -826,19 +844,41 @@
     }
 
     if (timeline) {
-      timeline.innerHTML = slots.length ? slots.map(function(slot) {
+      timeline.innerHTML = fieldSummary.length ? fieldSummary.map(function(item) {
         return '' +
-          '<span class="' + getFieldSlotClass_(slot.status) + '">' +
-            '<strong>' + escapeHtml_(slot.label || slot.target || '-') + '</strong>' +
-            '<small>' + escapeHtml_(slot.status || '-') + '</small>' +
+          '<span class="field-summary-tile">' +
+            '<strong>' + escapeHtml_(item.label || '-') + '</strong>' +
+            '<small>' + escapeHtml_(item.value || '-') + '</small>' +
           '</span>';
-      }).join('') : fallbackLabels.map(function(label) {
-        return '<span><strong>' + label + '</strong><small>Belum</small></span>';
-      }).join('');
+      }).join('') : '';
     }
 
     setSingleActivityButtonState_('fieldStartBtn', hasStarted, 'Mulai kerja hari ini sudah tercatat.');
     setSingleActivityButtonState_('fieldEndBtn', hasEnded, 'Selesai kerja hari ini sudah tercatat.');
+  }
+
+  function buildSalesActivityHeadline_(today, nextAction) {
+    var source = today || {};
+    var status = normalizeClientText_(source.status_harian || '');
+    var totalUpdateLokasi = Number(source.total_update_lokasi || 0);
+
+    if (status === 'belum mulai') {
+      return 'Mulai Kerja';
+    }
+
+    if (status === 'selesai') {
+      return 'Selesai ' + (source.jam_selesai || '');
+    }
+
+    if (status === 'perlu cek') {
+      return 'Perlu Cek Aktivitas';
+    }
+
+    if (totalUpdateLokasi > 0) {
+      return 'Update Lokasi ' + formatNumber_(totalUpdateLokasi) + ' Titik';
+    }
+
+    return (nextAction && nextAction.label) || 'Update Lokasi Bebas';
   }
 
   function setSingleActivityButtonState_(id, isDone, title) {
@@ -863,11 +903,15 @@
       return 'Ada catatan yang perlu dicek admin. Tetap lanjutkan update sesuai jadwal.';
     }
 
-    if (source.status_harian === 'Hijau') {
-      return 'Aktivitas hari ini lengkap.';
+    if (source.status_harian === 'Selesai') {
+      return 'Aktivitas hari ini selesai. Semua titik dan catatan tetap tersimpan.';
     }
 
-    return 'Update berikutnya akan mengikuti titik kontrol terdekat.';
+    if (!Number(source.total_update_lokasi || 0)) {
+      return 'Update lokasi bisa ditekan setiap kali tiba di outlet atau titik kunjungan.';
+    }
+
+    return 'Update lokasi bebas jam. Tekan Update setiap tiba di outlet agar histori rute lengkap.';
   }
 
   function getFieldSlotClass_(status) {
@@ -1071,6 +1115,7 @@
     if (!ensureAuthorizedSession_()) return;
 
     setStatusText_('Memuat antrean export Kledo...');
+    appState.approverExportPage = 1;
 
     google.script.run
       .withSuccessHandler(function(data) {
@@ -1659,19 +1704,36 @@
 
   function renderApproverExportTable_() {
     var tbody = document.getElementById('approverExportTableBody');
+    var pagination = document.getElementById('approverExportPagination');
     var orders = getFilteredExportOrders_();
     var batchButtonsDisabled = !orders.length;
+    var totalPages;
+    var currentPage;
+    var startIndex;
+    var endIndex;
+    var pageRows;
+    var pageInfo;
 
     if (!tbody) return;
     document.getElementById('downloadKledoBatchBtn').disabled = batchButtonsDisabled;
 
     if (!orders.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">Belum ada order siap export Kledo.</td></tr>';
+      if (pagination) {
+        pagination.innerHTML = '';
+      }
       return;
     }
 
-    tbody.innerHTML = orders.map(function(row) {
+    totalPages = getApproverExportPageTotal_(orders);
+    currentPage = normalizeApproverExportPage_(totalPages);
+    startIndex = (currentPage - 1) * APPROVER_EXPORT_PAGE_SIZE;
+    endIndex = Math.min(startIndex + APPROVER_EXPORT_PAGE_SIZE, orders.length);
+    pageRows = orders.slice(startIndex, endIndex);
+
+    tbody.innerHTML = pageRows.map(function(row) {
       var noSo = String(row.no_so || '');
+      var tanggalDiterima = row.tanggal_diterima || row.tanggal_verifikasi_cs || '';
 
       return '' +
         '<tr>' +
@@ -1686,10 +1748,71 @@
             '<div class="approver-meta-line"><strong>Order:</strong> ' + escapeHtml_(formatShortDateId_(row.tanggal_order || '')) + '</div>' +
             '<div class="approver-meta-line"><strong>JT:</strong> ' + escapeHtml_(formatShortDateId_(row.tanggal_jatuh_tempo || '')) + '</div>' +
             '<div class="approver-meta-line"><strong>Kirim:</strong> ' + escapeHtml_(formatShortDateId_(row.tanggal_kirim || '')) + '</div>' +
+            '<div class="approver-meta-line"><strong>Diterima:</strong> ' + escapeHtml_(formatShortDateId_(tanggalDiterima)) + '</div>' +
           '</td>' +
           '<td>' + buildStatusBadge_(row.status_export_kledo || 'Siap Export') + '</td>' +
         '</tr>';
     }).join('');
+
+    if (!pagination) {
+      return;
+    }
+
+    if (orders.length <= APPROVER_EXPORT_PAGE_SIZE) {
+      pagination.innerHTML = '';
+      return;
+    }
+
+    pageInfo = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + orders.length + ' order siap export';
+
+    pagination.innerHTML = '' +
+      '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
+      '<div class="table-pagination-actions">' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleApproverExportPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
+        '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleApproverExportPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
+      '</div>';
+  }
+
+  function getApproverExportPageTotal_(rows) {
+    var sourceRows = Array.isArray(rows) ? rows : getFilteredExportOrders_();
+    return Math.max(1, Math.ceil((sourceRows.length || 0) / APPROVER_EXPORT_PAGE_SIZE));
+  }
+
+  function normalizeApproverExportPage_(totalPages) {
+    var maxPage = Number(totalPages || getApproverExportPageTotal_());
+    var currentPage = Number(appState.approverExportPage || 1);
+
+    if (!isFinite(currentPage) || currentPage < 1) {
+      currentPage = 1;
+    }
+
+    if (currentPage > maxPage) {
+      currentPage = maxPage;
+    }
+
+    appState.approverExportPage = currentPage;
+    return currentPage;
+  }
+
+  function handleApproverExportPageChange_(direction) {
+    var nextPage = normalizeApproverExportPage_() + Number(direction || 0);
+    var totalPages = getApproverExportPageTotal_();
+
+    if (nextPage < 1) {
+      nextPage = 1;
+    }
+
+    if (nextPage > totalPages) {
+      nextPage = totalPages;
+    }
+
+    if (nextPage === appState.approverExportPage) {
+      return;
+    }
+
+    appState.approverExportPage = nextPage;
+    renderApproverExportTable_();
   }
 
   function buildApproverExportOrderCellHtml_(row) {
@@ -2026,7 +2149,7 @@
     }
 
     return (appState.exportOrders || []).slice().filter(function(row) {
-      var rowDate = normalizeDateKey_(row.tanggal_selesai || row.tanggal_verifikasi_cs || row.tanggal_order);
+      var rowDate = normalizeDateKey_(row.tanggal_diterima || row.tanggal_verifikasi_cs);
 
       if (startDate && (!rowDate || rowDate < startDate)) {
         return false;
@@ -3319,6 +3442,7 @@
     appState.approverExportStartDate = normalizeDateKey_(getFieldValue_('approverExportStartDate'));
     appState.approverExportEndDate = normalizeDateKey_(getFieldValue_('approverExportEndDate'));
     appState.approverExportFilterDate = '';
+    appState.approverExportPage = 1;
     renderApproverExportSummary_();
     renderApproverExportTable_();
   }
@@ -3327,22 +3451,24 @@
     appState.approverExportStartDate = getTodayIsoDate_();
     appState.approverExportEndDate = appState.approverExportStartDate;
     appState.approverExportFilterDate = appState.approverExportStartDate;
+    appState.approverExportPage = 1;
     setFieldValue_('approverExportStartDate', appState.approverExportStartDate);
     setFieldValue_('approverExportEndDate', appState.approverExportEndDate);
     renderApproverExportSummary_();
     renderApproverExportTable_();
-    setStatusText_('Filter export Kledo diatur ke hari ini');
+    setStatusText_('Filter tanggal diterima diatur ke hari ini');
   }
 
   function handleApproverExportFilterAll_() {
     appState.approverExportFilterDate = '';
     appState.approverExportStartDate = '';
     appState.approverExportEndDate = '';
+    appState.approverExportPage = 1;
     setFieldValue_('approverExportStartDate', '');
     setFieldValue_('approverExportEndDate', '');
     renderApproverExportSummary_();
     renderApproverExportTable_();
-    setStatusText_('Menampilkan semua antrean export Kledo');
+    setStatusText_('Menampilkan semua antrean export Kledo berdasarkan tanggal diterima');
   }
 
   function handleCreateDatabaseBackup_() {
@@ -4527,7 +4653,7 @@
       return '' +
         '<tr>' +
           '<td>' + escapeHtml_(String(row.no_so || '-')) + '</td>' +
-          '<td>' + escapeHtml_(formatShortDateTimeId_(row.tanggal_siap_kirim || '-')) + '</td>' +
+          '<td>' + escapeHtml_(formatShortDateTimeId_(row.tanggal_order || row.tanggal_siap_kirim || '-')) + '</td>' +
           '<td>' + escapeHtml_(String(row.nama_customer || '-')) + '</td>' +
           '<td class="cell-right">' + escapeHtml_(formatNumber_(row.qty_total || 0)) + '</td>' +
         '</tr>';
@@ -7280,11 +7406,41 @@
       });
     }
 
-    return rows;
+    return rows.sort(compareDeliveryOrdersLatestFirst_);
   }
 
   function getDeliveryDateKey_(row) {
     return normalizeDateKey_(row && (row.tanggal_kirim || row.tanggal_cetak || ''));
+  }
+
+  function compareDeliveryOrdersLatestFirst_(left, right) {
+    var leftDeliveryDate = getDeliveryDateKey_(left) || '0000-00-00';
+    var rightDeliveryDate = getDeliveryDateKey_(right) || '0000-00-00';
+    var leftCreatedAt = getDeliveryCreatedAtSortKey_(left);
+    var rightCreatedAt = getDeliveryCreatedAtSortKey_(right);
+    var leftNoSj = String(left && left.no_surat_jalan || '');
+    var rightNoSj = String(right && right.no_surat_jalan || '');
+
+    if (leftDeliveryDate !== rightDeliveryDate) {
+      return rightDeliveryDate.localeCompare(leftDeliveryDate);
+    }
+
+    if (leftCreatedAt !== rightCreatedAt) {
+      return rightCreatedAt.localeCompare(leftCreatedAt);
+    }
+
+    return rightNoSj.localeCompare(leftNoSj, 'id-ID');
+  }
+
+  function getDeliveryCreatedAtSortKey_(row) {
+    var createdAt = String(row && row.tanggal_cetak || '').trim();
+    var dateKey = normalizeDateKey_(createdAt) || getDeliveryDateKey_(row) || '0000-00-00';
+    var timeMatch = createdAt.match(/(?:T|\s)(\d{2}):(\d{2})(?::(\d{2}))?/);
+    var timeKey = timeMatch
+      ? [timeMatch[1], timeMatch[2], timeMatch[3] || '00'].join(':')
+      : '00:00:00';
+
+    return dateKey + 'T' + timeKey;
   }
 
   function normalizeDeliverySearchQuery_() {
@@ -7858,13 +8014,13 @@
       className = 'done';
     } else if (normalized === 'belum ada target') {
       className = 'ready';
-    } else if (normalized === 'belum mulai') {
+    } else if (normalized === 'belum mulai' || normalized === 'minim update') {
       className = 'warning';
-    } else if (normalized === 'berjalan') {
+    } else if (normalized === 'berjalan' || normalized === 'aktif') {
       className = 'progress';
     } else if (normalized === 'tercapai' || normalized === 'melebihi') {
       className = 'done';
-    } else if (normalized === 'ditahan' || normalized === 'ditolak' || normalized === 'dibatalkan') {
+    } else if (normalized === 'ditahan' || normalized === 'ditolak' || normalized === 'dibatalkan' || normalized === 'perlu cek') {
       className = 'danger';
     } else if (normalized === 'terkirim') {
       className = 'progress';
@@ -8347,7 +8503,7 @@
   }
 
   function syncControllerTechnicalPanels_() {
-    var showFieldMonitoring = currentUserHasRole_('mtr');
+    var showFieldMonitoring = currentUserHasRole_('mtr') || currentUserHasRole_('controller');
     var fieldMonitoringCard = document.querySelector('.controller-field-monitoring-card');
 
     if (fieldMonitoringCard) {
@@ -8469,41 +8625,34 @@
     } else {
       body.innerHTML = rows.map(function(row) {
         var slots = Array.isArray(row.slots) ? row.slots : [];
-        var doneSlots = slots.filter(function(slot) {
-          return slot.status && slot.status !== 'Tidak Update';
-        }).length;
-        var lateSlots = slots.filter(function(slot) {
-          return slot.status === 'Terlambat' || slot.status === 'Lebih Awal';
-        }).length;
-        var missingSlots = Math.max(0, slots.length - doneSlots);
-        var detailSlots = slots.map(function(slot) {
-          var statusText = String(slot.status || 'Tidak Update');
-          var statusClass = statusText.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
+        var startSlot = slots.find(function(slot) { return slot.type === 'Mulai Kerja'; }) || {};
+        var endSlot = slots.find(function(slot) { return slot.type === 'Selesai Kerja'; }) || {};
+        var totalUpdateLokasi = Number(row.total_update_lokasi || 0);
+        var totalKegiatan = Number(row.total_catatan_kegiatan_sales || 0);
+        var detailSlots = [
+          { label: 'Mulai', value: row.jam_mulai || startSlot.jam || '-' },
+          { label: 'Update', value: formatNumber_(totalUpdateLokasi) + ' titik' },
+          { label: 'Kegiatan', value: formatNumber_(totalKegiatan) + ' catatan' },
+          { label: 'Terakhir', value: row.jam_lokasi_terakhir || row.lokasi_terakhir_jam || '-' },
+          { label: 'Selesai', value: row.jam_selesai || endSlot.jam || '-' }
+        ].map(function(item) {
           return '' +
-            '<span class="field-monitor-slot slot-' + escapeHtml_(statusClass) + '">' +
-              '<b>' + escapeHtml_(slot.label || slot.target || '-') + '</b>' +
-              '<em>' + escapeHtml_(statusText) + '</em>' +
-              '<small>' + escapeHtml_(slot.jam || '-') + '</small>' +
+            '<span class="field-monitor-slot field-monitor-metric-chip">' +
+              '<b>' + escapeHtml_(item.label || '-') + '</b>' +
+              '<em>' + escapeHtml_(item.value || '-') + '</em>' +
             '</span>';
         }).join('');
-        var detailMaps = slots.filter(function(slot) {
-          return !!String(slot.lokasi || '').trim();
-        }).map(function(slot) {
-          return '' +
-            '<a class="field-monitor-map-chip" href="' + escapeHtml_(slot.lokasi) + '" target="_blank" rel="noopener">' +
-              escapeHtml_(slot.label || slot.target || '-') +
-              '<small>' + escapeHtml_(slot.jam || '-') + '</small>' +
-            '</a>';
-        }).join('') || '<span class="field-monitor-empty">-</span>';
+        var detailMaps = row.lokasi_terakhir
+          ? '<a class="field-monitor-map-chip" href="' + escapeHtml_(row.lokasi_terakhir) + '" target="_blank" rel="noopener">Lokasi Terakhir<small>' + escapeHtml_(row.lokasi_terakhir_jam || '-') + '</small></a>'
+          : '<span class="field-monitor-empty">-</span>';
         var updateInfo = '' +
           '<div class="field-monitor-detail-grid">' +
             detailSlots +
           '</div>';
         var progressInfo = '' +
           '<div class="field-monitor-progress">' +
-            '<strong>' + escapeHtml_(doneSlots) + '/' + escapeHtml_(slots.length || 5) + ' checkpoint</strong>' +
-            '<small>' + escapeHtml_(lateSlots) + ' telat | ' + escapeHtml_(missingSlots) + ' belum update</small>' +
+            '<strong>' + escapeHtml_(formatNumber_(totalUpdateLokasi)) + ' titik lokasi</strong>' +
+            '<small>' + escapeHtml_(formatNumber_(totalKegiatan)) + ' kegiatan | ' + escapeHtml_(formatNumber_(row.total_update || 0)) + ' total log</small>' +
           '</div>';
         var mapsLink = row.lokasi_terakhir
           ? '<a href="' + escapeHtml_(row.lokasi_terakhir) + '" target="_blank" rel="noopener">Maps</a><small class="field-monitor-time">' + escapeHtml_(row.lokasi_terakhir_jam || '-') + '</small>'
@@ -8553,7 +8702,7 @@
         '<article class="controller-stat-item">' +
           '<div class="controller-stat-copy">' +
             '<strong>Belum ada anomali</strong>' +
-            '<small>Data akan muncul bila ada telat, perpindahan tidak wajar, atau ganti perangkat.</small>' +
+            '<small>Data akan muncul bila ada perpindahan tidak wajar atau ganti perangkat.</small>' +
           '</div>' +
         '</article>';
       return;
@@ -8564,7 +8713,7 @@
         '<article class="controller-stat-item">' +
           '<div class="controller-stat-copy">' +
             '<strong>' + escapeHtml_(row.nama_user || row.user_id || '-') + '</strong>' +
-            '<small>Telat: ' + escapeHtml_(row.telat || 0) + ' | Lokasi: ' + escapeHtml_(row.anomali_lokasi || 0) + ' | Perangkat: ' + escapeHtml_(row.anomali_perangkat || 0) + '</small>' +
+            '<small>Jam kerja: ' + escapeHtml_(row.telat || 0) + ' | Lokasi: ' + escapeHtml_(row.anomali_lokasi || 0) + ' | Perangkat: ' + escapeHtml_(row.anomali_perangkat || 0) + '</small>' +
           '</div>' +
           '<span class="controller-stat-value">Cek</span>' +
         '</article>';

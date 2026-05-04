@@ -422,7 +422,6 @@ function getFieldActivityClientConfig_() {
 
   return {
     startTime: schedule.startTime,
-    updateTimes: schedule.updateTimes,
     endTime: schedule.endTime,
     toleranceMinutes: FIELD_ACTIVITY_CONFIG.TOLERANCE_MINUTES,
     scheduleText: schedule.text,
@@ -467,7 +466,7 @@ function getFieldActivityTargetTime_(activityType, currentTime, dateKey) {
     return '';
   }
 
-  return getNearestFieldUpdateTime_(currentTime, schedule.updateTimes);
+  return '';
 }
 
 function getNearestFieldUpdateTime_(currentTime, updateTimes) {
@@ -492,10 +491,8 @@ function getFieldActivityScheduleForDate_(dateKey) {
   var isSaturday = day === 6;
   var isSunday = day === 0;
   var endTime = isSaturday ? FIELD_ACTIVITY_CONFIG.SATURDAY_END_TIME : FIELD_ACTIVITY_CONFIG.END_TIME;
-  var updateTimes = FIELD_ACTIVITY_CONFIG.UPDATE_TIMES.filter(function(time) {
-    return timeToMinutes_(time) < timeToMinutes_(endTime);
-  });
-  var labels = [FIELD_ACTIVITY_CONFIG.START_TIME].concat(updateTimes).concat([endTime]);
+  var updateTimes = [];
+  var labels = [FIELD_ACTIVITY_CONFIG.START_TIME].concat([endTime]);
 
   return {
     startTime: FIELD_ACTIVITY_CONFIG.START_TIME,
@@ -504,8 +501,8 @@ function getFieldActivityScheduleForDate_(dateKey) {
     labels: labels,
     isWorkday: !isSunday,
     text: isSaturday
-      ? 'Jadwal Sabtu 08:00, 10:00, 12:00, 14:00. Toleransi 30 menit.'
-      : 'Jadwal Senin-Jumat 08:00, 10:00, 12:00, 14:00, 16:00. Toleransi 30 menit.'
+      ? 'Jadwal Sabtu mulai 08:00 dan selesai 14:00. Update lokasi bebas saat kunjungan.'
+      : 'Jadwal Senin-Jumat mulai 08:00 dan selesai 16:00. Update lokasi bebas saat kunjungan.'
   };
 }
 
@@ -728,19 +725,19 @@ function buildFieldActivityDailyRow_(user, dateKey) {
   var schedule = getFieldActivityScheduleForDate_(dateKey);
   var slots = buildFieldActivitySlots_(logs, schedule);
   var activityNotes = buildFieldActivitySalesNotes_(logs);
+  var updateLogs = getFieldActivityUpdateLogs_(logs);
+  var startLog = getFieldActivityLogByType_(logs, 'Mulai Kerja');
+  var endLog = getFieldActivityLogByType_(logs, 'Selesai Kerja');
   var totalTelat = 0;
-  var totalTidakUpdate = 0;
   var anomaliLokasi = 0;
   var anomaliPerangkat = 0;
   var lastLog = logs.length ? logs[logs.length - 1] : null;
+  var lastUpdateLog = updateLogs.length ? updateLogs[updateLogs.length - 1] : null;
   var statusHarian;
 
   slots.forEach(function(slot) {
     if (slot.status === 'Terlambat' || slot.status === 'Lebih Awal') {
       totalTelat += 1;
-    }
-    if (slot.status === 'Tidak Update') {
-      totalTidakUpdate += 1;
     }
   });
 
@@ -753,13 +750,15 @@ function buildFieldActivityDailyRow_(user, dateKey) {
     }
   });
 
-  statusHarian = 'Hijau';
-  if (!logs.length) {
+  statusHarian = 'Aktif';
+  if (!startLog) {
     statusHarian = 'Belum Mulai';
-  } else if (totalTidakUpdate >= 2 || anomaliLokasi > 0 || anomaliPerangkat > 0) {
-    statusHarian = 'Merah';
-  } else if (totalTidakUpdate === 1 || totalTelat > 0) {
-    statusHarian = 'Kuning';
+  } else if (anomaliLokasi > 0 || anomaliPerangkat > 0) {
+    statusHarian = 'Perlu Cek';
+  } else if (!updateLogs.length && !activityNotes.length) {
+    statusHarian = 'Minim Update';
+  } else if (endLog) {
+    statusHarian = 'Selesai';
   }
 
   return {
@@ -770,14 +769,16 @@ function buildFieldActivityDailyRow_(user, dateKey) {
     channel_sales_default: user.channel_sales_default || '',
     slots: slots,
     jadwal_kerja: schedule.text,
-    jam_mulai: getSlotLogTime_(slots, schedule.startTime),
+    jam_mulai: startLog ? normalizeFieldActivityTime_(startLog.jam_server) : '',
     jam_update_terakhir: lastLog ? normalizeFieldActivityTime_(lastLog.jam_server) : '',
-    jam_selesai: getSlotLogTime_(slots, schedule.endTime),
+    jam_lokasi_terakhir: lastUpdateLog ? normalizeFieldActivityTime_(lastUpdateLog.jam_server) : '',
+    jam_selesai: endLog ? normalizeFieldActivityTime_(endLog.jam_server) : '',
     total_update: logs.length,
+    total_update_lokasi: updateLogs.length,
     total_catatan_kegiatan_sales: activityNotes.length,
     catatan_kegiatan_sales: activityNotes,
     total_telat: totalTelat,
-    total_tidak_update: totalTidakUpdate,
+    total_tidak_update: startLog ? 0 : 1,
     anomali_lokasi: anomaliLokasi,
     anomali_perangkat: anomaliPerangkat,
     status_harian: statusHarian,
@@ -787,17 +788,30 @@ function buildFieldActivityDailyRow_(user, dateKey) {
   };
 }
 
+function getFieldActivityUpdateLogs_(logs) {
+  return (logs || []).filter(function(log) {
+    return normalizeText_(log.tipe_aktivitas) === 'update lokasi';
+  });
+}
+
+function getFieldActivityLogByType_(logs, activityType) {
+  var typeKey = normalizeText_(activityType);
+  var matches = (logs || []).filter(function(log) {
+    return normalizeText_(log.tipe_aktivitas) === typeKey;
+  });
+
+  return matches.length ? matches[matches.length - 1] : null;
+}
+
 function buildFieldActivitySlots_(logs, schedule) {
   var safeSchedule = schedule || getFieldActivityScheduleForDate_(getNowParts_().tanggal);
   var definitions = [{ target: safeSchedule.startTime, label: safeSchedule.startTime, type: 'Mulai Kerja' }]
-    .concat(safeSchedule.updateTimes.map(function(time) {
-      return { target: time, label: time, type: 'Update Lokasi' };
-    }))
     .concat([{ target: safeSchedule.endTime, label: safeSchedule.endTime, type: 'Selesai Kerja' }]);
 
   return definitions.map(function(definition) {
     var matching = (logs || []).filter(function(log) {
-      return normalizeFieldActivityTargetTime_(log.target_jam) === definition.target;
+      return normalizeText_(log.tipe_aktivitas) === normalizeText_(definition.type) &&
+        normalizeFieldActivityTargetTime_(log.target_jam) === definition.target;
     }).sort(function(left, right) {
       return getFieldSlotStatusRank_(left.status_waktu) - getFieldSlotStatusRank_(right.status_waktu);
     })[0];
@@ -902,9 +916,10 @@ function buildFieldMonitoringSummary_(rows) {
   var merah = 0;
 
   rows.forEach(function(row) {
-    if (row.status_harian === 'Hijau') hijau += 1;
-    if (row.status_harian === 'Kuning') kuning += 1;
-    if (row.status_harian === 'Merah' || row.status_harian === 'Belum Mulai') merah += 1;
+    var statusKey = normalizeText_(row.status_harian);
+    if (statusKey === 'aktif' || statusKey === 'selesai') hijau += 1;
+    if (statusKey === 'minim update') kuning += 1;
+    if (statusKey === 'perlu cek' || statusKey === 'belum mulai') merah += 1;
   });
 
   return {

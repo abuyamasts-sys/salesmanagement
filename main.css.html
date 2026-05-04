@@ -960,13 +960,32 @@
     color: var(--sap-success);
   }
 
+  .sales-activity-status.status-aktif,
+  .sales-activity-status.status-selesai {
+    border-color: #b8dfc5;
+    background: #edf8f1;
+    color: var(--sap-success);
+  }
+
   .sales-activity-status.status-kuning {
     border-color: #ffd9a8;
     background: #fff7ed;
     color: var(--sap-warning);
   }
 
+  .sales-activity-status.status-minim-update {
+    border-color: #ffd9a8;
+    background: #fff7ed;
+    color: var(--sap-warning);
+  }
+
   .sales-activity-status.status-merah {
+    border-color: #f0b7b7;
+    background: #fff1f1;
+    color: var(--sap-danger);
+  }
+
+  .sales-activity-status.status-perlu-cek {
     border-color: #f0b7b7;
     background: #fff1f1;
     color: var(--sap-danger);
@@ -1053,6 +1072,17 @@
   .sales-activity-timeline .slot-tidak-update {
     border-color: #e2e8f0;
     background: #f7f9fb;
+  }
+
+  .sales-activity-timeline .field-summary-tile {
+    border-color: #d7e4f0;
+    background: #ffffff;
+  }
+
+  .sales-activity-timeline .field-summary-tile small {
+    display: block;
+    font-weight: 800;
+    color: #1f3145;
   }
 
   .sales-worklog-card {
@@ -1171,6 +1201,15 @@
   .field-monitor-slot.slot-tidak-update {
     border-color: #d7e4f0;
     background: #f8fbfe;
+  }
+
+  .field-monitor-metric-chip {
+    border-color: #d7e4f0;
+    background: #ffffff;
+  }
+
+  .field-monitor-metric-chip em {
+    color: #1f3145;
   }
 
   .field-monitor-map-grid {

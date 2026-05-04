@@ -109,11 +109,11 @@
               </div>
 
               <div class="sales-activity-timeline" id="salesActivityTimeline">
-                <span>08:00</span>
-                <span>10:00</span>
-                <span>12:00</span>
-                <span>14:00</span>
-                <span>16:00</span>
+                <span><strong>Mulai</strong><small>-</small></span>
+                <span><strong>Update</strong><small>0 titik</small></span>
+                <span><strong>Kegiatan</strong><small>0 catatan</small></span>
+                <span><strong>Terakhir</strong><small>-</small></span>
+                <span><strong>Selesai</strong><small>-</small></span>
               </div>
               <div class="sales-activity-note" id="salesActivityNote">Lokasi akan diminta saat tombol ditekan.</div>
             </section>
@@ -158,14 +158,14 @@
             <div class="sales-section-divider" id="salesTargetSection">
               <span>Target KPI</span>
               <h2>Ringkasan Target Bulan Ini</h2>
-              <p>Fokus pada target customer baru dan progress bulan berjalan.</p>
+              <p>Fokus pada target qty order terkirim dan progress bulan berjalan.</p>
             </div>
 
             <section class="form-card">
               <div class="panel-header">
                 <div>
-                  <h2>KPI Customer Baru</h2>
-                  <p class="panel-subtitle">Target dihitung per bulan saat order menjadi Siap Kirim, total qty mix (dus/galon).</p>
+                  <h2>KPI Qty Terkirim</h2>
+                  <p class="panel-subtitle">Target mengikuti bulan tanggal SO. Realisasi dihitung dari qty order yang sudah Terkirim atau Selesai.</p>
                 </div>
               </div>
 
@@ -185,7 +185,7 @@
                 <article class="summary-card">
                   <span class="summary-label">Tercapai</span>
                   <strong class="summary-value" id="salesKpiAchieved">0</strong>
-                  <span class="summary-note">Total qty order Siap Kirim</span>
+                  <span class="summary-note">Total qty order terkirim</span>
                 </article>
                 <article class="summary-card">
                   <span class="summary-label">Sisa</span>
@@ -199,15 +199,15 @@
                 </article>
               </div>
 
-              <p class="sales-info-note">KPI bertambah saat order sudah berstatus Siap Kirim.</p>
+              <p class="sales-info-note">KPI dihitung setelah order Terkirim atau Selesai, dan masuk bulan sesuai Tanggal SO.</p>
 
-              <h3 class="section-title">Detail Order (Siap Kirim)</h3>
+              <h3 class="section-title">Detail Order Terkirim</h3>
               <div class="table-wrap">
                 <table class="data-table">
                   <thead>
                     <tr>
                       <th>No SO</th>
-                      <th>Tanggal</th>
+                      <th>Tanggal SO</th>
                       <th>Nama Customer</th>
                       <th class="cell-right">Qty</th>
                     </tr>
@@ -661,11 +661,11 @@
 
               <div class="form-grid">
                 <label class="field">
-                  <span>Tanggal Siap Export Mulai</span>
+                  <span>Tanggal Diterima Mulai</span>
                   <input id="approverExportStartDate" type="date" />
                 </label>
                 <label class="field">
-                  <span>Tanggal Siap Export Sampai</span>
+                  <span>Tanggal Diterima Sampai</span>
                   <input id="approverExportEndDate" type="date" />
                 </label>
                 <div class="field field-inline-actions">
@@ -711,6 +711,7 @@
                   </tbody>
                 </table>
               </div>
+              <div class="table-pagination" id="approverExportPagination"></div>
             </section>
           </section>
 
@@ -932,8 +933,8 @@
             <section class="form-card">
               <div class="panel-header">
                 <div>
-                  <h2>Target KPI Sales (Customer Baru)</h2>
-                  <p class="panel-subtitle">KPI dihitung saat order berstatus Siap Kirim. Target dan realisasi dihitung per bulan, dalam total qty (mix dus/galon).</p>
+                  <h2>Target KPI Sales (Qty)</h2>
+                  <p class="panel-subtitle">KPI memakai bulan tanggal SO. Realisasi dihitung dari qty order SLS yang sudah Terkirim atau Selesai.</p>
                 </div>
                 <button type="button" class="ghost-btn" id="refreshApproverKpiBtn">Refresh</button>
               </div>
@@ -975,7 +976,7 @@
                 <article class="summary-card">
                   <span class="summary-label">Total Realisasi</span>
                   <strong class="summary-value" id="summaryKpiAchievedQty">0</strong>
-                  <span class="summary-note">Akumulasi qty customer baru yang sudah masuk progress KPI</span>
+                  <span class="summary-note">Akumulasi qty order Terkirim/Selesai</span>
                 </article>
                 <article class="summary-card">
                   <span class="summary-label">Rata-rata Progress</span>
@@ -1179,7 +1180,7 @@
             <div class="panel-header">
               <div>
                 <h3 class="section-title compact">Pengawasan Sales Lapangan</h3>
-                <p class="panel-subtitle">Status klik mulai kerja, update lokasi 2 jam sekali, dan selesai kerja.</p>
+                <p class="panel-subtitle">Status mulai kerja, update lokasi bebas jam, kegiatan outlet, dan selesai kerja.</p>
               </div>
               <div class="field-monitor-date-filter">
                 <label class="field">
@@ -1197,17 +1198,17 @@
                 <span class="summary-note">Sales aktif</span>
               </article>
               <article class="summary-card">
-                <span class="summary-label">Hijau</span>
+                <span class="summary-label">Normal</span>
                 <strong class="summary-value" id="fieldMonitorGreen">0</strong>
-                <span class="summary-note">Update lengkap</span>
+                <span class="summary-note">Aktif atau selesai normal</span>
               </article>
               <article class="summary-card">
-                <span class="summary-label">Kuning</span>
+                <span class="summary-label">Minim Update</span>
                 <strong class="summary-value" id="fieldMonitorYellow">0</strong>
-                <span class="summary-note">Ada telat ringan</span>
+                <span class="summary-note">Minim update lokasi</span>
               </article>
               <article class="summary-card">
-                <span class="summary-label">Merah</span>
+                <span class="summary-label">Perlu Cek</span>
                 <strong class="summary-value" id="fieldMonitorRed">0</strong>
                 <span class="summary-note">Perlu dicek</span>
               </article>
@@ -1219,9 +1220,9 @@
                   <tr>
                     <th>Sales</th>
                     <th>Status</th>
-                    <th>Detail Update</th>
-                    <th>Detail Maps</th>
-                    <th>Progress</th>
+                    <th>Ringkasan Aktivitas</th>
+                    <th>Maps</th>
+                    <th>Total Hari Ini</th>
                     <th>Lokasi Terakhir</th>
                     <th>Catatan MTR</th>
                   </tr>
@@ -1237,7 +1238,7 @@
               <article class="controller-stat-item">
                 <div class="controller-stat-copy">
                   <strong>Belum ada anomali</strong>
-                  <small>Data akan muncul bila ada telat, perpindahan tidak wajar, atau ganti perangkat.</small>
+                  <small>Data akan muncul bila ada perpindahan tidak wajar atau ganti perangkat.</small>
                 </div>
               </article>
             </div>
@@ -1293,7 +1294,7 @@
             <div class="panel-header">
               <div>
                 <h3 class="section-title compact">KPI Sales Bulan Ini</h3>
-                <p class="panel-subtitle">Ringkasan target dan realisasi customer baru per sales</p>
+                <p class="panel-subtitle">Ringkasan target dan realisasi qty terkirim per sales</p>
               </div>
             </div>
 
@@ -1306,7 +1307,7 @@
               <article class="summary-card controller-kpi-snapshot-item">
                 <span class="summary-label">Realisasi</span>
                 <strong class="summary-value" id="controllerKpiSalesTotalAchieved">0</strong>
-                <span class="summary-note">Total qty customer baru bulan berjalan</span>
+                <span class="summary-note">Total qty SO terkirim bulan berjalan</span>
               </article>
               <article class="summary-card controller-kpi-snapshot-item">
                 <span class="summary-label">Sisa</span>

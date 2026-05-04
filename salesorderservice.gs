@@ -93,15 +93,6 @@ function submitSalesOrder(payload) {
     createApprovalOrder_(noSo, payload.sales_id, salesOrderRow.alasan_hold);
   }
 
-  if (normalizeText_(salesOrderRow.status_order) === 'siap kirim') {
-    try {
-      recordKpiLogForOrderIfEligible_(noSo, payload.sales_id, now.tanggal + ' ' + now.jam);
-    } catch (error) {
-      // KPI bersifat tambahan; jangan bikin submit order gagal.
-      console.log('KPI log gagal: ' + (error && error.message ? error.message : error));
-    }
-  }
-
   return {
     success: true,
     no_so: noSo,

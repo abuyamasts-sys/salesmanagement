@@ -210,7 +210,7 @@ function getReadyKledoExportOrders_(options) {
     var statusOrder = normalizeText_(row.status_order);
     var verificationStatus = String(row.status_verifikasi_cs || '').trim();
     var exportStatus = String(row.status_export_kledo || '').trim();
-    var rowDate = normalizeSheetDateToYmd_(row.tanggal_selesai || row.tanggal_verifikasi_cs || row.tanggal_order);
+    var rowDate = normalizeKledoExportReceivedDate_(row.tanggal_verifikasi_cs);
 
     if (!(statusOrder === 'selesai' &&
       verificationStatus === 'Sudah Dicek' &&
@@ -254,6 +254,7 @@ function getReadyKledoExportOrders_(options) {
       tanggal_order: order.tanggal_order || '',
       tanggal_selesai: order.tanggal_selesai || '',
       tanggal_verifikasi_cs: order.tanggal_verifikasi_cs || '',
+      tanggal_diterima: order.tanggal_verifikasi_cs || '',
       tanggal_jatuh_tempo: order.tanggal_jatuh_tempo || '',
       tanggal_kirim: suratJalan.tanggal_kirim || order.tanggal_kirim_rencana || '',
       term_pembayaran: order.term_pembayaran || '',
@@ -536,6 +537,13 @@ function normalizeKledoExportDateRange_(options) {
     start: start,
     end: end
   };
+}
+
+function normalizeKledoExportReceivedDate_(value) {
+  var normalized = normalizeSheetDateToYmd_(value);
+  var match = String(normalized || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  return match ? [match[1], match[2], match[3]].join('-') : '';
 }
 
 function buildAdminReadyOrderListRow_(order, rawDetails) {

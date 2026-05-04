@@ -22,11 +22,13 @@ function listSalesUsers_() {
     var statusKey = normalizeText_(row.status_aktif);
     var tipeSalesKey = normalizeText_(row.tipe_sales);
     var userIdKey = normalizeText_(row.user_id);
+    var isFreelance = tipeSalesKey === 'freelance';
     var isSales = roleKey === 'sales' || roleKey.indexOf('sales') !== -1;
     var isActive = statusKey === 'aktif' || statusKey === '';
     var isSlfMurni = tipeSalesKey.indexOf('slfm') === 0 || userIdKey.indexOf('slfm') === 0;
+    var channelSalesKey = normalizeText_(row.channel_sales_default || (isFreelance || isSlfMurni ? 'SLF' : 'SLS'));
 
-    return isSales && isActive && !isSlfMurni;
+    return isSales && isActive && !isSlfMurni && channelSalesKey === 'sls';
   }).map(function(row) {
     return {
       user_id: String(row.user_id || '').trim(),
@@ -284,11 +286,136 @@ function getSalesKpiTargetQty_(bulan, salesId) {
 }
 
 function computeOrderQtyTotal_(noSo) {
+  return computeOrderDeliveredQtyTotal_(noSo);
+}
+
+function hasKpiNumericValue_(value) {
+  return value !== null && typeof value !== 'undefined' && String(value).trim() !== '';
+}
+
+function getKpiNumber_(value) {
+  var number = Number(value);
+
+  return isNaN(number) ? 0 : number;
+}
+
+function getKpiDeliveredQtyFromDetail_(detail) {
+  var source = detail || {};
+
+  if (hasKpiNumericValue_(source.qty_terkirim)) {
+    return getKpiNumber_(source.qty_terkirim);
+  }
+
+  return getKpiNumber_(source.qty);
+}
+
+function computeOrderDeliveredQtyTotal_(noSo) {
   var details = getSalesOrderDetailsByNoSo_(noSo);
 
   return (details || []).reduce(function(result, row) {
-    return result + Number(row.qty || 0);
+    return result + getKpiDeliveredQtyFromDetail_(row);
   }, 0);
+}
+
+function buildKpiDeliveredQtyByNoSo_() {
+  var result = {};
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, APP_CONFIG.HEADERS.SALES_ORDER_DETAIL);
+
+  getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL).forEach(function(detail) {
+    var noSo = String(detail.no_so || '').trim();
+
+    if (!noSo) {
+      return;
+    }
+
+    result[noSo] = Number(result[noSo] || 0) + getKpiDeliveredQtyFromDetail_(detail);
+  });
+
+  return result;
+}
+
+function buildSalesUserMapForKpi_() {
+  var result = {};
+
+  listSalesUsers_().forEach(function(user) {
+    var userId = String(user.user_id || '').trim();
+
+    if (userId) {
+      result[userId] = user;
+    }
+  });
+
+  return result;
+}
+
+function isSalesOrderDeliveredForKpi_(order) {
+  var status = normalizeText_(order && order.status_order);
+
+  return status === 'terkirim' || status === 'selesai';
+}
+
+function getSalesOrderKpiMonth_(order) {
+  var source = order || {};
+
+  return normalizeMonthKey_(source.tanggal_order || source.tanggal_kirim_rencana || source.tanggal_selesai || '');
+}
+
+function getKpiOrderQtyTotal_(order, deliveredQtyByNoSo) {
+  var noSo = String(order && order.no_so || '').trim();
+  var qtyMap = deliveredQtyByNoSo || {};
+
+  if (noSo && Object.prototype.hasOwnProperty.call(qtyMap, noSo)) {
+    return Number(qtyMap[noSo] || 0);
+  }
+
+  return getKpiNumber_(order && order.qty);
+}
+
+function listDeliveredSalesOrdersForKpi_(bulan, salesId) {
+  var monthKey = normalizeMonthKey_(bulan) || getCurrentMonthKey_();
+  var salesKey = String(salesId || '').trim();
+  var salesUserMap = buildSalesUserMapForKpi_();
+  var deliveredQtyByNoSo = buildKpiDeliveredQtyByNoSo_();
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER, APP_CONFIG.HEADERS.SALES_ORDER);
+
+  return getSheetData_(APP_CONFIG.SHEETS.SALES_ORDER).filter(function(order) {
+    var orderSalesId = String(order.sales_id || '').trim();
+
+    if (salesKey && orderSalesId !== salesKey) {
+      return false;
+    }
+
+    return !!(
+      orderSalesId &&
+      salesUserMap[orderSalesId] &&
+      isSalesOrderDeliveredForKpi_(order) &&
+      getSalesOrderKpiMonth_(order) === monthKey
+    );
+  }).map(function(order) {
+    return {
+      no_so: String(order.no_so || '').trim(),
+      sales_id: String(order.sales_id || '').trim(),
+      sales_name: String(order.sales_nama || '').trim(),
+      nama_customer: String(order.nama_customer_input || order.nama_customer || '').trim(),
+      jenis_customer: String(order.jenis_customer || '').trim(),
+      qty_total: getKpiOrderQtyTotal_(order, deliveredQtyByNoSo),
+      tanggal_order: normalizeSheetDateToYmd_(order.tanggal_order),
+      jam_order: String(order.jam_order || '').trim(),
+      tanggal_kirim_rencana: normalizeSheetDateToYmd_(order.tanggal_kirim_rencana),
+      status_order: String(order.status_order || '').trim()
+    };
+  }).sort(function(left, right) {
+    var leftStamp = String(left.tanggal_order || '') + ' ' + String(left.jam_order || '');
+    var rightStamp = String(right.tanggal_order || '') + ' ' + String(right.jam_order || '');
+
+    if (leftStamp !== rightStamp) {
+      return String(rightStamp).localeCompare(String(leftStamp));
+    }
+
+    return String(right.no_so || '').localeCompare(String(left.no_so || ''));
+  });
 }
 
 function recordKpiLogForOrderIfEligible_(noSo, actorId, tanggalSiapKirim) {
@@ -302,16 +429,12 @@ function recordKpiLogForOrderIfEligible_(noSo, actorId, tanggalSiapKirim) {
     return { recorded: false, reason: 'order tidak ditemukan' };
   }
 
-  if (normalizeText_(salesOrder.status_order) !== 'siap kirim') {
-    return { recorded: false, reason: 'status bukan siap kirim' };
-  }
-
-  if (normalizeText_(salesOrder.jenis_customer) !== 'baru') {
-    return { recorded: false, reason: 'bukan customer baru' };
+  if (!isSalesOrderDeliveredForKpi_(salesOrder)) {
+    return { recorded: false, reason: 'status belum terkirim' };
   }
 
   if (!isActiveSalesUserForKpi_(salesOrder.sales_id)) {
-    return { recorded: false, reason: 'sales_id bukan user Sales aktif' };
+    return { recorded: false, reason: 'sales_id bukan user SLS aktif' };
   }
 
   var sheetName = APP_CONFIG.SHEETS.KPI_LOG;
@@ -326,12 +449,12 @@ function recordKpiLogForOrderIfEligible_(noSo, actorId, tanggalSiapKirim) {
   }
 
   var tanggalText = String(tanggalSiapKirim || '').trim();
-  var monthKey = normalizeMonthKey_(tanggalText);
+  var monthKey = getSalesOrderKpiMonth_(salesOrder);
   if (!monthKey) {
-    monthKey = getCurrentMonthKey_();
+    monthKey = normalizeMonthKey_(tanggalText) || getCurrentMonthKey_();
   }
 
-  var qtyTotal = computeOrderQtyTotal_(noSoKey);
+  var qtyTotal = computeOrderDeliveredQtyTotal_(noSoKey);
   var payload = {
     bulan: monthKey,
     no_so: noSoKey,
@@ -353,24 +476,29 @@ function isActiveSalesUserForKpi_(salesId) {
     profile &&
     profile.authorized &&
     normalizeRoleKey_(profile.role) === 'sales' &&
-    !profile.is_slfm
+    (normalizeText_(profile.status_aktif) === 'aktif' || normalizeText_(profile.status_aktif) === '') &&
+    !profile.is_slfm &&
+    normalizeText_(profile.channel_sales_default) === 'sls'
   );
 }
 
 function getSalesKpiSummary_(bulan, salesId) {
   var monthKey = normalizeMonthKey_(bulan) || getCurrentMonthKey_();
   var salesKey = String(salesId || '').trim();
+  if (!isActiveSalesUserForKpi_(salesKey)) {
+    return {
+      bulan: monthKey,
+      sales_id: salesKey,
+      target_qty: 0,
+      achieved_qty: 0,
+      remaining_qty: 0,
+      achieved_percent: 0,
+      orders: []
+    };
+  }
 
   var targetQty = getSalesKpiTargetQty_(monthKey, salesKey);
-
-  var sheetName = APP_CONFIG.SHEETS.KPI_LOG;
-  ensureSheetWithHeaders_(sheetName, APP_CONFIG.HEADERS.KPI_LOG);
-
-  var rows = getSheetData_(sheetName).filter(function(row) {
-    return normalizeMonthKey_(row.bulan) === monthKey &&
-      String(row.sales_id || '').trim() === salesKey &&
-      normalizeText_(row.jenis_customer) === 'baru';
-  });
+  var rows = listDeliveredSalesOrdersForKpi_(monthKey, salesKey);
 
   var achieved = rows.reduce(function(result, row) {
     return result + Number(row.qty_total || 0);
@@ -387,15 +515,20 @@ function getSalesKpiSummary_(bulan, salesId) {
     remaining_qty: remaining,
     achieved_percent: percent,
     orders: rows.map(function(row) {
-      var salesOrder = findSalesOrderByNoSo_(String(row.no_so || '').trim()) || {};
       return {
         no_so: String(row.no_so || '').trim(),
-        nama_customer: String(salesOrder.nama_customer_input || salesOrder.nama_customer || '').trim(),
+        nama_customer: String(row.nama_customer || '').trim(),
         qty_total: Number(row.qty_total || 0),
-        tanggal_siap_kirim: String(row.tanggal_siap_kirim || '').trim()
+        tanggal_order: String(row.tanggal_order || '').trim(),
+        jam_order: String(row.jam_order || '').trim(),
+        tanggal_kirim_rencana: String(row.tanggal_kirim_rencana || '').trim(),
+        status_order: String(row.status_order || '').trim()
       };
     }).sort(function(left, right) {
-      return String(right.tanggal_siap_kirim || '').localeCompare(String(left.tanggal_siap_kirim || ''));
+      var leftStamp = String(left.tanggal_order || '') + ' ' + String(left.jam_order || '');
+      var rightStamp = String(right.tanggal_order || '') + ' ' + String(right.jam_order || '');
+
+      return String(rightStamp).localeCompare(String(leftStamp));
     })
   };
 }
@@ -461,8 +594,8 @@ function buildApproverKpiProgressRows_(bulan) {
   var salesUsers = listSalesUsers_();
   var targets = listSalesKpiTargetsByMonth_(monthKey);
   var targetMap = {};
-  var kpiLogRows;
-  var logMap = {};
+  var deliveredRows = listDeliveredSalesOrdersForKpi_(monthKey);
+  var orderMap = {};
 
   targets.forEach(function(target) {
     var salesId = String(target.sales_id || '').trim();
@@ -473,37 +606,37 @@ function buildApproverKpiProgressRows_(bulan) {
     targetMap[salesId] = target;
   });
 
-  ensureSheetWithHeaders_(APP_CONFIG.SHEETS.KPI_LOG, APP_CONFIG.HEADERS.KPI_LOG);
-  kpiLogRows = getSheetData_(APP_CONFIG.SHEETS.KPI_LOG).filter(function(row) {
-    return normalizeMonthKey_(row.bulan) === monthKey &&
-      normalizeText_(row.jenis_customer) === 'baru';
-  });
-
-  kpiLogRows.forEach(function(row) {
+  deliveredRows.forEach(function(row) {
     var salesId = String(row.sales_id || '').trim();
-    var logRow;
+    var orderRow;
 
     if (!salesId) {
       return;
     }
 
-    if (!logMap[salesId]) {
-      logMap[salesId] = [];
+    if (!orderMap[salesId]) {
+      orderMap[salesId] = [];
     }
 
-    logRow = {
+    orderRow = {
       no_so: String(row.no_so || '').trim(),
       qty_total: Number(row.qty_total || 0),
-      tanggal_siap_kirim: String(row.tanggal_siap_kirim || '').trim()
+      tanggal_order: String(row.tanggal_order || '').trim(),
+      jam_order: String(row.jam_order || '').trim(),
+      tanggal_kirim_rencana: String(row.tanggal_kirim_rencana || '').trim(),
+      status_order: String(row.status_order || '').trim()
     };
-    logMap[salesId].push(logRow);
+    orderMap[salesId].push(orderRow);
   });
 
   return salesUsers.map(function(user) {
     var salesId = String(user.user_id || '').trim();
     var targetRow = targetMap[salesId] || null;
-    var orders = (logMap[salesId] || []).slice().sort(function(left, right) {
-      return String(right.tanggal_siap_kirim || '').localeCompare(String(left.tanggal_siap_kirim || ''));
+    var orders = (orderMap[salesId] || []).slice().sort(function(left, right) {
+      var leftStamp = String(left.tanggal_order || '') + ' ' + String(left.jam_order || '');
+      var rightStamp = String(right.tanggal_order || '') + ' ' + String(right.jam_order || '');
+
+      return String(rightStamp).localeCompare(String(leftStamp));
     });
     var targetQty = Number(targetRow && targetRow.target_qty || 0);
     var achievedQty = orders.reduce(function(sum, row) {
