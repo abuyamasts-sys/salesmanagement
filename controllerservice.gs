@@ -66,16 +66,19 @@ function buildControllerDashboardSummary_(salesOrders, salesOrderDetails, filter
   var monthEnd = String(filter.monthEnd || filter.today || '').trim();
   var periodStart = String(filter.startDate || monthStart || '').trim();
   var periodEnd = String(filter.endDate || monthEnd || today || '').trim();
+  var periodOrderCount = buildControllerOrderCount_(orders, periodStart, periodEnd);
+  var periodOmzet = buildControllerOmzetTotal_(orders, periodStart, periodEnd);
 
   return {
     so_today: buildControllerOrderCount_(orders, today, today),
     omzet_today: buildControllerOmzetTotal_(orders, today, today),
     customers_today: buildControllerUniqueCustomerCount_(orders, today, today),
     qty_today: buildControllerQtyTotal_(orders, detailQtyByNoSo, today, today),
-    so_week: buildControllerOrderCount_(orders, periodStart, periodEnd),
-    omzet_week: buildControllerOmzetTotal_(orders, periodStart, periodEnd),
+    so_week: periodOrderCount,
+    omzet_week: periodOmzet,
     so_month: buildControllerOrderCount_(orders, monthStart, monthEnd),
-    omzet_month: buildControllerOmzetTotal_(orders, monthStart, monthEnd)
+    omzet_month: buildControllerOmzetTotal_(orders, monthStart, monthEnd),
+    average_order_value: periodOrderCount > 0 ? Math.round(periodOmzet / periodOrderCount) : 0
   };
 }
 

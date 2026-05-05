@@ -1197,6 +1197,7 @@
 
           appState.readyOrders = Array.isArray(payload.readyOrders) ? payload.readyOrders : [];
           appState.deliveryOrders = Array.isArray(payload.deliveryOrders) ? payload.deliveryOrders : [];
+          appState.deliverySummary = payload.deliverySummary || null;
           appState.tomorrowOrders = Array.isArray(payload.tomorrowOrders) ? payload.tomorrowOrders : [];
           appState.tomorrowPlanDate = String(payload.tomorrowPlanDate || '');
           appState.customers = Array.isArray(payload.customers) ? payload.customers : appState.customers;
@@ -4378,19 +4379,22 @@
   }
 
   function renderAdminSummary_() {
-    setText_('summaryReadyOrders', String(appState.readyOrders.length || 0));
     var summary = appState.deliverySummary || null;
 
     if (summary) {
+      setText_('summaryReadyOrders', String(summary.order_operasional || 0));
       setText_('summaryDeliveryReady', String(summary.siap_kirim || 0));
       setText_('summaryDelivered', String(summary.terkirim || 0));
       setText_('summaryCompleted', String(summary.selesai || 0));
+      setText_('adminSummaryPeriod', summary.period_label ? 'Periode: ' + summary.period_label : '');
       return;
     }
 
+    setText_('summaryReadyOrders', String(appState.readyOrders.length || 0));
     setText_('summaryDeliveryReady', String(countDeliveryByStatus_('Siap Kirim')));
     setText_('summaryDelivered', String(countDeliveryByStatus_('Terkirim')));
     setText_('summaryCompleted', String(countDeliveryByStatus_('Selesai')));
+    setText_('adminSummaryPeriod', '');
   }
 
   function renderBillingSummary_() {
@@ -8417,7 +8421,7 @@
       so_week: '74',
       omzet_week: 'Rp 109.800.000',
       so_month: '286',
-      omzet_month: 'Rp 421.350.000'
+      average_order_value: 'Rp 1.483.784'
     };
     appState.controllerTrend = [
       { label: 'H-6', value: '8 SO', note: 'Rp 11,2 jt' },
@@ -8529,7 +8533,7 @@
     setText_('controllerKpiSoWeek', summary.so_week || '0');
     setText_('controllerKpiOmzetWeek', summary.omzet_week || 'Rp 0');
     setText_('controllerKpiSoMonth', summary.so_month || '0');
-    setText_('controllerKpiOmzetMonth', summary.omzet_month || 'Rp 0');
+    setText_('controllerKpiOmzetMonth', summary.average_order_value || 'Rp 0');
   }
 
   function renderControllerSalesKpiSnapshot_() {
@@ -9486,7 +9490,7 @@
       so_week: formatNumber_(source.so_week || 0),
       omzet_week: formatCurrencyInput_(source.omzet_week || 0),
       so_month: formatNumber_(source.so_month || 0),
-      omzet_month: formatCurrencyInput_(source.omzet_month || 0)
+      average_order_value: formatCurrencyInput_(source.average_order_value || 0)
     };
   }
 

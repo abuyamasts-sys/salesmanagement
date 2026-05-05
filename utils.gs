@@ -77,6 +77,40 @@ function normalizeSheetDateToYmd_(value) {
   return String(value || '').trim();
 }
 
+function getCurrentMonthPeriod_() {
+  var now = new Date();
+  var start = new Date(now.getFullYear(), now.getMonth(), 1);
+  var end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  var monthNames = [
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember'
+  ];
+
+  return {
+    start: Utilities.formatDate(start, APP_CONFIG.TIMEZONE, 'yyyy-MM-dd'),
+    end: Utilities.formatDate(end, APP_CONFIG.TIMEZONE, 'yyyy-MM-dd'),
+    label: monthNames[Number(Utilities.formatDate(now, APP_CONFIG.TIMEZONE, 'M')) - 1] + ' ' +
+      Utilities.formatDate(now, APP_CONFIG.TIMEZONE, 'yyyy')
+  };
+}
+
+function isYmdInPeriod_(value, period) {
+  var dateKey = normalizeSheetDateToYmd_(value);
+  var safePeriod = period || {};
+
+  return !!dateKey && dateKey >= safePeriod.start && dateKey <= safePeriod.end;
+}
+
 function appendRowByHeaders_(sheetName, data) {
   var sheet = getSheetByName_(sheetName);
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(header) {

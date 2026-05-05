@@ -351,6 +351,7 @@ function getAdminDashboardData(userId) {
   var salesOrderByNoSo = {};
   var salesOrderDetailsByNoSo = {};
   var suratJalanByNoSo = {};
+  var dashboardPeriod = getCurrentMonthPeriod_();
 
   salesOrders.forEach(function(order) {
     salesOrderByNoSo[String(order.no_so || '').trim()] = order;
@@ -407,6 +408,7 @@ function getAdminDashboardData(userId) {
     tomorrowPlanDate: tomorrowPlanDate,
     tomorrowOrders: tomorrowOrders,
     readyOrders: readyOrders,
+    deliverySummary: buildAdminOperationsSummary_(salesOrders, deliveryOrders, suratJalanByNoSo, dashboardPeriod),
     deliveryOrders: deliveryOrders.filter(function(row) {
       return normalizeText_(row.status_kirim) !== 'batal kirim';
     }).map(function(row) {
@@ -448,6 +450,7 @@ function getAdminOperationsData(userId, options) {
   var deliverySummary;
   var filterDate;
   var filteredDeliveryOrders;
+  var dashboardPeriod = getCurrentMonthPeriod_();
 
   salesOrders.forEach(function(order) {
     salesOrderByNoSo[String(order.no_so || '').trim()] = order;
@@ -459,13 +462,7 @@ function getAdminOperationsData(userId, options) {
     }
   });
 
-  deliverySummary = deliveryOrders.reduce(function(result, row) {
-    var status = normalizeText_(row.status_kirim);
-    if (status === 'siap kirim') result.siap_kirim += 1;
-    if (status === 'terkirim') result.terkirim += 1;
-    if (status === 'selesai') result.selesai += 1;
-    return result;
-  }, { siap_kirim: 0, terkirim: 0, selesai: 0 });
+  deliverySummary = buildAdminOperationsSummary_(salesOrders, deliveryOrders, suratJalanByNoSo, dashboardPeriod);
 
   filterDate = normalizeSheetDateToYmd_(options && options.delivery_filter_date);
   filteredDeliveryOrders = deliveryOrders.filter(function(row) {
@@ -502,6 +499,52 @@ function getAdminOperationsData(userId, options) {
       return buildAdminDeliveryListRow_(row, salesOrderByNoSo[noSoKey] || {});
     })
   });
+}
+
+function buildAdminOperationsSummary_(salesOrders, deliveryOrders, suratJalanByNoSo, period) {
+  var safePeriod = period || getCurrentMonthPeriod_();
+  var activeSuratJalanByNoSo = suratJalanByNoSo || {};
+  var result = {
+    order_operasional: 0,
+    siap_kirim: 0,
+    terkirim: 0,
+    selesai: 0,
+    period_start: safePeriod.start,
+    period_end: safePeriod.end,
+    period_label: safePeriod.label
+  };
+
+  (salesOrders || []).forEach(function(row) {
+    var noSoKey = String(row.no_so || '').trim();
+    var orderDate = row.tanggal_kirim_rencana || row.tanggal_order || '';
+
+    if (!isAdminOperationalOrderStatus_(row.status_order)) {
+      return;
+    }
+
+    if (activeSuratJalanByNoSo[noSoKey]) {
+      return;
+    }
+
+    if (isYmdInPeriod_(orderDate, safePeriod)) {
+      result.order_operasional += 1;
+    }
+  });
+
+  (deliveryOrders || []).forEach(function(row) {
+    var status = normalizeText_(row.status_kirim);
+    var deliveryDate = row.tanggal_kirim || row.tanggal_cetak || '';
+
+    if (status === 'batal kirim' || !isYmdInPeriod_(deliveryDate, safePeriod)) {
+      return;
+    }
+
+    if (status === 'siap kirim') result.siap_kirim += 1;
+    if (status === 'terkirim') result.terkirim += 1;
+    if (status === 'selesai') result.selesai += 1;
+  });
+
+  return result;
 }
 
 function isAdminOperationalOrderStatus_(statusOrder) {
