@@ -51,6 +51,10 @@
     tagihan: [],
     billingSummary: null,
     billingSync: null,
+    billingPage: 1,
+    billingFilterStartDate: '',
+    billingFilterEndDate: '',
+    billingFilterMonth: '',
     deliverySummary: null,
     salesKpiMonth: '',
     salesKpiSummary: null,
@@ -93,6 +97,7 @@
   var APPROVER_EXPORT_PAGE_SIZE = 10;
   var READY_ORDER_PAGE_SIZE = 10;
   var DELIVERY_PAGE_SIZE = 10;
+  var BILLING_PAGE_SIZE = 10;
   var SALES_HISTORY_PAGE_SIZE = 10;
   var BACKUP_HISTORY_PAGE_SIZE = 10;
   var controllerTrendChartLoadState_ = 'idle';
@@ -323,7 +328,12 @@
     safeBindById_('savePayoutActionBtn', 'click', submitPayoutActionModal_);
     safeBindById_('generateTomorrowPlanBtn', 'click', handleGenerateTomorrowPlan_);
     safeBindById_('copyTomorrowPlanBtn', 'click', handleCopyTomorrowPlan_);
-    safeBindById_('billingSearch', 'input', renderBillingTable_);
+    safeBindById_('billingSearch', 'input', handleBillingSearchInput_);
+    safeBindById_('billingFilterStartDate', 'change', handleBillingDateRangeChange_);
+    safeBindById_('billingFilterEndDate', 'change', handleBillingDateRangeChange_);
+    safeBindById_('billingFilterMonth', 'change', handleBillingMonthFilterChange_);
+    safeBindById_('billingFilterTodayBtn', 'click', handleBillingFilterToday_);
+    safeBindById_('billingFilterAllBtn', 'click', handleBillingFilterAll_);
     safeBindById_('billingRefreshBtn', 'click', function() {
       setStatusText_('Memuat data tagihan...');
       loadAdminBillingData_(function() {
@@ -430,6 +440,7 @@
     window.handleCsRevisionLineInput_ = handleCsRevisionLineInput_;
     window.handleBillingPartialPay_ = handleBillingPartialPay_;
     window.handleMarkBillingPaid_ = handleMarkBillingPaid_;
+    window.handleBillingPageChange_ = handleBillingPageChange_;
     window.handleMarkSlfPayoutBatchPaid_ = handleMarkSlfPayoutBatchPaid_;
     window.handleMarkSlfPayoutBatchInProcess_ = handleMarkSlfPayoutBatchInProcess_;
     window.handleViewSlfPayoutBatchDetail_ = handleViewSlfPayoutBatchDetail_;
@@ -1367,14 +1378,6 @@
       setStatusText_('Memuat ulang rencana besok...');
       loadAdminPlanningData_(function() {
         setStatusText_('Rencana besok diperbarui');
-      });
-      return;
-    }
-
-    if (getActiveAdminView_() === 'billing') {
-      setStatusText_('Memuat ulang data tagihan...');
-      loadAdminBillingData_(function() {
-        setStatusText_('Data tagihan diperbarui');
       });
       return;
     }
@@ -4413,16 +4416,42 @@
 
   function getFilteredBillingRows_() {
     var query = normalizeSearchText_(getFieldValue_('billingSearch'));
+    var startDate = normalizeDateKey_(appState.billingFilterStartDate || getFieldValue_('billingFilterStartDate'));
+    var endDate = normalizeDateKey_(appState.billingFilterEndDate || getFieldValue_('billingFilterEndDate'));
+    var rows = appState.tagihan.slice();
 
-    if (!query) {
-      return appState.tagihan.slice();
+    if (startDate || endDate) {
+      rows = rows.filter(function(row) {
+        var rowDate = normalizeDateKey_(row.tanggal_dibuat || '');
+
+        if (!rowDate) {
+          return false;
+        }
+
+        if (startDate && rowDate < startDate) {
+          return false;
+        }
+
+        if (endDate && rowDate > endDate) {
+          return false;
+        }
+
+        return true;
+      });
     }
 
-    return appState.tagihan.filter(function(row) {
+    if (!query) {
+      return rows;
+    }
+
+    return rows.filter(function(row) {
       var haystack = [
         row.tagihan_id,
+        row.no_so,
         row.kode_customer,
         row.nama_customer,
+        row.sales_nama,
+        row.term_pembayaran,
         row.status_customer,
         row.status_pembayaran,
         row.status_tagihan,
@@ -4436,16 +4465,31 @@
 
   function renderBillingTable_() {
     var tbody = document.getElementById('billingTableBody');
+    var pagination = document.getElementById('billingPagination');
+    var rows = getFilteredBillingRows_();
+    var totalPages;
+    var currentPage;
+    var startIndex;
+    var endIndex;
+    var pageRows;
+    var pageInfo;
     if (!tbody) return;
 
-    var rows = getFilteredBillingRows_();
-
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Tidak ada data tagihan.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-cell">Tidak ada data tagihan.</td></tr>';
+      if (pagination) {
+        pagination.innerHTML = '';
+      }
       return;
     }
 
-    tbody.innerHTML = rows.map(function(row) {
+    totalPages = getBillingPageTotal_(rows);
+    currentPage = normalizeBillingPage_(totalPages);
+    startIndex = (currentPage - 1) * BILLING_PAGE_SIZE;
+    endIndex = Math.min(startIndex + BILLING_PAGE_SIZE, rows.length);
+    pageRows = rows.slice(startIndex, endIndex);
+
+    tbody.innerHTML = pageRows.map(function(row) {
       var kode = String(row.kode_customer || '').trim();
       var name = String(row.nama_customer || '-').trim();
       var meta = kode ? (name + ' (' + kode + ')') : name;
@@ -4470,6 +4514,9 @@
       return '' +
         '<tr>' +
           '<td><strong>' + escapeHtml_(meta) + '</strong><br/><small>' + escapeHtml_(statusLine || '-') + '</small><br/><small>' + escapeHtml_(paymentInfo || '-') + '</small></td>' +
+          '<td>' + escapeHtml_(row.no_so || '-') + '</td>' +
+          '<td>' + escapeHtml_(row.term_pembayaran || '-') + '</td>' +
+          '<td>' + escapeHtml_(row.sales_nama || row.sales_id || '-') + '</td>' +
           '<td>' + escapeHtml_(row.status_tagihan || '-') + '</td>' +
           '<td class="cell-right">' + escapeHtml_(formatCurrencyInput_(total)) + '</td>' +
           '<td class="cell-right">' + escapeHtml_(String(overdue || 0)) + '</td>' +
@@ -4481,6 +4528,140 @@
           ) : '-') + '</td>' +
         '</tr>';
     }).join('');
+
+    if (!pagination) {
+      return;
+    }
+
+    if (rows.length <= BILLING_PAGE_SIZE) {
+      pagination.innerHTML = '';
+      return;
+    }
+
+    pageInfo = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + rows.length + ' tagihan';
+    pagination.innerHTML = '' +
+      '<div class="table-pagination-info">' + escapeHtml_(pageInfo) + '</div>' +
+      '<div class="table-pagination-actions">' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleBillingPageChange_(-1)"' + (currentPage <= 1 ? ' disabled' : '') + '>Sebelumnya</button>' +
+        '<span class="table-pagination-status">Halaman ' + currentPage + ' dari ' + totalPages + '</span>' +
+        '<button type="button" class="ghost-btn pagination-btn" onclick="handleBillingPageChange_(1)"' + (currentPage >= totalPages ? ' disabled' : '') + '>Berikutnya</button>' +
+      '</div>';
+  }
+
+  function handleBillingSearchInput_() {
+    appState.billingPage = 1;
+    renderBillingTable_();
+  }
+
+  function handleBillingDateRangeChange_() {
+    appState.billingFilterStartDate = normalizeDateKey_(getFieldValue_('billingFilterStartDate'));
+    appState.billingFilterEndDate = normalizeDateKey_(getFieldValue_('billingFilterEndDate'));
+    appState.billingFilterMonth = '';
+    setFieldValue_('billingFilterMonth', '');
+    appState.billingPage = 1;
+    renderBillingTable_();
+  }
+
+  function handleBillingMonthFilterChange_() {
+    var monthKey = String(getFieldValue_('billingFilterMonth') || '').trim();
+    var range = getBillingMonthRange_(monthKey);
+
+    appState.billingFilterMonth = monthKey;
+    appState.billingFilterStartDate = range.startDate;
+    appState.billingFilterEndDate = range.endDate;
+    setFieldValue_('billingFilterStartDate', range.startDate);
+    setFieldValue_('billingFilterEndDate', range.endDate);
+    appState.billingPage = 1;
+    renderBillingTable_();
+  }
+
+  function handleBillingFilterToday_() {
+    var today = getTodayIsoDate_();
+
+    appState.billingFilterStartDate = today;
+    appState.billingFilterEndDate = today;
+    appState.billingFilterMonth = '';
+    setFieldValue_('billingFilterStartDate', today);
+    setFieldValue_('billingFilterEndDate', today);
+    setFieldValue_('billingFilterMonth', '');
+    appState.billingPage = 1;
+    renderBillingTable_();
+  }
+
+  function handleBillingFilterAll_() {
+    appState.billingFilterStartDate = '';
+    appState.billingFilterEndDate = '';
+    appState.billingFilterMonth = '';
+    setFieldValue_('billingFilterStartDate', '');
+    setFieldValue_('billingFilterEndDate', '');
+    setFieldValue_('billingFilterMonth', '');
+    appState.billingPage = 1;
+    renderBillingTable_();
+  }
+
+  function getBillingMonthRange_(monthKey) {
+    var match = String(monthKey || '').trim().match(/^(\d{4})-(\d{2})$/);
+    var year;
+    var monthIndex;
+    var endDate;
+
+    if (!match) {
+      return { startDate: '', endDate: '' };
+    }
+
+    year = Number(match[1]);
+    monthIndex = Number(match[2]) - 1;
+    endDate = new Date(year, monthIndex + 1, 0);
+
+    return {
+      startDate: match[1] + '-' + match[2] + '-01',
+      endDate: [
+        String(endDate.getFullYear()),
+        String(endDate.getMonth() + 1).padStart(2, '0'),
+        String(endDate.getDate()).padStart(2, '0')
+      ].join('-')
+    };
+  }
+
+  function getBillingPageTotal_(rows) {
+    var sourceRows = rows || getFilteredBillingRows_();
+    return Math.max(1, Math.ceil((sourceRows.length || 0) / BILLING_PAGE_SIZE));
+  }
+
+  function normalizeBillingPage_(totalPages) {
+    var maxPage = Number(totalPages || getBillingPageTotal_());
+    var currentPage = Number(appState.billingPage || 1);
+
+    if (!isFinite(currentPage) || currentPage < 1) {
+      currentPage = 1;
+    }
+
+    if (currentPage > maxPage) {
+      currentPage = maxPage;
+    }
+
+    appState.billingPage = currentPage;
+    return currentPage;
+  }
+
+  function handleBillingPageChange_(direction) {
+    var nextPage = normalizeBillingPage_() + Number(direction || 0);
+    var totalPages = getBillingPageTotal_();
+
+    if (nextPage < 1) {
+      nextPage = 1;
+    }
+
+    if (nextPage > totalPages) {
+      nextPage = totalPages;
+    }
+
+    if (nextPage === appState.billingPage) {
+      return;
+    }
+
+    appState.billingPage = nextPage;
+    renderBillingTable_();
   }
 
   function handleBillingPartialPay_(tagihanId) {
@@ -6263,10 +6444,6 @@
       return 'planning';
     }
 
-    if (id === 'admin-view-billing' || id === 'admin-view-tagihan') {
-      return 'billing';
-    }
-
     return 'operations';
   }
 
@@ -7047,8 +7224,6 @@
 
     if (viewName === 'planning') {
       targetView = 'planning';
-    } else if (viewName === 'billing' || viewName === 'tagihan') {
-      targetView = 'billing';
     }
 
     document.querySelectorAll('.admin-subtab-btn').forEach(function(button) {
@@ -7061,15 +7236,13 @@
 
     if (targetView === 'planning') {
       ensurePlanningDataLoaded_();
-    } else if (targetView === 'billing') {
-      ensureBillingDataLoaded_();
     }
   }
 
   function activateApproverView_(viewName) {
     var targetView = 'approval';
 
-    if (viewName === 'pricing' || viewName === 'export' || viewName === 'commission' || viewName === 'kpi' || viewName === 'backup') {
+    if (viewName === 'pricing' || viewName === 'export' || viewName === 'commission' || viewName === 'kpi' || viewName === 'backup' || viewName === 'billing') {
       targetView = viewName;
     }
 
@@ -7089,6 +7262,8 @@
       loadApproverExportData_();
     } else if (targetView === 'backup') {
       loadApproverBackupData_();
+    } else if (targetView === 'billing') {
+      ensureBillingDataLoaded_();
     }
   }
 

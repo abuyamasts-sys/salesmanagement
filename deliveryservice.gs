@@ -17,6 +17,8 @@ function createSuratJalan(noSo, options) {
       throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSoKey);
     }
 
+    assertSuratJalanApprovalGateOpen_(salesOrder);
+
     if (normalizeText_(salesOrder.status_order) !== 'siap kirim') {
       throw new Error('Surat jalan hanya bisa dibuat untuk order dengan status Siap Kirim');
     }
@@ -69,6 +71,8 @@ function getSuratJalanPrintData(noSo) {
   }
 
   var salesOrder = findSalesOrderByNoSo_(noSo) || {};
+  assertSuratJalanApprovalGateOpen_(salesOrder);
+
   var orderDisplay = buildSalesOrderClientRow_(salesOrder);
   var tanggalKirimEfektif = resolveEffectiveSuratJalanTanggalKirim_(suratJalan, salesOrder);
 
@@ -116,6 +120,8 @@ function getSuratJalanPreviewData(noSo) {
     throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSoKey);
   }
 
+  assertSuratJalanApprovalGateOpen_(salesOrder);
+
   if (normalizeText_(salesOrder.status_order) !== 'siap kirim') {
     throw new Error('Preview SJ hanya tersedia untuk order berstatus Siap Kirim.');
   }
@@ -155,6 +161,66 @@ function getSuratJalanPreviewData(noSo) {
     total: orderDisplay.total_order || salesOrder.total || '',
     catatan_order: salesOrder.catatan || ''
   };
+}
+
+function assertSuratJalanApprovalGateOpen_(salesOrder) {
+  var order = salesOrder || {};
+  var statusOrder = normalizeText_(order.status_order);
+  var butuhPersetujuan = normalizeText_(order.butuh_persetujuan) === 'ya';
+  var hasCustomerDebtRisk = hasCustomerDebtRiskForSuratJalan_(order);
+  var approval = null;
+  var approvalStatus = '';
+  var isApproved = false;
+
+  if (!hasCustomerDebtRisk) {
+    return;
+  }
+
+  if (typeof findApprovalByNoSo_ === 'function') {
+    approval = findApprovalByNoSo_(order.no_so);
+  }
+
+  approvalStatus = normalizeText_(approval && approval.status_approval);
+  isApproved = approvalStatus === 'disetujui' || (
+    statusOrder === 'siap kirim' &&
+    !butuhPersetujuan &&
+    approvalStatus !== 'ditolak'
+  );
+
+  if (!isApproved || statusOrder === 'ditolak') {
+    throw new Error(buildSuratJalanApprovalGateMessage_(order, approval));
+  }
+}
+
+function hasCustomerDebtRiskForSuratJalan_(salesOrder) {
+  var order = salesOrder || {};
+  var statusPembayaran = normalizeText_(order.status_pembayaran_customer);
+  var alasanHold = normalizeText_(order.alasan_hold);
+
+  return Number(order.total_tunggakan || 0) > 0 ||
+    statusPembayaran === 'menunggak' ||
+    statusPembayaran === 'ditahan' ||
+    alasanHold.indexOf('customer menunggak') !== -1 ||
+    alasanHold.indexOf('customer ditahan') !== -1 ||
+    alasanHold.indexOf('total tunggakan') !== -1;
+}
+
+function buildSuratJalanApprovalGateMessage_(salesOrder, approval) {
+  var order = salesOrder || {};
+  var totalTunggakan = Number(order.total_tunggakan || 0);
+  var approvalStatus = normalizeText_(approval && approval.status_approval);
+  var parts = [
+    'Customer masih memiliki tunggakan.',
+    'Nominal tunggakan: Rp ' + formatNumberServer_(totalTunggakan) + '.'
+  ];
+
+  if (approvalStatus === 'ditolak' || normalizeText_(order.status_order) === 'ditolak') {
+    parts.push('Approval approver ditolak. Surat Jalan tidak boleh dibuat atau dicetak.');
+  } else {
+    parts.push('Order harus disetujui approver terlebih dahulu sebelum Surat Jalan dibuat atau dicetak.');
+  }
+
+  return parts.join(' ');
 }
 
 function markOrderDelivered(noSo, userId, catatanKirim) {
@@ -579,6 +645,11 @@ function verifyDeliveredOrder(noSo, userId, payload) {
       catatan_approval: 'Ditutup otomatis karena CS mengubah nominal transfer sehingga tidak perlu approval selisih pembayaran.'
     });
   }
+
+  createOrSyncTagihanFromSalesOrderTempo_(Object.keys(salesOrder || {}).reduce(function(result, key) {
+    result[key] = salesOrder[key];
+    return result;
+  }, {}), suratJalan, totals, { user_id: userId });
 
   if (normalizeText_(salesOrder.channel_sales) === 'slf') {
     updateSalesOrderCommissionStatus_(noSo, 'Menunggu Pembayaran', {

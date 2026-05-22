@@ -672,20 +672,20 @@ function getDeliveryVerificationData_(noSo) {
 }
 
 function getAdminBillingData(userId) {
-  requireCurrentUserRole_(['CS/Admin'], userId);
+  requireCurrentUserRole_(['Approver'], userId);
   var currentUser = getCurrentUserProfile(userId);
   var payload = getAdminBillingData_(currentUser, {});
   return toClientValue_(payload);
 }
 
 function markTagihanLunasFromDashboard(userId, payload) {
-  requireCurrentUserRole_(['CS/Admin'], userId);
+  requireCurrentUserRole_(['Approver'], userId);
   var currentUser = getCurrentUserProfile(userId);
   return toClientValue_(markTagihanLunas_(currentUser, payload || {}));
 }
 
 function recordTagihanPaymentFromDashboard(userId, payload) {
-  requireCurrentUserRole_(['CS/Admin'], userId);
+  requireCurrentUserRole_(['Approver'], userId);
   var currentUser = getCurrentUserProfile(userId);
   return toClientValue_(recordTagihanPayment_(currentUser, payload || {}));
 }

@@ -70,6 +70,11 @@ function syncTagihanFromCustomerMaster_(currentUser) {
 
   existing.forEach(function(row) {
     var status = normalizeText_(row.status_tagihan);
+    var sumberTagihan = normalizeText_(row.sumber_tagihan);
+    if (sumberTagihan === 'sales_order') {
+      return;
+    }
+
     if (status !== 'belum lunas' && status !== 'sebagian') {
       return;
     }
@@ -131,8 +136,17 @@ function syncTagihanFromCustomerMaster_(currentUser) {
       var totalAwal = totalTunggakan;
       appendRowByHeaders_(APP_CONFIG.SHEETS.TAGIHAN, {
         tagihan_id: generateDocNumber_('TGH'),
+        sumber_tagihan: 'MASTER_CUSTOMER',
+        no_so: '',
+        no_surat_jalan: '',
         kode_customer: snapshot.kode_customer,
         nama_customer: snapshot.nama_customer,
+        sales_id: '',
+        sales_nama: '',
+        term_pembayaran: '',
+        tanggal_order: '',
+        tanggal_kirim: '',
+        tanggal_jatuh_tempo: '',
         status_customer: snapshot.status_customer,
         status_pembayaran: snapshot.status_pembayaran,
         total_tagihan: snapshot.total_tagihan,
@@ -182,6 +196,15 @@ function syncTagihanFromCustomerMaster_(currentUser) {
       result[key] = snapshot[key];
       return result;
     }, {
+      sumber_tagihan: String(openTagihan.sumber_tagihan || '').trim() || 'MASTER_CUSTOMER',
+      no_so: openTagihan.no_so || '',
+      no_surat_jalan: openTagihan.no_surat_jalan || '',
+      sales_id: openTagihan.sales_id || '',
+      sales_nama: openTagihan.sales_nama || '',
+      term_pembayaran: openTagihan.term_pembayaran || '',
+      tanggal_order: openTagihan.tanggal_order || '',
+      tanggal_kirim: openTagihan.tanggal_kirim || '',
+      tanggal_jatuh_tempo: openTagihan.tanggal_jatuh_tempo || '',
       total_awal_tagihan: totalAwalTagihan,
       total_bayar: totalBayar,
       sisa_tagihan: sisaTagihan,
@@ -196,6 +219,120 @@ function syncTagihanFromCustomerMaster_(currentUser) {
     updated: updated,
     autoClosed: autoClosed
   };
+}
+
+function createOrSyncTagihanFromSalesOrderTempo_(salesOrder, suratJalan, totals, currentUser) {
+  var order = salesOrder || {};
+  var noSo = String(order.no_so || '').trim();
+  var termPembayaran = String(order.term_pembayaran || '').trim();
+  var totalTagihan = Number((totals && totals.total) || order.total_final || order.total || 0);
+  var existing;
+  var existingPaid;
+  var sisaTagihan;
+  var statusTagihan;
+  var now;
+  var tanggalJatuhTempo;
+  var row;
+
+  if (!noSo || normalizeText_(termPembayaran).indexOf('tempo') === -1) {
+    return null;
+  }
+
+  if (!(totalTagihan > 0)) {
+    return null;
+  }
+
+  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.TAGIHAN, APP_CONFIG.HEADERS.TAGIHAN);
+
+  existing = getSheetData_(APP_CONFIG.SHEETS.TAGIHAN).find(function(item) {
+    return normalizeText_(item.sumber_tagihan) === 'sales_order' &&
+      String(item.no_so || '').trim() === noSo;
+  }) || null;
+
+  if (existing && normalizeText_(existing.status_tagihan) === 'lunas') {
+    return existing;
+  }
+
+  now = getNowParts_();
+  tanggalJatuhTempo = calculateTagihanDueDateFromVerification_(now.tanggal, termPembayaran) ||
+    normalizeSheetDateToYmd_(order.tanggal_jatuh_tempo || '');
+  existingPaid = existing ? Number(existing.total_bayar || 0) : 0;
+  sisaTagihan = Math.max(0, totalTagihan - existingPaid);
+  statusTagihan = sisaTagihan <= 0 ? 'Lunas' : (existingPaid > 0 ? 'Sebagian' : 'Belum Lunas');
+  row = {
+    sumber_tagihan: 'SALES_ORDER',
+    no_so: noSo,
+    no_surat_jalan: suratJalan && suratJalan.no_surat_jalan ? suratJalan.no_surat_jalan : '',
+    kode_customer: order.customer_id || '',
+    nama_customer: order.nama_customer_input || '',
+    sales_id: order.sales_id || '',
+    sales_nama: order.sales_nama || '',
+    term_pembayaran: termPembayaran,
+    tanggal_order: order.tanggal_order || '',
+    tanggal_kirim: suratJalan && suratJalan.tanggal_kirim ? suratJalan.tanggal_kirim : (order.tanggal_kirim_rencana || ''),
+    tanggal_jatuh_tempo: tanggalJatuhTempo,
+    status_customer: '',
+    status_pembayaran: termPembayaran,
+    total_tagihan: totalTagihan,
+    total_awal_tagihan: existing ? Number(existing.total_awal_tagihan || totalTagihan) : totalTagihan,
+    total_bayar: existingPaid,
+    sisa_tagihan: sisaTagihan,
+    jumlah_nota_overdue: 0,
+    jt_terdekat: tanggalJatuhTempo,
+    catatan_piutang: 'Tagihan tempo dari SO ' + noSo,
+    status_tagihan: statusTagihan
+  };
+
+  if (existing) {
+    return updateRowByKey_(APP_CONFIG.SHEETS.TAGIHAN, 'tagihan_id', existing.tagihan_id, row);
+  }
+
+  row.tagihan_id = generateDocNumber_('TGH');
+  row.tanggal_dibuat = now.tanggal + ' ' + now.jam;
+  row.dibuat_oleh = currentUser && currentUser.user_id ? currentUser.user_id : '';
+  row.tanggal_bayar_terakhir = '';
+  row.dibayar_oleh_terakhir = '';
+  row.catatan_bayar_terakhir = '';
+  row.tanggal_lunas = '';
+  row.dilunasi_oleh = '';
+  row.catatan_pelunasan = '';
+  appendRowByHeaders_(APP_CONFIG.SHEETS.TAGIHAN, row);
+  return row;
+}
+
+function calculateTagihanDueDateFromVerification_(tanggalVerifikasi, termPembayaran) {
+  var verificationDate = normalizeSheetDateToYmd_(tanggalVerifikasi);
+  var tempoDays = getTempoDaysFromTermPembayaran_(termPembayaran);
+
+  if (!verificationDate || tempoDays < 0) {
+    return '';
+  }
+
+  return addDaysToYmdDate_(verificationDate, tempoDays);
+}
+
+function getTempoDaysFromTermPembayaran_(termPembayaran) {
+  var text = String(termPembayaran || '').trim();
+  var match = text.match(/(\d+)/);
+
+  if (normalizeText_(text).indexOf('tempo') === -1) {
+    return -1;
+  }
+
+  return match ? Number(match[1] || 0) : 0;
+}
+
+function addDaysToYmdDate_(ymdDate, daysToAdd) {
+  var match = String(ymdDate || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  var date;
+
+  if (!match) {
+    return '';
+  }
+
+  date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  date.setDate(date.getDate() + Number(daysToAdd || 0));
+  return Utilities.formatDate(date, APP_CONFIG.TIMEZONE, 'yyyy-MM-dd');
 }
 
 function markTagihanLunas_(currentUser, payload) {
@@ -279,6 +416,7 @@ function applyTagihanPayment_(currentUser, payload) {
   }
 
   var currentUserId = currentUser && currentUser.user_id ? currentUser.user_id : '';
+  var isSalesOrderTagihan = normalizeText_(target.sumber_tagihan) === 'sales_order';
   var totalAwal = Number(target.total_awal_tagihan || target.total_tagihan || 0);
   var totalBayarLama = Number(target.total_bayar || 0);
   var totalTagihan = Number(target.total_tagihan || 0);
@@ -318,7 +456,7 @@ function applyTagihanPayment_(currentUser, payload) {
 
   var updatedTagihan = updateRowByKey_(APP_CONFIG.SHEETS.TAGIHAN, 'tagihan_id', tagihanId, updates);
 
-  var existingCustomer = findCustomerByCode_(target.kode_customer);
+  var existingCustomer = isSalesOrderTagihan ? null : findCustomerByCode_(target.kode_customer);
   if (existingCustomer) {
     var statusCustomer = normalizeText_(existingCustomer.status_customer);
     var nextCustomerStatus = existingCustomer.status_customer;
@@ -355,7 +493,11 @@ function applyTagihanPayment_(currentUser, payload) {
   }
 
   if (statusBaru === 'Lunas') {
-    markSlfCommissionReadyByCustomer_(target.kode_customer);
+    if (isSalesOrderTagihan && String(target.no_so || '').trim()) {
+      markSlfCommissionReadyByNoSo_(target.no_so);
+    } else {
+      markSlfCommissionReadyByCustomer_(target.kode_customer);
+    }
   }
 
   return {
@@ -417,5 +559,26 @@ function markSlfCommissionReadyByCustomer_(kodeCustomer) {
     updateSalesOrderCommissionStatus_(order.no_so, 'Siap Cair', {
       catatan: 'Tagihan lunas, komisi siap cair'
     });
+  });
+}
+
+function markSlfCommissionReadyByNoSo_(noSo) {
+  var noSoKey = String(noSo || '').trim();
+  var order;
+
+  if (!noSoKey) {
+    return;
+  }
+
+  order = findSalesOrderByNoSo_(noSoKey);
+  if (!order ||
+    normalizeText_(order.channel_sales) !== 'slf' ||
+    normalizeText_(order.status_order) !== 'selesai' ||
+    normalizeText_(order.status_komisi) !== 'menunggu pembayaran') {
+    return;
+  }
+
+  updateSalesOrderCommissionStatus_(noSoKey, 'Siap Cair', {
+    catatan: 'Tagihan SO lunas, komisi siap cair'
   });
 }
