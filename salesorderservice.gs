@@ -996,10 +996,68 @@ function calculateOrderTotals_(items) {
 
 function writeSalesOrderDetails_(noSo, items) {
   var headers = APP_CONFIG.HEADERS.SALES_ORDER_DETAIL;
+  var sheet;
+  var rows;
 
-  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, headers);
-  (items || []).forEach(function(item) {
-    appendRowByHeaders_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, {
+  sheet = ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, headers);
+  rows = buildSalesOrderDetailRows_(headers, noSo, items);
+
+  if (!rows.length) {
+    return;
+  }
+
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+}
+
+function replaceSalesOrderDetails_(noSo, items) {
+  var headers = APP_CONFIG.HEADERS.SALES_ORDER_DETAIL;
+  var sheet;
+  var safeNoSo = String(noSo || '').trim();
+  var lastRow;
+  var lastCol;
+  var sheetHeaders;
+  var noSoIndex;
+  var existingRows;
+  var preservedRows;
+  var nextRows;
+
+  sheet = ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, headers);
+  lastRow = sheet.getLastRow();
+  lastCol = sheet.getLastColumn();
+
+  if (lastRow < 2) {
+    writeSalesOrderDetails_(safeNoSo, items);
+    return;
+  }
+
+  sheetHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(header) {
+    return String(header || '').trim();
+  });
+  noSoIndex = sheetHeaders.indexOf('no_so');
+
+  if (noSoIndex === -1) {
+    throw new Error('Kolom no_so tidak ditemukan di sheet detail order.');
+  }
+
+  existingRows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  preservedRows = existingRows.filter(function(row) {
+    return String(row[noSoIndex] || '').trim() !== safeNoSo;
+  });
+  nextRows = preservedRows.concat(buildSalesOrderDetailRows_(sheetHeaders, safeNoSo, items));
+
+  sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+
+  if (nextRows.length) {
+    if (nextRows.length + 1 > sheet.getMaxRows()) {
+      sheet.insertRowsAfter(sheet.getMaxRows(), nextRows.length + 1 - sheet.getMaxRows());
+    }
+    sheet.getRange(2, 1, nextRows.length, lastCol).setValues(nextRows);
+  }
+}
+
+function buildSalesOrderDetailRows_(headers, noSo, items) {
+  return (items || []).map(function(item) {
+    var rowData = {
       detail_id: item.detail_id,
       no_so: noSo,
       urutan_item: item.urutan_item,
@@ -1014,29 +1072,12 @@ function writeSalesOrderDetails_(noSo, items) {
       harga_final: item.harga,
       diskon_final: item.diskon,
       subtotal_final: item.subtotal
+    };
+
+    return (headers || []).map(function(header) {
+      return Object.prototype.hasOwnProperty.call(rowData, header) ? rowData[header] : '';
     });
   });
-}
-
-function replaceSalesOrderDetails_(noSo, items) {
-  var sheet = getSheetByNameOrNull_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL);
-  var safeNoSo = String(noSo || '').trim();
-  var rowIndex;
-
-  ensureSheetHeadersContain_(APP_CONFIG.SHEETS.SALES_ORDER_DETAIL, APP_CONFIG.HEADERS.SALES_ORDER_DETAIL);
-
-  if (!sheet) {
-    writeSalesOrderDetails_(safeNoSo, items);
-    return;
-  }
-
-  for (rowIndex = sheet.getLastRow(); rowIndex >= 2; rowIndex -= 1) {
-    if (String(sheet.getRange(rowIndex, 2).getValue() || '').trim() === safeNoSo) {
-      sheet.deleteRow(rowIndex);
-    }
-  }
-
-  writeSalesOrderDetails_(safeNoSo, items);
 }
 
 function getSalesOrderDetailsByNoSo_(noSo) {
