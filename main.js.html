@@ -10070,6 +10070,7 @@
           buildPrintField_('TERM', data.term_pembayaran || '-') +
           buildPrintField_('CUSTOMER', data.nama_customer || '-') +
           buildPrintField_('SALES', data.sales_nama || '-') +
+          buildPrintField_('PIC / HP', joinPrintValues_(data.pic_customer, data.no_hp_customer, ' / ') || '-') +
         '</div>' +
         '<div class="full-row"><span class="label">ALAMAT</span>: </div>' +
         '<div class="box-line">' + escapeHtml_(data.alamat_kirim || '-') + '</div>' +
