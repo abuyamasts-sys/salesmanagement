@@ -2157,7 +2157,7 @@
     }
 
     return (appState.exportOrders || []).slice().filter(function(row) {
-      var rowDate = normalizeDateKey_(row.tanggal_diterima || row.tanggal_verifikasi_cs);
+      var rowDate = normalizeDateKey_(row.tanggal_kirim);
 
       if (startDate && (!rowDate || rowDate < startDate)) {
         return false;
@@ -3631,7 +3631,7 @@
     setFieldValue_('approverExportEndDate', appState.approverExportEndDate);
     renderApproverExportSummary_();
     renderApproverExportTable_();
-    setStatusText_('Filter tanggal diterima diatur ke hari ini');
+    setStatusText_('Filter tanggal kirim diatur ke hari ini');
   }
 
   function handleApproverExportFilterAll_() {
@@ -3643,7 +3643,7 @@
     setFieldValue_('approverExportEndDate', '');
     renderApproverExportSummary_();
     renderApproverExportTable_();
-    setStatusText_('Menampilkan semua antrean export Kledo berdasarkan tanggal diterima');
+    setStatusText_('Menampilkan semua antrean export Kledo berdasarkan tanggal kirim');
   }
 
   function handleCreateDatabaseBackup_() {

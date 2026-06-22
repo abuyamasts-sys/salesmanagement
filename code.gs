@@ -210,19 +210,10 @@ function getReadyKledoExportOrders_(options) {
     var statusOrder = normalizeText_(row.status_order);
     var verificationStatus = String(row.status_verifikasi_cs || '').trim();
     var exportStatus = String(row.status_export_kledo || '').trim();
-    var rowDate = normalizeKledoExportReceivedDate_(row.tanggal_verifikasi_cs);
 
     if (!(statusOrder === 'selesai' &&
       verificationStatus === 'Sudah Dicek' &&
       exportStatus !== 'Sudah Export')) {
-      return;
-    }
-
-    if (filter.start && (!rowDate || rowDate < filter.start)) {
-      return;
-    }
-
-    if (filter.end && (!rowDate || rowDate > filter.end)) {
       return;
     }
 
@@ -235,7 +226,7 @@ function getReadyKledoExportOrders_(options) {
   detailsByNoSo = getSalesOrderDetailsMapForNoSo_(neededNoSo);
   getSheetData_(APP_CONFIG.SHEETS.SURAT_JALAN).forEach(function(row) {
     var noSo = String(row.no_so || '').trim();
-    if (noSo && neededNoSo[noSo] && !suratJalanByNoSo[noSo]) {
+    if (noSo && neededNoSo[noSo] && normalizeText_(row.status_kirim) !== 'batal kirim') {
       suratJalanByNoSo[noSo] = row;
     }
   });
@@ -244,6 +235,7 @@ function getReadyKledoExportOrders_(options) {
     var noSoKey = String(orderRow.no_so || '').trim();
     var order = buildSalesOrderClientRowFromDetails_(orderRow || {}, detailsByNoSo[noSoKey] || null);
     var suratJalan = suratJalanByNoSo[noSoKey] || {};
+    var tanggalKirimEfektif = resolveEffectiveSuratJalanTanggalKirim_(suratJalan, order);
 
     return {
       no_so: order.no_so || '',
@@ -256,7 +248,7 @@ function getReadyKledoExportOrders_(options) {
       tanggal_verifikasi_cs: order.tanggal_verifikasi_cs || '',
       tanggal_diterima: order.tanggal_verifikasi_cs || '',
       tanggal_jatuh_tempo: order.tanggal_jatuh_tempo || '',
-      tanggal_kirim: suratJalan.tanggal_kirim || order.tanggal_kirim_rencana || '',
+      tanggal_kirim: tanggalKirimEfektif || suratJalan.tanggal_kirim || order.tanggal_kirim_rencana || '',
       term_pembayaran: order.term_pembayaran || '',
       item: order.item_summary || order.item || '',
       qty: order.qty_summary || order.qty || '',
@@ -266,6 +258,18 @@ function getReadyKledoExportOrders_(options) {
       catatan_order: order.catatan || '',
       catatan_verifikasi_cs: order.catatan_verifikasi_cs || ''
     };
+  }).filter(function(row) {
+    var rowDate = normalizeKledoExportDeliveryDate_(row.tanggal_kirim);
+
+    if (filter.start && (!rowDate || rowDate < filter.start)) {
+      return false;
+    }
+
+    if (filter.end && (!rowDate || rowDate > filter.end)) {
+      return false;
+    }
+
+    return true;
   });
 }
 
@@ -587,6 +591,10 @@ function normalizeKledoExportReceivedDate_(value) {
   var match = String(normalized || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
 
   return match ? [match[1], match[2], match[3]].join('-') : '';
+}
+
+function normalizeKledoExportDeliveryDate_(value) {
+  return normalizeKledoExportReceivedDate_(value);
 }
 
 function buildAdminReadyOrderListRow_(order, rawDetails) {
