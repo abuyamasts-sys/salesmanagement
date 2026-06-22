@@ -1648,6 +1648,7 @@
                     <option value="Sudah Dicek">Sudah Dicek</option>
                   </select>
                   <input type="date" id="deliveryFilterDate" />
+                  <button type="button" class="ghost-btn bulk-delivery-btn" id="bulkCompleteNoRevisionBtn" disabled>Selesaikan Tanpa Revisi</button>
                   <button type="button" class="ghost-btn" id="deliveryFilterTodayBtn">Hari Ini</button>
                   <button type="button" class="ghost-btn" id="deliveryFilterAllBtn">Semua</button>
                 </div>
@@ -1656,6 +1657,7 @@
                 <table class="data-table">
                   <thead>
                     <tr>
+                      <th class="select-cell"><input type="checkbox" id="deliverySelectPage" aria-label="Pilih semua SJ aman di halaman ini" /></th>
                       <th>No SJ</th>
                       <th>Tanggal Kirim</th>
                       <th>No SO</th>
@@ -1665,7 +1667,7 @@
                     </tr>
                   </thead>
                   <tbody id="deliveryTableBody">
-                    <tr><td colspan="6" class="empty-cell">Belum ada surat jalan.</td></tr>
+                    <tr><td colspan="7" class="empty-cell">Belum ada surat jalan.</td></tr>
                   </tbody>
                 </table>
               </div>

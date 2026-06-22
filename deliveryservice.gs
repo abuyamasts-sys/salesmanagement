@@ -689,6 +689,100 @@ function verifyDeliveredOrder(noSo, userId, payload) {
   };
 }
 
+function completeDeliveredOrdersWithoutRevision(noSoList, userId) {
+  var targets = Array.isArray(noSoList) ? noSoList : [];
+  var results = {
+    success: true,
+    requested_count: targets.length,
+    success_count: 0,
+    failed_count: 0,
+    skipped_count: 0,
+    items: []
+  };
+
+  targets.forEach(function(noSo) {
+    var noSoKey = String(noSo || '').trim();
+    var rowResult = {
+      no_so: noSoKey,
+      success: false,
+      skipped: false,
+      message: ''
+    };
+
+    if (!noSoKey) {
+      rowResult.skipped = true;
+      rowResult.message = 'No SO kosong.';
+      results.skipped_count += 1;
+      results.items.push(rowResult);
+      return;
+    }
+
+    try {
+      verifyDeliveredOrderWithoutRevision_(noSoKey, userId);
+      completeOrder(noSoKey, userId, 'Selesai tanpa revisi dari bulk verifikasi CS');
+      rowResult.success = true;
+      rowResult.message = 'Selesai tanpa revisi.';
+      results.success_count += 1;
+    } catch (error) {
+      rowResult.message = error && error.message ? error.message : String(error || 'Error tidak diketahui');
+      results.failed_count += 1;
+    }
+
+    results.items.push(rowResult);
+  });
+
+  return results;
+}
+
+function verifyDeliveredOrderWithoutRevision_(noSo, userId) {
+  var salesOrder = findSalesOrderByNoSo_(noSo);
+  var details = getSalesOrderDetailsByNoSo_(noSo);
+  var total = 0;
+  var payloadItems;
+
+  if (!salesOrder) {
+    throw new Error('Sales order tidak ditemukan untuk no_so: ' + noSo);
+  }
+
+  if (String(salesOrder.status_verifikasi_cs || '').trim() === 'Sudah Dicek') {
+    throw new Error('Order sudah diverifikasi CS.');
+  }
+
+  if (!details.length) {
+    throw new Error('Detail order tidak ditemukan.');
+  }
+
+  payloadItems = details.map(function(detail) {
+    var qty = Number(detail.qty || 0);
+    var harga = Number(detail.harga || 0);
+    var diskon = Number(detail.diskon || 0);
+    var subtotalSource = String(detail.subtotal || '').trim();
+    var subtotal = Number(detail.subtotal);
+
+    if (!subtotalSource || isNaN(subtotal)) {
+      subtotal = (qty * harga) - diskon;
+    }
+
+    subtotal = Math.max(subtotal, 0);
+    total += subtotal;
+
+    return {
+      detail_id: detail.detail_id || '',
+      qty_terkirim: qty,
+      harga_final: harga,
+      diskon_final: diskon,
+      subtotal_final: subtotal
+    };
+  });
+
+  return verifyDeliveredOrder(noSo, userId, {
+    items: payloadItems,
+    catatan_verifikasi_cs: 'Verifikasi cepat: tidak ada revisi',
+    nominal_transfer_diterima: total,
+    catatan_pembayaran_cs: 'Verifikasi cepat: pembayaran sesuai total order'
+  });
+}
+
 function completeOrder(noSo, userId, catatanKirim) {
   var salesOrder = findSalesOrderByNoSo_(noSo);
   var result;

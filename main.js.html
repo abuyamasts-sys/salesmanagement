@@ -44,6 +44,7 @@
     deliveryStatusFilter: '',
     deliveryVerificationFilter: '',
     deliverySearch: '',
+    deliveryBulkSelection: {},
     readyOrderPage: 1,
     deliveryPage: 1,
     tomorrowOrders: [],
@@ -283,6 +284,8 @@
     safeBindById_('deliveryFilterDate', 'change', handleDeliveryFilterChange_);
     safeBindById_('deliveryFilterTodayBtn', 'click', handleDeliveryFilterToday_);
     safeBindById_('deliveryFilterAllBtn', 'click', handleDeliveryFilterAll_);
+    safeBindById_('bulkCompleteNoRevisionBtn', 'click', handleBulkCompleteNoRevision_);
+    safeBindById_('deliverySelectPage', 'change', handleDeliverySelectPageChange_);
     safeBindById_('admin_customer_id', 'change', handleAdminCustomerChange_);
     safeBindById_('admin_customer_search', 'input', handleAdminCustomerSearchInput_);
     safeBindById_('admin_item', 'change', handleAdminProductChange_);
@@ -426,6 +429,7 @@
     window.handleCancelDelivery = handleCancelDelivery;
     window.openDeliveryVerification = openDeliveryVerification;
     window.handleCompleteOrder = handleCompleteOrder;
+    window.handleDeliveryBulkCheckboxChange_ = handleDeliveryBulkCheckboxChange_;
     window.handlePrintSjNota = handlePrintSjNota;
     window.handlePrintSuratJalan = handlePrintSuratJalan;
     window.handlePrintNota = handlePrintNota;
@@ -2558,13 +2562,16 @@
     var endIndex;
     var pageRows;
     var pageInfo;
+    var eligiblePageRows;
+    var selectPageEl;
     if (!tbody) return;
 
     if (!appState.deliveryOrders.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Belum ada surat jalan.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Belum ada surat jalan.</td></tr>';
       if (pagination) {
         pagination.innerHTML = '';
       }
+      syncDeliveryBulkControls_([]);
       return;
     }
 
@@ -2573,38 +2580,46 @@
     searchQuery = normalizeDeliverySearchQuery_();
 
     if (!filteredOrders.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">' +
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">' +
         escapeHtml_(activeDateLabel ? ('Belum ada surat jalan untuk tanggal ' + activeDateLabel + '.') : 'Belum ada surat jalan.') +
       '</td></tr>';
       if (pagination) {
         pagination.innerHTML = '';
       }
+      syncDeliveryBulkControls_([]);
       return;
     }
 
     filteredOrders = getFilteredSearchedDeliveryOrders_(filteredOrders);
 
     if (!filteredOrders.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">' +
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">' +
         escapeHtml_(searchQuery ? 'Surat jalan tidak ditemukan.' : 'Belum ada surat jalan.') +
       '</td></tr>';
       if (pagination) {
         pagination.innerHTML = '';
       }
+      syncDeliveryBulkControls_([]);
       return;
     }
+
+    pruneDeliveryBulkSelection_(filteredOrders);
 
     totalPages = getDeliveryPageTotal_(filteredOrders);
     currentPage = normalizeDeliveryPage_(totalPages);
     startIndex = (currentPage - 1) * DELIVERY_PAGE_SIZE;
     endIndex = Math.min(startIndex + DELIVERY_PAGE_SIZE, filteredOrders.length);
     pageRows = filteredOrders.slice(startIndex, endIndex);
+    eligiblePageRows = pageRows.filter(isDeliveryBulkCompleteEligible_);
 
     tbody.innerHTML = pageRows.map(function(row) {
       var noSo = String(row.no_so || '');
       var actions = [];
       var statusVerifikasi = String(row.status_verifikasi_cs || 'Belum Dicek');
       var statusPersetujuanPembayaran = String(row.status_persetujuan_pembayaran || '').trim();
+      var isBulkEligible = isDeliveryBulkCompleteEligible_(row);
+      var checkedAttr = appState.deliveryBulkSelection[noSo] ? ' checked' : '';
+      var disabledAttr = isBulkEligible ? '' : ' disabled';
 
       if (String(row.status_kirim || '') === 'Siap Kirim') {
         actions.push('<button type="button" class="approve-btn" onclick="handleMarkDelivered(\'' + escapeJs_(noSo) + '\')">Terkirim</button>');
@@ -2636,6 +2651,7 @@
 
       return '' +
         '<tr>' +
+          '<td class="select-cell"><input type="checkbox" class="delivery-bulk-checkbox" aria-label="Pilih ' + escapeHtml_(row.no_surat_jalan || noSo) + '" value="' + escapeHtml_(noSo) + '"' + checkedAttr + disabledAttr + ' onchange="handleDeliveryBulkCheckboxChange_(this)" /></td>' +
           '<td>' + escapeHtml_(row.no_surat_jalan) + '</td>' +
           '<td>' + escapeHtml_(formatShortDateId_(row.tanggal_kirim || row.tanggal_cetak || '')) + '</td>' +
           '<td>' + escapeHtml_(noSo) + '</td>' +
@@ -2644,6 +2660,19 @@
           '<td><div class="inline-actions">' + actions.join('') + '</div></td>' +
         '</tr>';
     }).join('');
+
+    selectPageEl = document.getElementById('deliverySelectPage');
+    if (selectPageEl) {
+      selectPageEl.disabled = !eligiblePageRows.length;
+      selectPageEl.checked = !!eligiblePageRows.length && eligiblePageRows.every(function(row) {
+        return !!appState.deliveryBulkSelection[String(row.no_so || '')];
+      });
+      selectPageEl.indeterminate = eligiblePageRows.some(function(row) {
+        return !!appState.deliveryBulkSelection[String(row.no_so || '')];
+      }) && !selectPageEl.checked;
+    }
+
+    syncDeliveryBulkControls_(filteredOrders);
 
     if (!pagination) {
       return;
@@ -2665,21 +2694,162 @@
       '</div>';
   }
 
+  function isDeliveryBulkCompleteEligible_(row) {
+    if (!row) return false;
+
+    return String(row.status_kirim || '').trim() === 'Terkirim' &&
+      String(row.status_verifikasi_cs || 'Belum Dicek').trim() !== 'Sudah Dicek';
+  }
+
+  function getSelectedDeliveryNoSoList_() {
+    return Object.keys(appState.deliveryBulkSelection || {}).filter(function(noSo) {
+      return !!appState.deliveryBulkSelection[noSo];
+    });
+  }
+
+  function pruneDeliveryBulkSelection_(visibleRows) {
+    var rows = Array.isArray(visibleRows) ? visibleRows : (appState.deliveryOrders || []);
+    var allowed = {};
+
+    rows.forEach(function(row) {
+      var noSo = String(row && row.no_so || '');
+      if (noSo && isDeliveryBulkCompleteEligible_(row)) {
+        allowed[noSo] = true;
+      }
+    });
+
+    Object.keys(appState.deliveryBulkSelection || {}).forEach(function(noSo) {
+      if (!allowed[noSo]) {
+        delete appState.deliveryBulkSelection[noSo];
+      }
+    });
+  }
+
+  function syncDeliveryBulkControls_() {
+    var button = document.getElementById('bulkCompleteNoRevisionBtn');
+    var selectPageEl = document.getElementById('deliverySelectPage');
+    var pageCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.delivery-bulk-checkbox:not(:disabled)'));
+    var selectedCount = getSelectedDeliveryNoSoList_().length;
+
+    if (button) {
+      button.disabled = selectedCount < 1;
+      button.textContent = selectedCount ? ('Selesaikan Tanpa Revisi (' + selectedCount + ')') : 'Selesaikan Tanpa Revisi';
+    }
+
+    if (selectPageEl) {
+      selectPageEl.disabled = !pageCheckboxes.length;
+      selectPageEl.checked = !!pageCheckboxes.length && pageCheckboxes.every(function(checkbox) {
+        return checkbox.checked;
+      });
+      selectPageEl.indeterminate = pageCheckboxes.some(function(checkbox) {
+        return checkbox.checked;
+      }) && !selectPageEl.checked;
+    }
+  }
+
+  function handleDeliveryBulkCheckboxChange_(checkbox) {
+    var noSo = String(checkbox && checkbox.value || '').trim();
+
+    if (!noSo) {
+      return;
+    }
+
+    if (checkbox.checked) {
+      appState.deliveryBulkSelection[noSo] = true;
+    } else {
+      delete appState.deliveryBulkSelection[noSo];
+    }
+
+    syncDeliveryBulkControls_();
+    renderDeliveryTable_();
+  }
+
+  function handleDeliverySelectPageChange_() {
+    var checkbox = document.getElementById('deliverySelectPage');
+    var filteredOrders = getFilteredSearchedDeliveryOrders_(getFilteredDeliveryOrders_());
+    var totalPages = getDeliveryPageTotal_(filteredOrders);
+    var currentPage = normalizeDeliveryPage_(totalPages);
+    var startIndex = (currentPage - 1) * DELIVERY_PAGE_SIZE;
+    var pageRows = filteredOrders.slice(startIndex, Math.min(startIndex + DELIVERY_PAGE_SIZE, filteredOrders.length));
+
+    pageRows.forEach(function(row) {
+      var noSo = String(row && row.no_so || '');
+      if (!noSo || !isDeliveryBulkCompleteEligible_(row)) {
+        return;
+      }
+
+      if (checkbox && checkbox.checked) {
+        appState.deliveryBulkSelection[noSo] = true;
+      } else {
+        delete appState.deliveryBulkSelection[noSo];
+      }
+    });
+
+    renderDeliveryTable_();
+  }
+
+  function handleBulkCompleteNoRevision_() {
+    var noSoList = getSelectedDeliveryNoSoList_();
+
+    if (!noSoList.length) {
+      renderResult_('Pilih minimal satu SJ yang Terkirim dan belum diverifikasi CS.', true);
+      return;
+    }
+
+    if (!confirm('Selesaikan ' + noSoList.length + ' SJ terpilih tanpa revisi qty, harga, diskon, dan pembayaran?')) {
+      return;
+    }
+
+    setStatusText_('Memproses bulk selesai tanpa revisi...');
+    google.script.run
+      .withSuccessHandler(function(result) {
+        var summary = result || {};
+        var failedItems = (summary.items || []).filter(function(item) {
+          return !item.success;
+        });
+        var message = 'Bulk selesai tanpa revisi: ' + Number(summary.success_count || 0) + ' berhasil';
+
+        if (Number(summary.failed_count || 0) || Number(summary.skipped_count || 0)) {
+          message += ', ' + (Number(summary.failed_count || 0) + Number(summary.skipped_count || 0)) + ' gagal/dilewati.';
+          message += failedItems.slice(0, 5).map(function(item) {
+            return '\n' + (item.no_so || '-') + ': ' + (item.message || 'Gagal diproses');
+          }).join('');
+        } else {
+          message += '.';
+        }
+
+        appState.deliveryBulkSelection = {};
+        setStatusText_('Bulk selesai tanpa revisi selesai');
+        renderResult_(message, !!failedItems.length);
+        loadAdminOperationsData_();
+      })
+      .withFailureHandler(function(error) {
+        setStatusText_('Gagal bulk selesai tanpa revisi');
+        renderResult_('Gagal bulk selesai tanpa revisi: ' + (error && error.message ? error.message : error), true);
+      })
+      .bulkCompleteDeliveredOrdersWithoutRevisionFromDashboard(appState.currentUser.user_id, {
+        no_so_list: noSoList
+      });
+  }
+
   function handleDeliveryFilterChange_() {
     appState.deliveryFilterDate = normalizeDateKey_(getFieldValue_('deliveryFilterDate'));
     appState.deliveryPage = 1;
+    appState.deliveryBulkSelection = {};
     loadAdminOperationsData_();
   }
 
   function handleDeliverySearchInput_() {
     appState.deliverySearch = getFieldValue_('deliverySearch');
     appState.deliveryPage = 1;
+    appState.deliveryBulkSelection = {};
     renderDeliveryTable_();
   }
 
   function handleDeliveryStatusFilterChange_() {
     appState.deliveryStatusFilter = getFieldValue_('deliveryStatusFilter');
     appState.deliveryPage = 1;
+    appState.deliveryBulkSelection = {};
     renderDeliveryTable_();
     setStatusText_(appState.deliveryStatusFilter ? ('Filter surat jalan: ' + appState.deliveryStatusFilter) : 'Menampilkan semua status surat jalan');
   }
@@ -2687,6 +2857,7 @@
   function handleDeliveryVerificationFilterChange_() {
     appState.deliveryVerificationFilter = getFieldValue_('deliveryVerificationFilter');
     appState.deliveryPage = 1;
+    appState.deliveryBulkSelection = {};
     renderDeliveryTable_();
     setStatusText_(appState.deliveryVerificationFilter ? ('Filter verifikasi CS: ' + appState.deliveryVerificationFilter) : 'Menampilkan semua status verifikasi CS');
   }
@@ -3569,6 +3740,7 @@
     appState.deliveryFilterDate = getTodayIsoDate_();
     setFieldValue_('deliveryFilterDate', appState.deliveryFilterDate);
     appState.deliveryPage = 1;
+    appState.deliveryBulkSelection = {};
     loadAdminOperationsData_();
     setStatusText_('Filter surat jalan diatur ke hari ini');
   }
@@ -3577,6 +3749,7 @@
     appState.deliveryFilterDate = '';
     setFieldValue_('deliveryFilterDate', '');
     appState.deliveryPage = 1;
+    appState.deliveryBulkSelection = {};
     loadAdminOperationsData_();
     setStatusText_('Menampilkan semua surat jalan');
   }

@@ -999,6 +999,13 @@ function verifyDeliveredOrderFromDashboard(userId, formData) {
   });
 }
 
+function bulkCompleteDeliveredOrdersWithoutRevisionFromDashboard(userId, formData) {
+  var currentUser = requireCurrentUserRole_(['CS/Admin'], userId);
+  var payload = formData || {};
+
+  return toClientValue_(completeDeliveredOrdersWithoutRevision(payload.no_so_list || [], currentUser.user_id));
+}
+
 function generateKledoExportFromDashboard(userId, formData) {
   var currentUser = requireCurrentUserRole_(['Approver'], userId);
   return toClientValue_(generateKledoExportBatchFile(currentUser, formData || {}));
