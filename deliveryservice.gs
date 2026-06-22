@@ -75,6 +75,7 @@ function getSuratJalanPrintData(noSo) {
 
   var orderDisplay = buildSalesOrderClientRow_(salesOrder);
   var tanggalKirimEfektif = resolveEffectiveSuratJalanTanggalKirim_(suratJalan, salesOrder);
+  var customerContact = resolveSuratJalanCustomerContact_(salesOrder);
 
   return {
     no_surat_jalan: suratJalan.no_surat_jalan || '',
@@ -101,8 +102,8 @@ function getSuratJalanPrintData(noSo) {
     status_kirim: suratJalan.status_kirim || '',
     catatan_kirim: suratJalan.catatan_kirim || '',
     sales_nama: salesOrder.sales_nama || '',
-    pic_customer: salesOrder.pic_customer || '',
-    no_hp_customer: salesOrder.no_hp_customer || '',
+    pic_customer: customerContact.pic_customer,
+    no_hp_customer: customerContact.no_hp_customer,
     term_pembayaran: salesOrder.term_pembayaran || '',
     subtotal: orderDisplay.subtotal_final || salesOrder.subtotal_final || salesOrder.subtotal || '',
     diskon: orderDisplay.diskon_final || salesOrder.diskon_final || salesOrder.diskon || '',
@@ -127,6 +128,7 @@ function getSuratJalanPreviewData(noSo) {
   }
 
   orderDisplay = buildSalesOrderClientRow_(salesOrder);
+  var customerContact = resolveSuratJalanCustomerContact_(salesOrder);
 
   return {
     no_surat_jalan: '',
@@ -153,13 +155,29 @@ function getSuratJalanPreviewData(noSo) {
     status_kirim: 'Preview',
     catatan_kirim: '',
     sales_nama: salesOrder.sales_nama || '',
-    pic_customer: salesOrder.pic_customer || '',
-    no_hp_customer: salesOrder.no_hp_customer || '',
+    pic_customer: customerContact.pic_customer,
+    no_hp_customer: customerContact.no_hp_customer,
     term_pembayaran: salesOrder.term_pembayaran || '',
     subtotal: orderDisplay.subtotal_order || salesOrder.subtotal || '',
     diskon: orderDisplay.diskon_order || salesOrder.diskon || '',
     total: orderDisplay.total_order || salesOrder.total || '',
     catatan_order: salesOrder.catatan || ''
+  };
+}
+
+function resolveSuratJalanCustomerContact_(salesOrder) {
+  var order = salesOrder || {};
+  var customer = {};
+  var pic = String(order.pic_customer || '').trim();
+  var noHp = String(order.no_hp_customer || '').trim();
+
+  if ((!pic || !noHp) && order.customer_id && typeof findCustomerByCode_ === 'function') {
+    customer = findCustomerByCode_(order.customer_id) || {};
+  }
+
+  return {
+    pic_customer: pic || String(customer.pic || '').trim(),
+    no_hp_customer: noHp || String(customer.no_hp || '').trim()
   };
 }
 
